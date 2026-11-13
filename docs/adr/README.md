@@ -26,6 +26,9 @@ last_updated: 2026-11-14
 | 编号 | 标题 | 状态 | 日期 | 关联 |
 | --- | --- | --- | --- | --- |
 | [ADR-0001](ADR-0001-采用文档驱动的文档体系.md) | 采用文档驱动与分层文档体系 | accepted | 2026-11-14 | STD-00, STD-01 |
+| [ADR-0002](ADR-0002-技术栈选型.md) | 技术栈选型（Spring Boot 4.1 + Vue 3） | accepted | 2026-11-14 | ARC-02, ADR-0003, ADR-0004 |
+| [ADR-0003](ADR-0003-实时通信方案.md) | 实时通信方案（STOMP over WebSocket） | accepted | 2026-11-14 | ARC-02 |
+| [ADR-0004](ADR-0004-数据访问与迁移方案.md) | 数据访问与迁移（MySQL + MyBatis-Plus + Flyway） | accepted | 2026-11-14 | ARC-02 |
 
 > 状态：`proposed`（提议中）/ `accepted`（已采纳）/ `rejected`（已否决）/ `superseded`（被替代）/ `deprecated`（已过时）。
 
