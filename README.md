@@ -52,9 +52,61 @@
 
 详细规则见 [docs/00-工程开发规范.md](docs/00-工程开发规范.md)。
 
-## 快速开始
+## 快速开始（本地开发）
 
-架构确认后将在此补全：环境要求、安装依赖、初始化数据库、启动开发服务器、运行测试。
+> M1 已在 Windows + JDK 17 + MySQL 8.0 + Node 26 环境验证；Redis 在 M2 接入前非必需（令牌存 DB）。
+
+前置：JDK 17（`JAVA_HOME`）、Maven 3.9+、MySQL 8.0、Node 20+ / pnpm。
+
+1. 创建数据库与专用账号（示例，按需改密码）：
+
+   ```sql
+   CREATE DATABASE my_social_channel CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+   CREATE DATABASE my_social_channel_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+   CREATE USER 'isles_app'@'localhost' IDENTIFIED BY 'change-me';
+   GRANT ALL PRIVILEGES ON my_social_channel.* TO 'isles_app'@'localhost';
+   GRANT ALL PRIVILEGES ON my_social_channel_test.* TO 'isles_app'@'localhost';
+   ```
+
+2. 配置环境变量（参考 [`backend/.env.example`](backend/.env.example)；本地可写入根目录 `.env.local`，已被 git 忽略）：
+
+   ```powershell
+   $env:DB_URL = "jdbc:mysql://127.0.0.1:3306/my_social_channel?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true"
+   $env:DB_USERNAME = "isles_app"
+   $env:DB_PASSWORD = "change-me"
+   $env:JWT_SECRET = "至少32字节的本地开发密钥-local-dev-only"
+   ```
+
+3. 启动后端（Flyway 自动建表，健康检查 `/actuator/health`）：
+
+   ```powershell
+   cd backend
+   mvn spring-boot:run
+   ```
+
+4. 启动前端（Vite 代理 `/api`、`/uploads` 到 8080）：
+
+   ```powershell
+   cd frontend
+   pnpm install
+   pnpm dev        # http://127.0.0.1:5173
+   ```
+
+5. 测试与构建：
+
+   ```powershell
+   cd backend;  mvn -B test
+   cd frontend; pnpm build
+   ```
+
+> 认证方式：access token 仅存前端内存，refresh token 走 HttpOnly Cookie；游客可浏览公开内容，
+> 互动需要登录。接口契约见 [docs/05-API设计.md](docs/05-API设计.md)。
+
+## 界面预览（M1）
+
+| 频道页 | 帖子详情 | 搜索 |
+| --- | --- | --- |
+| ![频道页](docs/assets/screenshots/m1-channel.png) | ![帖子详情](docs/assets/screenshots/m1-post-detail.png) | ![搜索](docs/assets/screenshots/m1-search.png) |
 
 ## 目录结构
 
@@ -69,7 +121,14 @@ MySocialChannel/
 │   ├── 02-架构设计.md
 │   ├── 03-需求规格.md
 │   ├── 04-领域模型与词汇表.md
+│   ├── 05-API设计.md / 06-数据库设计.md / 07-安全与合规.md
+│   ├── 10-路线图与里程碑.md
 │   ├── adr/                  # 架构决策记录
-│   └── templates/            # 文档模板
-└── （应用代码目录，架构确认后固定）
+│   ├── templates/            # 文档模板
+│   └── assets/screenshots/   # 界面截图
+├── backend/                  # Spring Boot 4.1 后端（Maven，com.isles）
+│   ├── src/main/java/com/isles/{common,config,auth,user,channel,post,comment,interaction,feed,search,notification,media}
+│   └── src/main/resources/db/migration/   # Flyway V1__init.sql
+└── frontend/                 # Vue 3 + TypeScript + Vite 前端
+    └── src/{api,components,composables,layouts,pages,router,stores,styles,types,utils}
 ```

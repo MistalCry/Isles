@@ -20,6 +20,12 @@
 - 确认频道类型与邀请机制（公开 + 私密邀请，邀请链接可审批/可设可见性），见 ADR-0005。
 - 确认游客可浏览公开内容、双向好友 + 任何人可私信、板块首期支持、媒体本地存储、AI 需视觉 + 深度思考。
 - 新增 M1 设计与契约文档：`docs/05-API设计.md`、`docs/06-数据库设计.md`、`docs/07-安全与合规.md`、`docs/10-路线图与里程碑.md`。
+- M1 后端实现：Spring Boot 4.1.2 + Java 17 + MyBatis-Plus + Flyway + Nimbus JWT；认证/用户/频道/板块/邀请/帖子/评论/互动/动态/搜索/媒体/通知接口，
+  统一错误信封与 requestId，权限校验集中 `ChannelAccessService`；35 个单元测试通过。
+- M1 前端实现：Vue 3 + TypeScript + Vite + Element Plus；侧边栏布局、频道页、帖子详情、动态、搜索、登录注册、我的频道、
+  帖子卡片/评论/用户卡片/媒体查看器等复用组件；`pnpm build` 通过。
+- 新增前后端适配层 `frontend/src/api/adapters.ts`，收敛后端扁平 DTO 与前端嵌套模型的差异；补充 docs/05 响应模型。
+- 修复 Flyway 自动配置（Boot 4 需 `spring-boot-starter-flyway`）、Jackson 3 配置项、搜索 DTO 作者/板块字段。
 - 建立项目入口文件与工程基础配置（`README.md`、`.editorconfig`、`.gitignore`、`.gitattributes`）。
 
 ## [0.1.0] - 2026-11-14

@@ -182,6 +182,24 @@ POST /api/v1/channels/{channelId}/posts
 }
 ```
 
+## 3.4 响应模型（M1 实际契约）
+
+> 后端返回**扁平字段**（如 `authorId`/`channelName`/`liked`），前端 `frontend/src/api/adapters.ts` 统一适配为嵌套模型。
+> 新增字段只增不改；删除/重命名按 §1.1 兼容规则执行。
+
+| DTO | 字段 |
+| --- | --- |
+| `LoginResponse` | `accessToken`、`tokenType`、`expiresIn`、`user:UserResponse`；refreshToken 仅走 HttpOnly Cookie |
+| `UserResponse` | `id`、`username`、`nickname`、`avatarUrl`、`signature`、`gender`、`region`、`createdAt` |
+| `UserCardResponse` | UserResponse 字段 + `channelId`、`joinedAt`、`roleName`、`memberStatus` |
+| `ChannelResponse` | `id`、`channelNo`、`name`、`avatarUrl`、`coverUrl`、`description`、`type`、`visibility`、`ownerId`、`memberCount`、`postCount`、`joined`、`myRoleName`、`createdAt` |
+| `BoardResponse` | `id`、`channelId`、`name`、`description`、`sort`、`postCount`、`createdAt` |
+| `PostResponse` | `id`、`channelId`、`channelName`、`channelAvatarUrl`、`boardId`、`boardName`、`authorId`、`authorNickname`、`authorAvatarUrl`、`title`、`content`、`contentFormat`（`PLAIN`/`HTML`）、`coverUrl`、`media[]`、`viewCount`、`likeCount`、`commentCount`、`shareCount`、`liked`、`pinned`、`essence`、`createdAt` |
+| `CommentResponse` | `id`、`postId`、`parentId`、`authorId`、`authorNickname`、`authorAvatarUrl`、`replyToUserId`、`replyToNickname`、`content`、`media[]`、`emoji[]`、`likeCount`、`liked`、`createdAt`、`replies[]` |
+| `SearchItemResponse` | `type`（`CHANNEL`/`POST`）、`id`、`title`、`summary`、`channelId`、`channelName`、`channelAvatarUrl`、`avatarUrl`、`memberCount`、`likeCount`、`commentCount`、`authorId`、`authorUsername`、`authorNickname`、`authorAvatarUrl`、`boardId`、`boardName`、`createdAt` |
+| `LikeStateResponse` | `liked`、`likeCount` |
+| `PageResult<T>` | `items: T[]`、`nextCursor: string \| null` |
+
 ## 4. 待细化（随实现补充）
 
 - 置顶/精华/删除/内容管理接口（M2）

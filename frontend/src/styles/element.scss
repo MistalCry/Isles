@@ -1,0 +1,82 @@
+/**
+ * Element Plus 主题覆盖。
+ * 使用 :root:root 提高优先级，保证按需引入的组件样式（由 JS 注入）之后仍生效。
+ */
+:root:root {
+  --el-color-primary: var(--isles-primary);
+  --el-color-primary-light-3: #4d8b9b;
+  --el-color-primary-light-5: #7fa9b5;
+  --el-color-primary-light-7: #aec7d0;
+  --el-color-primary-light-8: #c6d8de;
+  --el-color-primary-light-9: var(--isles-primary-soft);
+  --el-color-primary-dark-2: var(--isles-primary-strong);
+
+  --el-color-success: var(--isles-success);
+  --el-color-warning: var(--isles-warning);
+  --el-color-danger: var(--isles-danger);
+  --el-color-error: var(--isles-danger);
+
+  --el-font-family: var(--isles-font-family);
+  --el-font-size-base: var(--isles-font-base);
+  --el-text-color-primary: var(--isles-text);
+  --el-text-color-regular: var(--isles-text-secondary);
+  --el-text-color-secondary: var(--isles-text-muted);
+  --el-text-color-placeholder: var(--isles-text-muted);
+
+  --el-border-color: var(--isles-border);
+  --el-border-color-light: var(--isles-border);
+  --el-border-color-lighter: var(--isles-border);
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-border-radius-round: var(--isles-radius-pill);
+
+  --el-bg-color: var(--isles-surface);
+  --el-bg-color-page: var(--isles-bg);
+  --el-bg-color-overlay: var(--isles-surface);
+  --el-fill-color-blank: var(--isles-surface);
+  --el-fill-color-light: var(--isles-surface-muted);
+  --el-fill-color-lighter: var(--isles-surface-muted);
+  --el-fill-color-extra-light: var(--isles-surface-muted);
+
+  --el-box-shadow-light: var(--isles-shadow-sm);
+  --el-box-shadow: var(--isles-shadow-md);
+
+  --el-mask-color: var(--isles-mask);
+  --el-overlay-color-lighter: rgba(16, 32, 41, 0.4);
+}
+
+.el-button {
+  font-weight: 500;
+}
+
+.el-button--primary {
+  --el-button-text-color: var(--isles-text-inverse);
+}
+
+.el-tag {
+  --el-tag-border-radius: 6px;
+}
+
+.el-dialog {
+  --el-dialog-border-radius: var(--isles-radius-lg);
+  --el-dialog-padding-primary: var(--isles-space-5);
+}
+
+.el-popover.el-popper {
+  --el-popover-border-radius: var(--isles-radius-md);
+  padding: var(--isles-space-4);
+}
+
+.el-card {
+  --el-card-border-color: var(--isles-border);
+  --el-card-border-radius: var(--isles-radius-lg);
+}
+
+.el-input__wrapper,
+.el-textarea__inner {
+  box-shadow: 0 0 0 1px var(--isles-border) inset;
+}
+
+.el-drawer {
+  --el-drawer-padding-primary: 0;
+}

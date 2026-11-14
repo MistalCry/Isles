@@ -1,0 +1,83 @@
+spring:
+  application:
+    name: isles-backend
+  profiles:
+    # 默认使用 local profile（本机开发）；部署时通过 SPRING_PROFILES_ACTIVE 覆盖
+    default: local
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/my_social_channel?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 2
+      connection-timeout: 5000
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    validate-on-migrate: true
+  servlet:
+    multipart:
+      # 视频上限 200MB（docs/07 §5），请求体留出余量
+      max-file-size: 200MB
+      max-request-size: 220MB
+  jackson:
+    # Boot 4 / Jackson 3：日期时间默认按 ISO-8601 输出；Jackson 3 已无 WRITE_DATES_AS_TIMESTAMPS 配置项
+    time-zone: UTC
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    # 生产环境不打印 SQL；需要排查时通过日志级别单独打开
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: input
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      # 数据库就绪状态通过 /actuator/health 暴露给部署探针
+      show-details: never
+  health:
+    redis:
+      # M1 未使用 Redis（令牌走 DB、限流 M2 接入），避免本机无 Redis 时健康检查误报 DOWN
+      enabled: false
+
+app:
+  # 上传文件根目录（相对路径按启动工作目录解析）
+  upload-dir: ${UPLOAD_DIR:./uploads}
+  jwt:
+    # 密钥只从环境变量注入，不允许写死；local profile 提供开发默认值
+    secret: ${JWT_SECRET:}
+    access-token-minutes: 15
+  auth:
+    refresh-token-days: 7
+    # 生产必须为 true（HTTPS）；local 为 false 便于本机调试
+    cookie-secure: ${COOKIE_SECURE:false}
+    cookie-same-site: Lax
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+logging:
+  level:
+    root: INFO
+    com.isles: INFO
+    org.springframework.security: WARN

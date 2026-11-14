@@ -1,0 +1,78 @@
+:root {
+  color-scheme: light;
+
+  /* 品牌色：海洋青 + 珊瑚橙 */
+  --isles-primary: #14657a;
+  --isles-primary-strong: #0f5062;
+  --isles-primary-soft: #e6f2f5;
+  --isles-accent: #d9682f;
+  --isles-accent-soft: #fdf0e8;
+
+  /* 文本 */
+  --isles-text: #1b2a33;
+  --isles-text-secondary: #53656f;
+  --isles-text-muted: #7c8d97;
+  --isles-text-inverse: #ffffff;
+
+  /* 背景与边框 */
+  --isles-bg: #f3f6f8;
+  --isles-surface: #ffffff;
+  --isles-surface-muted: #f7fafb;
+  --isles-sidebar-bg: #ffffff;
+  --isles-border: #e2eaee;
+  --isles-border-strong: #ccd9e0;
+  --isles-hover: #eef4f6;
+  --isles-mask: rgba(16, 32, 41, 0.56);
+
+  /* 语义色 */
+  --isles-success: #1c8a5b;
+  --isles-warning: #a8650f;
+  --isles-danger: #bf3b3b;
+
+  /* 圆角 */
+  --isles-radius-sm: 6px;
+  --isles-radius-md: 10px;
+  --isles-radius-lg: 14px;
+  --isles-radius-pill: 999px;
+
+  /* 间距 */
+  --isles-space-1: 4px;
+  --isles-space-2: 8px;
+  --isles-space-3: 12px;
+  --isles-space-4: 16px;
+  --isles-space-5: 20px;
+  --isles-space-6: 24px;
+  --isles-space-8: 32px;
+  --isles-space-10: 40px;
+  --isles-space-12: 48px;
+
+  /* 字号 */
+  --isles-font-family:
+    'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --isles-font-xs: 12px;
+  --isles-font-sm: 13px;
+  --isles-font-base: 14px;
+  --isles-font-md: 16px;
+  --isles-font-lg: 18px;
+  --isles-font-xl: 22px;
+  --isles-font-display: 28px;
+  --isles-line-tight: 1.35;
+  --isles-line-base: 1.65;
+
+  /* 阴影 */
+  --isles-shadow-sm: 0 1px 2px rgba(21, 44, 56, 0.06);
+  --isles-shadow-md: 0 6px 18px rgba(21, 44, 56, 0.08);
+  --isles-shadow-lg: 0 18px 40px rgba(21, 44, 56, 0.14);
+
+  /* 层级 */
+  --isles-z-header: 100;
+  --isles-z-floating: 300;
+  --isles-z-overlay: 2000;
+
+  /* 布局 */
+  --isles-sidebar-width: 240px;
+  --isles-content-max-width: 1120px;
+  --isles-page-padding: var(--isles-space-6);
+  --isles-mobile-topbar-height: 56px;
+}
