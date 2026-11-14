@@ -31,6 +31,9 @@
   帖子卡片/评论/用户卡片/媒体查看器等复用组件；`pnpm build` 通过。
 - 新增前后端适配层 `frontend/src/api/adapters.ts`，收敛后端扁平 DTO 与前端嵌套模型的差异；补充 docs/05 响应模型。
 - 修复 Flyway 自动配置（Boot 4 需 `spring-boot-starter-flyway`）、Jackson 3 配置项、搜索 DTO 作者/板块字段。
+- 新增 Docker Compose 部署方案（`deploy/`：backend/frontend Dockerfile、nginx.conf、compose、env 模板）
+  与部署运维文档 `docs/09-部署与运维.md`（待服务器验证）。
+- 新增本地 Mock OpenAI 兼容服务 `tools/mock-openai/server.mjs`，用于 LMStudio 未运行时联调 AI 功能。
 - 建立项目入口文件与工程基础配置（`README.md`、`.editorconfig`、`.gitignore`、`.gitattributes`）。
 
 ## [0.1.0] - 2026-11-14
