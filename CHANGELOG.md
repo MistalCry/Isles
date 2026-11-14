@@ -14,6 +14,8 @@
 - 建立 ADR 机制、文档模板与文档索引（`docs/adr/`、`docs/templates/`、`docs/README.md`）。
 - 确认技术栈与架构基线：Spring Boot 4.1.2 + Vue 3 + MySQL 8.0 + Redis 7 + STOMP over WebSocket
   （`docs/02-架构设计.md`、ADR-0002～0004）。
+- 完成需求分析与模块排布：角色权限、信息架构与路由、功能清单（FR）、通用组件复用、
+  数据模型草案、数据中心设计、分期建议（`docs/03-需求规格.md`、`docs/04-领域模型与词汇表.md`）。
 - 建立项目入口文件与工程基础配置（`README.md`、`.editorconfig`、`.gitignore`、`.gitattributes`）。
 
 ## [0.1.0] - 2026-11-14
