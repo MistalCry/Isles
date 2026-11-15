@@ -215,8 +215,8 @@ public class AdminService {
                                             Integer page, Integer size) {
         int pageSize = normalizeSize(size);
         int pageNo = normalizePage(page);
-        // 兼容旧前端的 DISMISSED/RESOLVED 筛选值（V6 起状态统一为 ACCEPTED/REJECTED）
-        String statusFilter = normalizeReportStatus(blankToNull(status));
+        // 状态取值统一为 PENDING/ACCEPTED/REJECTED（旧前端已迁移，兼容垫片已删除）
+        String statusFilter = blankToNull(status);
         String targetTypeFilter = blankToNull(targetType);
         String pattern = likePattern(keyword);
         long total = adminReportMapper.countPage(statusFilter, targetTypeFilter, pattern);
@@ -389,17 +389,4 @@ public class AdminService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    /**
-     * 举报状态兼容映射：旧前端仍可能按 {@code DISMISSED}/{@code RESOLVED} 筛选。
-     */
-    private String normalizeReportStatus(String status) {
-        if (status == null) {
-            return null;
-        }
-        return switch (status.toUpperCase()) {
-            case "DISMISSED" -> Report.Status.REJECTED.name();
-            case "RESOLVED" -> Report.Status.ACCEPTED.name();
-            default -> status;
-        };
-    }
 }

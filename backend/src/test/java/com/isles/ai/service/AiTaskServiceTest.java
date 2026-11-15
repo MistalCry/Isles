@@ -8,6 +8,9 @@ import com.isles.ai.entity.AiTaskLog;
 import com.isles.ai.entity.ChannelAiSetting;
 import com.isles.ai.mapper.AiTaskLogMapper;
 import com.isles.ai.mapper.ChannelAiSettingMapper;
+import com.isles.ai.provider.AiProvider;
+import com.isles.ai.provider.AiProviderException;
+import com.isles.channel.entity.Channel;
 import com.isles.channel.mapper.BoardMapper;
 import com.isles.channel.mapper.ChannelMapper;
 import com.isles.comment.mapper.CommentMapper;
@@ -158,6 +161,64 @@ class AiTaskServiceTest {
         verify(taskLogMapper, never()).insert(any(AiTaskLog.class));
     }
 
+
+    @Test
+    void should_use_channel_model_when_configured() {
+        ChannelAiSetting setting = setting("AUTO_POST", 1);
+        setting.setModelConfigId("cfg-ch");
+        when(settingsService.findSetting("ch-1")).thenReturn(setting);
+        when(taskLogMapper.selectByKey(anyString(), anyString(), anyString())).thenReturn(null);
+        when(taskLogMapper.countSuccessBetween(anyString(), anyString(), any(), any())).thenReturn(0L);
+        when(taskLogMapper.insert(any(AiTaskLog.class))).thenReturn(1);
+        when(taskLogMapper.updateById(any(AiTaskLog.class))).thenReturn(1);
+        when(settingsService.ensureAssistantAccountInternal("ch-1")).thenReturn("assistant-1");
+        when(contextService.recentChannelPosts(eq("ch-1"), any(), any(Integer.class))).thenReturn(List.of(post()));
+        when(channelMapper.selectById("ch-1")).thenReturn(channel());
+
+        AiModelConfig channelModel = modelConfig();
+        channelModel.setId("cfg-ch");
+        channelModel.setModel("channel-model");
+        AiModelConfig defaultModel = modelConfig();
+        when(modelConfigService.resolveDefault()).thenReturn(defaultModel);
+        when(modelConfigService.findEnabled("cfg-ch")).thenReturn(channelModel);
+        AiProvider provider = mock(AiProvider.class);
+        when(modelConfigService.providerFor(channelModel)).thenReturn(provider);
+        when(provider.chat(any())).thenThrow(new AiProviderException(AiProviderException.UPSTREAM_ERROR, "boom"));
+
+        AiResponses.TaskLogResponse response = service.runTask("ch-1", "AUTO_POST");
+
+        assertThat(response.status()).isEqualTo(AiTaskLog.Status.FAILED.name());
+        // 用的是频道指定模型，不是平台默认
+        verify(modelConfigService).providerFor(channelModel);
+        verify(modelConfigService, never()).providerFor(defaultModel);
+    }
+
+    @Test
+    void should_fallback_to_default_model_when_channel_model_unavailable() {
+        ChannelAiSetting setting = setting("AUTO_POST", 1);
+        setting.setModelConfigId("cfg-gone");
+        when(settingsService.findSetting("ch-1")).thenReturn(setting);
+        when(taskLogMapper.selectByKey(anyString(), anyString(), anyString())).thenReturn(null);
+        when(taskLogMapper.countSuccessBetween(anyString(), anyString(), any(), any())).thenReturn(0L);
+        when(taskLogMapper.insert(any(AiTaskLog.class))).thenReturn(1);
+        when(taskLogMapper.updateById(any(AiTaskLog.class))).thenReturn(1);
+        when(settingsService.ensureAssistantAccountInternal("ch-1")).thenReturn("assistant-1");
+        when(contextService.recentChannelPosts(eq("ch-1"), any(), any(Integer.class))).thenReturn(List.of(post()));
+        when(channelMapper.selectById("ch-1")).thenReturn(channel());
+
+        AiModelConfig defaultModel = modelConfig();
+        when(modelConfigService.resolveDefault()).thenReturn(defaultModel);
+        when(modelConfigService.findEnabled("cfg-gone")).thenReturn(null);
+        AiProvider provider = mock(AiProvider.class);
+        when(modelConfigService.providerFor(defaultModel)).thenReturn(provider);
+        when(provider.chat(any())).thenThrow(new AiProviderException(AiProviderException.UPSTREAM_ERROR, "boom"));
+
+        AiResponses.TaskLogResponse response = service.runTask("ch-1", "AUTO_POST");
+
+        assertThat(response.status()).isEqualTo(AiTaskLog.Status.FAILED.name());
+        verify(modelConfigService).providerFor(defaultModel);
+    }
+
     private ChannelAiSetting setting(String taskType, int perDay) {
         ChannelAiSetting setting = new ChannelAiSetting();
         setting.setId("set-1");
@@ -182,5 +243,21 @@ class AiTaskServiceTest {
         config.setEnabled(true);
         config.setMaxTokens(1024);
         return config;
+    }
+
+    private AiContextPost post() {
+        AiContextPost post = new AiContextPost();
+        post.setId("post-1");
+        post.setAuthorId("user-2");
+        post.setTitle("露营攻略");
+        post.setContent("帐篷怎么选");
+        return post;
+    }
+
+    private Channel channel() {
+        Channel channel = new Channel();
+        channel.setId("ch-1");
+        channel.setName("露营岛");
+        return channel;
     }
 }

@@ -107,15 +107,12 @@ public class AiTaskService {
         if (settings.isEmpty()) {
             return;
         }
-        AiModelConfig model = tryResolveModel();
-        if (model == null) {
-            log.debug("未配置可用 AI 模型，跳过频道助手自动任务扫描");
-            return;
-        }
+        // 平台默认模型可能为空，但频道可单独指定模型，因此不在此提前返回
+        AiModelConfig defaultModel = tryResolveModel();
         LocalDateTime now = ClockTimes.nowUtc();
         for (ChannelAiSetting setting : settings) {
             try {
-                scanOne(setting, now, model);
+                scanOne(setting, now, resolveChannelModel(setting, defaultModel));
             } catch (RuntimeException ex) {
                 log.error("频道助手任务扫描失败 channelId={}", setting.getChannelId(), ex);
             }
@@ -131,7 +128,7 @@ public class AiTaskService {
             throw new AppException(ErrorCode.BUSINESS_RULE_VIOLATION, "频道助手尚未配置，请先保存助手设置");
         }
         AiTaskLog.TaskType type = parseTaskType(taskType);
-        AiModelConfig model = tryResolveModel();
+        AiModelConfig model = resolveChannelModel(setting, tryResolveModel());
         AiTaskLog taskLog = runSettingTask(setting, type, true, model);
         return AiTaskLogResponses.of(taskLog);
     }
@@ -408,6 +405,25 @@ public class AiTaskService {
                 .orderByAsc(Board::getCreatedAt)
                 .last("LIMIT 1"));
         return boards.isEmpty() ? null : boards.get(0);
+    }
+
+    /**
+     * 解析频道助手使用的模型：频道指定且启用 → 用它；否则回落平台默认。
+     *
+     * <p>频道指定的模型被删除/禁用时只记日志并回落，不让任务失败（助手功能不能因换模型而停摆）。
+     */
+    private AiModelConfig resolveChannelModel(ChannelAiSetting setting, AiModelConfig defaultModel) {
+        String preferredId = setting.getModelConfigId();
+        if (preferredId == null || preferredId.isBlank()) {
+            return defaultModel;
+        }
+        AiModelConfig channelModel = modelConfigService.findEnabled(preferredId);
+        if (channelModel == null) {
+            log.warn("频道助手指定的模型不可用，回落平台默认模型 channelId={} modelConfigId={}",
+                    setting.getChannelId(), preferredId);
+            return defaultModel;
+        }
+        return channelModel;
     }
 
     private AiModelConfig tryResolveModel() {

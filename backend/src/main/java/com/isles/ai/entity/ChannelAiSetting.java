@@ -28,6 +28,8 @@ public class ChannelAiSetting {
     private String coverUrl;
     private String bio;
     private String persona;
+    /** 频道助手使用的模型配置；空表示跟随平台默认（V8） */
+    private String modelConfigId;
     private Boolean enabled;
     private Boolean summaryDailyEnabled;
     private Boolean summaryWeeklyEnabled;

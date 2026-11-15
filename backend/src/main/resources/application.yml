@@ -71,6 +71,9 @@ app:
     # 密钥只从环境变量注入，不允许写死；local profile 提供开发默认值
     secret: ${JWT_SECRET:}
     access-token-minutes: 15
+  security:
+    # 生产（application-prod.yml）置为 true：密钥缺失直接拒绝启动，不允许降级为明文/默认值
+    require-secrets: ${APP_REQUIRE_SECRETS:false}
   auth:
     refresh-token-days: 7
     # 生产必须为 true（HTTPS）；local 为 false 便于本机调试

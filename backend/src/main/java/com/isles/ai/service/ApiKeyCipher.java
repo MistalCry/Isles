@@ -16,8 +16,12 @@ import java.util.Base64;
 /**
  * AI API Key 落库加密（AES-256-GCM）。
  *
- * <p>密钥来自环境变量 {@code app.ai.api-key-secret}（生产必须配置）。未配置时降级为明文存储并打 WARN：
- * 本地开发可用，部署时必须补齐（docs/07 §2「密钥只放环境变量」）。无论是否加密，API Key 都不会出现在接口响应中。
+ * <p>密钥来自环境变量 {@code app.ai.api-key-secret}（生产必须配置）。行为按环境区分：
+ * <ul>
+ *   <li>{@code app.security.require-secrets=true}（prod profile）：密钥缺失直接拒绝启动，禁止明文落库；</li>
+ *   <li>本地/测试：密钥缺失时降级为明文并打 WARN，便于开发联调。</li>
+ * </ul>
+ * 无论是否加密，API Key 都不会出现在接口响应中。
  */
 @Component
 public class ApiKeyCipher {
@@ -33,8 +37,14 @@ public class ApiKeyCipher {
     private final SecretKeySpec key;
     private final SecureRandom secureRandom = new SecureRandom();
 
-    public ApiKeyCipher(@Value("${app.ai.api-key-secret:}") String secret) {
+    public ApiKeyCipher(@Value("${app.ai.api-key-secret:}") String secret,
+                        @Value("${app.security.require-secrets:false}") boolean requireSecrets) {
         if (secret == null || secret.isBlank()) {
+            if (requireSecrets) {
+                // 生产（profile=prod）必须配置密钥：明文落库属于安全事故，宁可启动失败
+                throw new IllegalStateException(
+                        "AI_API_KEY_SECRET 未配置：生产环境拒绝以明文存储 AI API Key，请注入 ≥32 字节随机值");
+            }
             this.key = null;
             log.warn("app.ai.api-key-secret 未配置，AI API Key 将以明文存储（仅限本地开发，生产必须配置）");
             return;

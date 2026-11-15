@@ -49,7 +49,7 @@ class AiModelConfigServiceTest {
     @BeforeEach
     void setUp() {
         mapper = mock(AiModelConfigMapper.class);
-        cipher = new ApiKeyCipher("unit-test-secret");
+        cipher = new ApiKeyCipher("unit-test-secret", false);
         AiProperties properties = AiProperties.defaults();
         service = new AiModelConfigService(mapper, new AiProviderFactory(cipher, properties), cipher, properties);
     }
@@ -94,7 +94,7 @@ class AiModelConfigServiceTest {
 
         AiResponses.ModelResponse response = service.create(new AiRequests.ModelConfigRequest(
                 "本地 LMStudio", "http://localhost:1234/v1", "sk-secret-123456", "qwen2.5-vl-7b",
-                true, false, "CHAT_TEMPLATE", true, true, 60, 2048), "admin-1");
+                true, false, "CHAT_TEMPLATE", true, true, 60, 2048, true), "admin-1");
 
         assertThat(response.apiKeyConfigured()).isTrue();
         assertThat(response.apiKeyMasked()).isEqualTo("******");
@@ -117,7 +117,7 @@ class AiModelConfigServiceTest {
 
         service.update("cfg-1", new AiRequests.ModelConfigRequest(
                 "本地 LMStudio", "http://localhost:1234/v1", "******", "qwen2.5-vl-7b",
-                true, false, "CHAT_TEMPLATE", true, true, 60, 2048));
+                true, false, "CHAT_TEMPLATE", true, true, 60, 2048, false));
 
         assertThat(cipher.decrypt(existing.getApiKey())).isEqualTo("old-secret");
     }

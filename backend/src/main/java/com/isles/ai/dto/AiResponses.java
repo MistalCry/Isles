@@ -28,7 +28,20 @@ public final class AiResponses {
             Integer maxTokens,
             boolean apiKeyConfigured,
             String apiKeyMasked,
-            Instant createdAt) {
+            Instant createdAt,
+            boolean toolCallEnabled) {
+    }
+
+    /**
+     * 频道侧可选模型（频道主为助手指定模型用）：只暴露展示必需字段，不含 Base URL / 密钥。
+     */
+    public record SelectableModelResponse(
+            String id,
+            String name,
+            String model,
+            boolean visionEnabled,
+            boolean reasoningEnabled,
+            boolean isDefault) {
     }
 
     /** AI 能力状态：前端据此提示「未配置模型」。 */
@@ -117,7 +130,8 @@ public final class AiResponses {
             Integer autoPostPerDay,
             Integer autoCommentPerDay,
             Integer autoLikePerDay,
-            Instant updatedAt) {
+            Instant updatedAt,
+            String modelConfigId) {
     }
 
     public record TaskLogResponse(
@@ -145,6 +159,14 @@ public final class AiResponses {
             String model,
             List<SourceResponse> sources,
             boolean deepThinking) {
+    }
+
+    /**
+     * SSE sources 事件：工具调用完成后下发的真实来源引用（覆盖 meta 里的兜底引用）。
+     *
+     * <p>{@code toolRounds} 为实际执行的工具轮次，0 表示模型未调用工具（此时 sources 与 meta 相同）。
+     */
+    public record StreamSources(List<SourceResponse> sources, int toolRounds) {
     }
 
     /** SSE delta/reasoning 事件。 */

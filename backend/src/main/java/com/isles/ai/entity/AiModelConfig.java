@@ -29,6 +29,8 @@ public class AiModelConfig {
     private Boolean reasoningEnabled;
     /** 思考参数下发方式：REASONING_EFFORT / CHAT_TEMPLATE / BOTH / NONE（V5） */
     private String thinkingMode;
+    /** 是否启用工具调用（function calling）；关闭时问答使用关键词检索（V8） */
+    private Boolean toolCallEnabled;
     private Boolean isDefault;
     private Boolean enabled;
     private Integer timeoutSeconds;

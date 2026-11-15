@@ -84,9 +84,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/channels/mine").authenticated()
                         // 公开只读：用户资料/卡片
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/*", "/api/v1/users/*/card").permitAll()
-                        // 公开只读：频道详情、板块、频道帖子流
+                        // 公开只读：频道详情、板块、频道帖子流、置顶帖
                         .requestMatchers(HttpMethod.GET, "/api/v1/channels/*", "/api/v1/channels/*/boards",
-                                "/api/v1/channels/*/posts").permitAll()
+                                "/api/v1/channels/*/posts", "/api/v1/channels/*/posts/pinned").permitAll()
                         // 公开只读：帖子详情、评论列表
                         .requestMatchers(HttpMethod.GET, "/api/v1/posts/*", "/api/v1/posts/*/comments").permitAll()
                         // 公开只读：搜索

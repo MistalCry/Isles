@@ -1,5 +1,6 @@
 package com.isles.ai.service;
 
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.isles.ai.dto.AiRequests;
 import com.isles.ai.dto.AiResponses;
@@ -64,6 +65,7 @@ public class ChannelAiSettingsService {
     private final RoleMapper roleMapper;
     private final UserMapper userMapper;
     private final ChannelAccessService accessService;
+    private final AiModelConfigService modelConfigService;
     private final PasswordEncoder passwordEncoder;
 
     // ---------------------------------------------------------------------
@@ -134,6 +136,15 @@ public class ChannelAiSettingsService {
         }
         setting.setBio(blankToNull(request.bio()));
         setting.setPersona(blankToNull(request.persona()));
+        // modelConfigId 为 null 表示「本次未修改」，空串才是「跟随平台默认」；
+        // 指定模型时校验存在性（已禁用允许保存，运行期回落默认并记日志）
+        if (request.modelConfigId() != null) {
+            String modelConfigId = blankToNull(request.modelConfigId());
+            if (modelConfigId != null) {
+                modelConfigService.requireById(modelConfigId);
+            }
+            setting.setModelConfigId(modelConfigId);
+        }
         setting.setEnabled(request.enabled());
         setting.setSummaryDailyEnabled(request.summaryDailyEnabled());
         setting.setSummaryWeeklyEnabled(request.summaryWeeklyEnabled());
@@ -159,10 +170,19 @@ public class ChannelAiSettingsService {
             settingMapper.insert(setting);
         } else {
             settingMapper.updateById(setting);
+            clearExplicitNulls(setting, request);
         }
         syncAssistantUser(setting);
         log.info("频道助手设置已更新 channelId={} enabled={}", channelId, setting.getEnabled());
         return toSettingsResponse(channelId, setting);
+    }
+
+    /**
+     * 频道侧可选模型列表（频道主为助手指定模型用）：只返回启用中的模型，不含连接信息与密钥。
+     */
+    public List<AiResponses.SelectableModelResponse> listSelectableModels(String channelId, String userId) {
+        accessService.requirePermission(channelId, userId, ChannelPermissions.AI_MANAGE);
+        return modelConfigService.listSelectable();
     }
 
     // ---------------------------------------------------------------------
@@ -246,7 +266,7 @@ public class ChannelAiSettingsService {
             return new AiResponses.AssistantSettingsResponse(channelId, null, DEFAULT_NICKNAME, null, null, null,
                     null, false, false, false, false, false, false, false, false,
                     DEFAULT_SUMMARY_HOUR, DEFAULT_AUTO_POST_PER_DAY, DEFAULT_AUTO_COMMENT_PER_DAY,
-                    DEFAULT_AUTO_LIKE_PER_DAY, null);
+                    DEFAULT_AUTO_LIKE_PER_DAY, null, null);
         }
         return new AiResponses.AssistantSettingsResponse(
                 channelId,
@@ -268,7 +288,46 @@ public class ChannelAiSettingsService {
                 setting.getAutoPostPerDay(),
                 setting.getAutoCommentPerDay(),
                 setting.getAutoLikePerDay(),
-                ClockTimes.toInstant(setting.getUpdatedAt()));
+                ClockTimes.toInstant(setting.getUpdatedAt()),
+                setting.getModelConfigId());
+    }
+
+    /**
+     * 显式清空需要置 NULL 的列。
+     *
+     * <p>MyBatis-Plus 的 {@code updateById} 默认忽略 null 字段，所以「清空头像 / 简介 / 设定 / 频道模型」
+     * 只改内存对象不会落库（保存后仍是旧值）。这里只对**本次请求明确要求清空**的列补一次显式 update：
+     * {@code avatarUrl}/{@code coverUrl}/{@code modelConfigId} 传空串表示清空，{@code bio}/{@code persona} 留空即清空。
+     */
+    private void clearExplicitNulls(ChannelAiSetting setting, AiRequests.AssistantSettingsRequest request) {
+        // 用列名字符串构造 UpdateWrapper：lambda 版本依赖 MyBatis-Plus 的实体元数据缓存，
+        // 在纯单测（无 SqlSession）下会抛 "can not find lambda cache"，这里保持可测性。
+        UpdateWrapper<ChannelAiSetting> update = new UpdateWrapper<>();
+        update.eq("id", setting.getId());
+        boolean needed = false;
+        if (request.avatarUrl() != null && setting.getAvatarUrl() == null) {
+            update.set("avatar_url", null);
+            needed = true;
+        }
+        if (request.coverUrl() != null && setting.getCoverUrl() == null) {
+            update.set("cover_url", null);
+            needed = true;
+        }
+        if (setting.getBio() == null) {
+            update.set("bio", null);
+            needed = true;
+        }
+        if (setting.getPersona() == null) {
+            update.set("persona", null);
+            needed = true;
+        }
+        if (request.modelConfigId() != null && setting.getModelConfigId() == null) {
+            update.set("model_config_id", null);
+            needed = true;
+        }
+        if (needed) {
+            settingMapper.update(null, update);
+        }
     }
 
     private User createAssistantUser(ChannelAiSetting setting, LocalDateTime now) {

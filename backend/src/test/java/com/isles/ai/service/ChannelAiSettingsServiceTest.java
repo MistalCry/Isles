@@ -50,6 +50,7 @@ class ChannelAiSettingsServiceTest {
     private RoleMapper roleMapper;
     private UserMapper userMapper;
     private ChannelAccessService accessService;
+    private AiModelConfigService modelConfigService;
     private PasswordEncoder passwordEncoder;
     private ChannelAiSettingsService service;
 
@@ -62,9 +63,10 @@ class ChannelAiSettingsServiceTest {
         roleMapper = mock(RoleMapper.class);
         userMapper = mock(UserMapper.class);
         accessService = mock(ChannelAccessService.class);
+        modelConfigService = mock(AiModelConfigService.class);
         passwordEncoder = mock(PasswordEncoder.class);
         service = new ChannelAiSettingsService(settingMapper, taskLogMapper, channelMapper, channelMemberMapper,
-                roleMapper, userMapper, accessService, passwordEncoder);
+                roleMapper, userMapper, accessService, modelConfigService, passwordEncoder);
     }
 
     @Test
@@ -84,7 +86,7 @@ class ChannelAiSettingsServiceTest {
 
         AiResponses.AssistantSettingsResponse response = service.saveSettings("ch-1",
                 new AiRequests.AssistantSettingsRequest("岛灵", "/uploads/a.png", null, "频道小助手", "温和幽默",
-                        true, true, false, false, false, false, false, true, 9, 1, 3, 10),
+                        true, true, false, false, false, false, false, true, 9, 1, 3, 10, null),
                 "user-1");
 
         assertThat(response.nickname()).isEqualTo("岛灵");
@@ -92,6 +94,32 @@ class ChannelAiSettingsServiceTest {
         assertThat(response.summaryDailyEnabled()).isTrue();
         assertThat(response.dailySummaryHour()).isEqualTo(9);
         verify(settingMapper).insert(any(ChannelAiSetting.class));
+    }
+
+
+    @Test
+    void should_persist_cleared_nullable_fields() {
+        ChannelAiSetting existing = setting("set-1", "ch-1", "assistant-1");
+        existing.setAvatarUrl("/uploads/old.png");
+        existing.setBio("旧简介");
+        existing.setPersona("旧设定");
+        existing.setModelConfigId("cfg-old");
+        when(settingMapper.selectOne(any())).thenReturn(existing);
+        when(settingMapper.updateById(any(ChannelAiSetting.class))).thenReturn(1);
+        when(userMapper.selectById("assistant-1")).thenReturn(null);
+
+        // 空串表示清空（头像/封面/频道模型），bio/persona 留空即清空
+        AiResponses.AssistantSettingsResponse response = service.saveSettings("ch-1",
+                new AiRequests.AssistantSettingsRequest("Islander", "", "", null, null,
+                        true, false, false, false, false, false, false, true, 9, 1, 3, 10, ""),
+                "user-1");
+
+        assertThat(response.avatarUrl()).isNull();
+        assertThat(response.bio()).isNull();
+        assertThat(response.persona()).isNull();
+        assertThat(response.modelConfigId()).isNull();
+        // updateById 忽略 null，必须补一次显式 set null，否则清空不会落库
+        verify(settingMapper).update(org.mockito.ArgumentMatchers.isNull(), any());
     }
 
     @Test

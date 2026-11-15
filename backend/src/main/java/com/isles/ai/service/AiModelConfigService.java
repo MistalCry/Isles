@@ -68,6 +68,32 @@ public class AiModelConfigService {
         return listEnabled().stream().map(this::toResponse).toList();
     }
 
+    /**
+     * 按 id 取「可用」模型：不存在或已禁用返回 null（调用方负责回落默认并记日志）。
+     */
+    public AiModelConfig findEnabled(String id) {
+        if (id == null || id.isBlank()) {
+            return null;
+        }
+        AiModelConfig config = modelConfigMapper.selectById(id);
+        return config != null && Boolean.TRUE.equals(config.getEnabled()) ? config : null;
+    }
+
+    /**
+     * 频道侧可选模型：只返回启用中的模型，字段裁剪为展示必需（不含 Base URL / 密钥）。
+     */
+    public List<AiResponses.SelectableModelResponse> listSelectable() {
+        return listEnabled().stream()
+                .map(config -> new AiResponses.SelectableModelResponse(
+                        config.getId(),
+                        config.getName(),
+                        config.getModel(),
+                        Boolean.TRUE.equals(config.getVisionEnabled()),
+                        Boolean.TRUE.equals(config.getReasoningEnabled()),
+                        Boolean.TRUE.equals(config.getIsDefault())))
+                .toList();
+    }
+
     public AiModelConfig requireById(String id) {
         AiModelConfig config = id == null ? null : modelConfigMapper.selectById(id);
         if (config == null) {
@@ -276,6 +302,7 @@ public class AiModelConfigService {
                 : request.thinkingMode());
         config.setIsDefault(request.isDefault());
         config.setEnabled(request.enabled());
+        config.setToolCallEnabled(request.toolCallEnabled());
         config.setTimeoutSeconds(request.timeoutSeconds() == null
                 ? properties.defaultTimeoutSeconds()
                 : request.timeoutSeconds());
@@ -307,7 +334,8 @@ public class AiModelConfigService {
                 config.getMaxTokens(),
                 config.getApiKey() != null && !config.getApiKey().isBlank(),
                 masked,
-                ClockTimes.toInstant(config.getCreatedAt()));
+                ClockTimes.toInstant(config.getCreatedAt()),
+                Boolean.TRUE.equals(config.getToolCallEnabled()));
     }
 
     private String maskApiKey(String apiKey, Boolean encrypted) {

@@ -31,5 +31,6 @@ public record PostResponse(
         boolean pinned,
         boolean essence,
         String status,
-        Instant createdAt) {
+        Instant createdAt,
+        TopCommentResponse topComment) {
 }

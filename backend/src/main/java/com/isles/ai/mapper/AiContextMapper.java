@@ -54,6 +54,31 @@ public interface AiContextMapper {
                                            @Param("limit") int limit);
 
     /**
+     * 单帖详情（工具调用 get_post_detail 使用）。
+     *
+     * <p>可见性与检索一致：公开可见频道的帖子，或频道助手场景下本频道的帖子。
+     */
+    @Select("""
+            <script>
+            SELECT
+            """ + CONTEXT_COLUMNS + """
+            FROM posts p
+            JOIN channels c ON c.id = p.channel_id
+            WHERE p.id = #{postId}
+              AND p.status = 'PUBLISHED' AND p.deleted_at IS NULL
+              AND c.status = 'ACTIVE' AND c.deleted_at IS NULL
+            <choose>
+              <when test="channelId != null">
+                AND (p.channel_id = #{channelId} OR c.type = 'PUBLIC' OR c.visibility = 'PUBLIC_VISIBLE')
+              </when>
+              <otherwise>AND (c.type = 'PUBLIC' OR c.visibility = 'PUBLIC_VISIBLE')</otherwise>
+            </choose>
+            LIMIT 1
+            </script>
+            """)
+    AiContextPost selectContextPostById(@Param("postId") String postId, @Param("channelId") String channelId);
+
+    /**
      * 最近帖子（无关键词命中时的兜底上下文 / 自动任务素材 / 热门内容检索）。
      */
     @Select("""

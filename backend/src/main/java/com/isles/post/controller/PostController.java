@@ -54,6 +54,15 @@ public class PostController {
                 currentUserProvider.currentUserIdOrNull());
     }
 
+    /**
+     * 频道置顶帖（docs/03 FR-POST-05）：按置顶时间倒序，最多 20 条。
+     */
+    @GetMapping("/channels/{channelId}/posts/pinned")
+    public PageResult<PostResponse> listPinnedPosts(@PathVariable String channelId,
+                                                    @RequestParam(required = false) Integer limit) {
+        return postService.listPinnedPosts(channelId, limit, currentUserProvider.currentUserIdOrNull());
+    }
+
     @GetMapping("/posts/{id}")
     public PostResponse getPost(@PathVariable String id) {
         return postService.getPostDetail(id, currentUserProvider.currentUserIdOrNull());

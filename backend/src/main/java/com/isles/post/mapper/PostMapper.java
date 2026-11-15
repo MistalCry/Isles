@@ -20,6 +20,10 @@ public interface PostMapper extends BaseMapper<Post> {
 
     /**
      * 频道帖子流 - 最新（含精华筛选）。
+     *
+     * <p>排序 {@code is_pinned DESC, id DESC}：置顶帖固定排在最前，避免置顶已久的旧帖沉到首屏之外。
+     * 游标使用「置顶标记 + id」复合条件：{@code cursorPinned} 为游标帖自身的置顶状态，
+     * 未置顶的游标只能继续翻未置顶帖，置顶游标先翻完剩余置顶再进入普通流。
      */
     @Select("""
             <script>
@@ -27,8 +31,11 @@ public interface PostMapper extends BaseMapper<Post> {
             WHERE channel_id = #{channelId} AND status = 'PUBLISHED' AND deleted_at IS NULL
             <if test="boardId != null">AND board_id = #{boardId}</if>
             <if test="essenceOnly">AND is_essence = 1</if>
-            <if test="cursorId != null">AND id &lt; #{cursorId}</if>
-            ORDER BY id DESC
+            <if test="cursorId != null">
+              AND (is_pinned &lt; #{cursorPinned}
+                   OR (is_pinned = #{cursorPinned} AND id &lt; #{cursorId}))
+            </if>
+            ORDER BY is_pinned DESC, id DESC
             LIMIT #{limit}
             </script>
             """)
@@ -36,6 +43,24 @@ public interface PostMapper extends BaseMapper<Post> {
                                    @Param("boardId") String boardId,
                                    @Param("essenceOnly") boolean essenceOnly,
                                    @Param("cursorId") String cursorId,
+                                   @Param("cursorPinned") int cursorPinned,
+                                   @Param("limit") int limit);
+
+    /**
+     * 频道置顶帖：按置顶时间倒序，最多 20 条（docs/03 FR-POST-05）。
+     */
+    @Select("""
+            <script>
+            SELECT * FROM posts
+            WHERE channel_id = #{channelId} AND status = 'PUBLISHED' AND deleted_at IS NULL
+              AND is_pinned = 1
+            <if test="boardId != null">AND board_id = #{boardId}</if>
+            ORDER BY pinned_at DESC, id DESC
+            LIMIT #{limit}
+            </script>
+            """)
+    List<Post> selectChannelPinned(@Param("channelId") String channelId,
+                                   @Param("boardId") String boardId,
                                    @Param("limit") int limit);
 
     /**

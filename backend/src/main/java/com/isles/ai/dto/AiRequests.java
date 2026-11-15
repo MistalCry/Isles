@@ -103,7 +103,10 @@ public final class AiRequests {
 
             @Min(value = 1, message = "最大 token 至少 1")
             @Max(value = 128_000, message = "最大 token 超出上限")
-            Integer maxTokens) {
+            Integer maxTokens,
+
+            /** 是否启用工具调用（function calling）；默认关闭时问答走关键词检索。 */
+            boolean toolCallEnabled) {
     }
 
     /** 未保存配置时的连通性测试。 */
@@ -166,7 +169,12 @@ public final class AiRequests {
 
             @Min(value = 0, message = "每日点赞上限不能为负")
             @Max(value = 200, message = "每日点赞上限最多 200")
-            Integer autoLikePerDay) {
+            Integer autoLikePerDay,
+
+            /**
+             * 频道助手使用的模型配置：{@code null}=不修改，空串=跟随平台默认，非空=指定模型。
+             */
+            String modelConfigId) {
     }
 
     /** 手动触发频道助手任务（管理端使用）。 */

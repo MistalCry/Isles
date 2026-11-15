@@ -16,6 +16,7 @@ import java.util.List;
  *                         不同后端开关思考的方式不同：OpenAI 系用 {@code reasoning_effort}，
  *                         LM Studio/vLLM + Qwen3 用 {@code chat_template_kwargs.enable_thinking}；
  *                         关闭时必须显式下发，否则模型沿用默认继续思考。
+ * @param tools            可用工具列表；空列表表示本轮不提供工具（不再请求模型调用工具）
  */
 public record AiChatRequest(
         String model,
@@ -25,27 +26,49 @@ public record AiChatRequest(
         int maxTokens,
         Integer timeoutSeconds,
         boolean reasoningCapable,
-        String thinkingMode) {
+        String thinkingMode,
+        List<AiToolDefinition> tools) {
 
     public AiChatRequest {
         messages = messages == null ? List.of() : List.copyOf(messages);
+        tools = tools == null ? List.of() : List.copyOf(tools);
     }
 
     public static AiChatRequest of(String model, List<AiChatMessage> messages, boolean stream,
                                    boolean deepThinking, int maxTokens) {
-        return new AiChatRequest(model, messages, stream, deepThinking, maxTokens, null, false, "REASONING_EFFORT");
+        return new AiChatRequest(model, messages, stream, deepThinking, maxTokens, null, false,
+                "REASONING_EFFORT", List.of());
     }
 
     public static AiChatRequest of(String model, List<AiChatMessage> messages, boolean stream,
                                    boolean deepThinking, int maxTokens, boolean reasoningCapable) {
         return new AiChatRequest(model, messages, stream, deepThinking, maxTokens, null, reasoningCapable,
-                "REASONING_EFFORT");
+                "REASONING_EFFORT", List.of());
     }
 
     public static AiChatRequest of(String model, List<AiChatMessage> messages, boolean stream,
                                    boolean deepThinking, int maxTokens, boolean reasoningCapable,
                                    String thinkingMode) {
         return new AiChatRequest(model, messages, stream, deepThinking, maxTokens, null, reasoningCapable,
-                thinkingMode == null ? "REASONING_EFFORT" : thinkingMode);
+                thinkingMode == null ? "REASONING_EFFORT" : thinkingMode, List.of());
+    }
+
+    public AiChatRequest withTools(List<AiToolDefinition> nextTools) {
+        return new AiChatRequest(model, messages, stream, deepThinking, maxTokens, timeoutSeconds,
+                reasoningCapable, thinkingMode, nextTools);
+    }
+
+    public AiChatRequest withMessages(List<AiChatMessage> nextMessages) {
+        return new AiChatRequest(model, nextMessages, stream, deepThinking, maxTokens, timeoutSeconds,
+                reasoningCapable, thinkingMode, tools);
+    }
+
+    public AiChatRequest withTimeoutSeconds(Integer nextTimeoutSeconds) {
+        return new AiChatRequest(model, messages, stream, deepThinking, maxTokens, nextTimeoutSeconds,
+                reasoningCapable, thinkingMode, tools);
+    }
+
+    public boolean hasTools() {
+        return !tools.isEmpty();
     }
 }

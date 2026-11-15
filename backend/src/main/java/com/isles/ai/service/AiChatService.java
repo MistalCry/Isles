@@ -8,11 +8,16 @@ import com.isles.ai.entity.AiMessage;
 import com.isles.ai.entity.AiModelConfig;
 import com.isles.ai.entity.ChannelAiSetting;
 import com.isles.ai.mapper.ChannelAiSettingMapper;
+import com.isles.ai.dto.AiContextPost;
 import com.isles.ai.provider.AiChatMessage;
 import com.isles.ai.provider.AiChatRequest;
 import com.isles.ai.provider.AiProvider;
 import com.isles.ai.provider.AiProviderException;
 import com.isles.ai.provider.AiStreamListener;
+import com.isles.ai.provider.AiToolCall;
+import com.isles.ai.provider.AiToolDefinition;
+import com.isles.ai.provider.AiUsage;
+import com.isles.ai.tool.AiToolRegistry;
 import com.isles.channel.entity.Channel;
 import com.isles.channel.mapper.ChannelMapper;
 import com.isles.channel.service.ChannelAccessService;
@@ -33,6 +38,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 频道问问对话编排（docs/03 FR-AIQA-01/03/04/05/07/08/09、§6.5）。
@@ -53,12 +59,17 @@ public class AiChatService {
     private static final String EVENT_REASONING = "reasoning";
     private static final String EVENT_DONE = "done";
     private static final String EVENT_ERROR = "error";
+    /** 工具调用后下发「真实来源」：覆盖 meta 里的关键词兜底引用 */
+    private static final String EVENT_SOURCES = "sources";
+    private static final int FALLBACK_SOURCE_LIMIT = 4;
     private static final int ESTIMATED_CHARS_PER_TOKEN = 4;
     private static final int MAX_IMAGES = 4;
 
     private final AiConversationService conversationService;
     private final AiModelConfigService modelConfigService;
     private final AiContextService contextService;
+    private final AiToolLoopService toolLoopService;
+    private final AiToolRegistry toolRegistry;
     private final AiImageResolver imageResolver;
     private final AiStreamRegistry streamRegistry;
     private final ChannelAccessService accessService;
@@ -73,6 +84,8 @@ public class AiChatService {
     public AiChatService(AiConversationService conversationService,
                          AiModelConfigService modelConfigService,
                          AiContextService contextService,
+                         AiToolLoopService toolLoopService,
+                         AiToolRegistry toolRegistry,
                          AiImageResolver imageResolver,
                          AiStreamRegistry streamRegistry,
                          ChannelAccessService accessService,
@@ -83,6 +96,8 @@ public class AiChatService {
         this.conversationService = conversationService;
         this.modelConfigService = modelConfigService;
         this.contextService = contextService;
+        this.toolLoopService = toolLoopService;
+        this.toolRegistry = toolRegistry;
         this.imageResolver = imageResolver;
         this.streamRegistry = streamRegistry;
         this.accessService = accessService;
@@ -179,7 +194,7 @@ public class AiChatService {
             log.info("模型未开启视觉能力，图片降级为纯文本 modelConfigId={}", model.getId());
             resolvedImages = List.of();
         }
-        AiContextService.AiPrompt prompt = contextService.buildPrompt(new AiContextService.AiPromptRequest(
+        AiContextService.AiPromptRequest promptRequest = new AiContextService.AiPromptRequest(
                 conversation.getScope(),
                 conversation.getChannelId(),
                 channelName(conversation),
@@ -187,8 +202,19 @@ public class AiChatService {
                 resolvedImages,
                 history,
                 deepThinking,
-                assistantPersona(conversation)));
-        String sourcesJson = conversationService.toSourcesJson(prompt.sources());
+                assistantPersona(conversation));
+        // 工具调用模式：不预置检索结果，由模型主动检索；其余模型保持原有关键词检索
+        boolean toolMode = Boolean.TRUE.equals(model.getToolCallEnabled());
+        AiContextService.AiPrompt prompt = toolMode
+                ? contextService.buildToolPrompt(promptRequest)
+                : contextService.buildPrompt(promptRequest);
+        List<AiResponses.SourceResponse> initialSources = prompt.sources();
+        if (toolMode && initialSources.isEmpty()) {
+            // meta 事件早于工具执行：先给一份关键词兜底引用，工具跑完后用 sources 事件覆盖为真实命中
+            initialSources = contextService.toSources(contextService.retrieve(question,
+                    channelScoped(conversation) ? conversation.getChannelId() : null, FALLBACK_SOURCE_LIMIT));
+        }
+        String sourcesJson = conversationService.toSourcesJson(initialSources);
 
         // 先落库占位消息：meta 事件用同一 id，前端停止/刷新都能定位
         AiMessage placeholder = conversationService.createAssistantPlaceholder(
@@ -197,14 +223,16 @@ public class AiChatService {
             acquireStreamSlot(userId, placeholder.getId());
         } catch (RuntimeException ex) {
             failPlaceholder(new StreamTask(conversation.getId(), userId, model, prompt, sourcesJson,
-                    placeholder.getId(), deepThinking), AiMessage.Status.FAILED, "");
+                    placeholder.getId(), deepThinking, promptRequest, toolMode, channelScoped(conversation),
+                    conversation.getChannelId(), initialSources), AiMessage.Status.FAILED, "");
             throw ex;
         }
         streamRegistry.register(placeholder.getId());
 
         SseEmitter emitter = new SseEmitter(Math.max(10, properties.streamTimeoutSeconds()) * 1000L);
         StreamTask task = new StreamTask(conversation.getId(), userId, model, prompt, sourcesJson,
-                placeholder.getId(), deepThinking);
+                placeholder.getId(), deepThinking, promptRequest, toolMode, channelScoped(conversation),
+                conversation.getChannelId(), initialSources);
         emitter.onTimeout(() -> streamRegistry.cancel(placeholder.getId()));
         emitter.onError(ex -> streamRegistry.cancel(placeholder.getId()));
         try {
@@ -224,35 +252,52 @@ public class AiChatService {
         AtomicBoolean finished = new AtomicBoolean(false);
         try {
             sendEvent(emitter, EVENT_META, new AiResponses.StreamMeta(task.conversationId(), task.messageId(),
-                    task.model().getModel(), task.prompt().sources(), task.deepThinking()));
+                    task.model().getModel(), task.initialSources(), task.deepThinking()));
             AiProvider provider = modelConfigService.providerFor(task.model());
-            AiChatRequest providerRequest = AiChatRequest.of(task.model().getModel(), task.prompt().messages(),
+            AiChatRequest baseRequest = AiChatRequest.of(task.model().getModel(), task.prompt().messages(),
                     true, task.deepThinking(), task.model().getMaxTokens() == null ? 0 : task.model().getMaxTokens(),
                     Boolean.TRUE.equals(task.model().getReasoningEnabled()), task.model().getThinkingMode());
-            provider.streamChat(providerRequest, new AiStreamListener() {
-                @Override
-                public void onDelta(String delta) {
-                    content.append(delta);
-                    sendEventQuietly(emitter, EVENT_DELTA, new AiResponses.StreamDelta(delta));
+            List<AiToolDefinition> tools = task.toolMode()
+                    ? toolRegistry.definitions(task.channelScope())
+                    : List.of();
+            // 工具轮次计入总超时：循环按剩余时间下发每轮 timeoutSeconds
+            long deadline = System.currentTimeMillis()
+                    + Math.max(10, properties.streamTimeoutSeconds()) * 1000L;
+            // 降级时用关键词检索结果替换初始来源（meta 已下发，sources 事件会覆盖）
+            List<AiResponses.SourceResponse> effectiveSources = task.initialSources();
+            AiToolLoopService.ToolLoopResult loopResult;
+            try {
+                loopResult = toolLoopService.run(baseRequest, tools, task.channelId(),
+                        deadline, () -> streamRegistry.isCancelled(task.messageId()),
+                        request -> streamRound(provider, request, emitter, task, content, reasoning));
+            } catch (AiProviderException ex) {
+                // 模型不支持 tools 时上游常直接报 400：降级为关键词检索再答一次，功能不能坏
+                if (!task.toolMode() || content.length() > 0) {
+                    throw ex;
                 }
-
-                @Override
-                public void onReasoning(String delta) {
-                    reasoning.append(delta);
-                    sendEventQuietly(emitter, EVENT_REASONING, new AiResponses.StreamDelta(delta));
-                }
-
-                @Override
-                public boolean isCancelled() {
-                    return streamRegistry.isCancelled(task.messageId());
-                }
-            });
+                log.warn("模型工具调用失败，降级为关键词检索 modelConfigId={} code={} message={}",
+                        task.model().getId(), ex.getCode(), ex.getMessage());
+                AiContextService.AiPrompt fallback = contextService.buildPrompt(task.promptRequest());
+                loopResult = toolLoopService.run(baseRequest.withMessages(fallback.messages()), List.of(),
+                        task.channelId(), deadline, () -> streamRegistry.isCancelled(task.messageId()),
+                        request -> streamRound(provider, request, emitter, task, content, reasoning));
+                effectiveSources = fallback.sources();
+            }
             boolean aborted = streamRegistry.isCancelled(task.messageId());
             AiMessage.Status status = aborted ? AiMessage.Status.ABORTED : AiMessage.Status.COMPLETED;
+            // 来源引用：工具实际命中的帖子优先；未命中或未开启工具时沿用关键词检索结果
+            List<AiResponses.SourceResponse> sources = loopResult.hits().isEmpty()
+                    ? effectiveSources
+                    : contextService.toSources(loopResult.hits());
+            if (task.toolMode()) {
+                sendEventQuietly(emitter, EVENT_SOURCES,
+                        new AiResponses.StreamSources(sources, loopResult.toolRounds()));
+            }
             int tokenIn = estimateTokens(task.prompt().messages());
             int tokenOut = estimateTokens(content.toString());
             conversationService.finishAssistantMessage(task.messageId(), content.toString(), reasoning.toString(),
-                    task.sourcesJson(), task.model().getModel(), task.model().getId(), tokenIn, tokenOut, status);
+                    conversationService.toSourcesJson(sources), task.model().getModel(), task.model().getId(),
+                    tokenIn, tokenOut, status);
             finished.set(true);
             sendEventQuietly(emitter, EVENT_DONE, new AiResponses.StreamDone(task.messageId(), aborted, status.name(),
                     tokenIn, tokenOut));
@@ -289,6 +334,54 @@ public class AiChatService {
             streamRegistry.remove(task.messageId());
             releaseStreamSlot(task.userId(), task.messageId());
         }
+    }
+
+    /**
+     * 执行一轮流式模型调用：delta 实时推给前端，同时收集本轮工具调用与用量。
+     *
+     * <p>工具轮次通常没有正文增量，因此「边收边推」不会把中间态暴露成最终答案；
+     * 若模型在工具轮里也输出了文本，会作为回答的一部分保留（与上游行为一致）。
+     */
+    private AiToolLoopService.ToolTurn streamRound(AiProvider provider, AiChatRequest request, SseEmitter emitter,
+                                                   StreamTask task, StringBuilder content, StringBuilder reasoning) {
+        StringBuilder roundContent = new StringBuilder();
+        StringBuilder roundReasoning = new StringBuilder();
+        AtomicReference<List<AiToolCall>> toolCalls = new AtomicReference<>(List.of());
+        AtomicReference<AiUsage> usage = new AtomicReference<>(AiUsage.empty());
+        provider.streamChat(request, new AiStreamListener() {
+            @Override
+            public void onDelta(String delta) {
+                content.append(delta);
+                roundContent.append(delta);
+                sendEventQuietly(emitter, EVENT_DELTA, new AiResponses.StreamDelta(delta));
+            }
+
+            @Override
+            public void onReasoning(String delta) {
+                reasoning.append(delta);
+                roundReasoning.append(delta);
+                sendEventQuietly(emitter, EVENT_REASONING, new AiResponses.StreamDelta(delta));
+            }
+
+            @Override
+            public void onToolCalls(List<AiToolCall> calls, String finishReason) {
+                toolCalls.set(calls);
+            }
+
+            @Override
+            public void onCompleted(AiUsage roundUsage) {
+                if (roundUsage != null) {
+                    usage.set(roundUsage);
+                }
+            }
+
+            @Override
+            public boolean isCancelled() {
+                return streamRegistry.isCancelled(task.messageId());
+            }
+        });
+        return new AiToolLoopService.ToolTurn(roundContent.toString(), roundReasoning.toString(), usage.get(),
+                toolCalls.get());
     }
 
     private void completeQuietly(SseEmitter emitter) {
@@ -358,6 +451,11 @@ public class AiChatService {
         return history;
     }
 
+    private boolean channelScoped(AiConversation conversation) {
+        return AiConversation.Scope.CHANNEL.name().equals(conversation.getScope())
+                && conversation.getChannelId() != null;
+    }
+
     private String channelName(AiConversation conversation) {
         if (!AiConversation.Scope.CHANNEL.name().equals(conversation.getScope())
                 || conversation.getChannelId() == null) {
@@ -424,7 +522,12 @@ public class AiChatService {
                               AiContextService.AiPrompt prompt,
                               String sourcesJson,
                               String messageId,
-                              boolean deepThinking) {
+                              boolean deepThinking,
+                              AiContextService.AiPromptRequest promptRequest,
+                              boolean toolMode,
+                              boolean channelScope,
+                              String channelId,
+                              List<AiResponses.SourceResponse> initialSources) {
     }
 
     /** 客户端断开连接：内部异常，仅用于中止读取循环。 */

@@ -13,10 +13,14 @@ import com.isles.channel.service.MentionService;
 import com.isles.channel.service.ChannelPermissions;
 import com.isles.common.dto.MediaItem;
 import com.isles.common.error.AppException;
+import com.isles.comment.entity.Comment;
+import com.isles.comment.mapper.CommentMapper;
 import com.isles.common.error.ErrorCode;
 import com.isles.interaction.service.InteractionService;
 import com.isles.post.dto.CreatePostRequest;
 import com.isles.post.dto.PostResponse;
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.isles.post.entity.Post;
 import com.isles.post.entity.PostMedia;
 import com.isles.post.mapper.PostMapper;
@@ -25,12 +29,18 @@ import com.isles.user.entity.User;
 import com.isles.user.mapper.UserMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
+import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
@@ -48,6 +58,7 @@ class PostServiceTest {
 
     private PostMapper postMapper;
     private PostMediaMapper postMediaMapper;
+    private CommentMapper commentMapper;
     private ChannelMapper channelMapper;
     private BoardMapper boardMapper;
     private UserMapper userMapper;
@@ -61,6 +72,7 @@ class PostServiceTest {
     void setUp() {
         postMapper = mock(PostMapper.class);
         postMediaMapper = mock(PostMediaMapper.class);
+        commentMapper = mock(CommentMapper.class);
         channelMapper = mock(ChannelMapper.class);
         boardMapper = mock(BoardMapper.class);
         userMapper = mock(UserMapper.class);
@@ -68,7 +80,8 @@ class PostServiceTest {
         interactionService = mock(InteractionService.class);
         channelViewService = mock(ChannelViewService.class);
         auditLogService = mock(AuditLogService.class);
-        postService = new PostService(postMapper, postMediaMapper, channelMapper, boardMapper, userMapper,
+        postService = new PostService(postMapper, postMediaMapper, commentMapper,
+                channelMapper, boardMapper, userMapper,
                 accessService, interactionService, channelViewService, auditLogService, mock(MentionService.class),
                 mock(com.isles.platform.wordfilter.SensitiveWordService.class));
     }
@@ -180,6 +193,73 @@ class PostServiceTest {
         return new ChannelAccessService.ChannelAccessContext(channel(), member, role);
     }
 
+
+    @Test
+    void should_clamp_pinned_posts_to_twenty() {
+        when(postMapper.selectChannelPinned("ch-1", null, 20)).thenReturn(List.of());
+
+        postService.listPinnedPosts("ch-1", 100, null);
+
+        verify(postMapper).selectChannelPinned("ch-1", null, 20);
+    }
+
+    @Test
+    void should_include_top_comment_when_building_responses() {
+        when(commentMapper.selectTopLikedByPostIds(List.of("post-1")))
+                .thenReturn(List.of(comment("comment-1", "user-2")));
+        when(userMapper.selectBatchIds(anyCollection())).thenReturn(List.of(author(), otherAuthor()));
+        when(channelMapper.selectBatchIds(anyCollection())).thenReturn(List.of(channel()));
+        when(boardMapper.selectBatchIds(anyCollection())).thenReturn(List.of(board("board-1", "ch-1")));
+        when(postMediaMapper.selectList(any())).thenReturn(List.of());
+        when(interactionService.likedPostIds(any(), any())).thenReturn(Set.of());
+        when(interactionService.likedCommentIds(any(), any())).thenReturn(Set.of("comment-1"));
+
+        List<PostResponse> responses = postService.toResponses(List.of(post()), "viewer-1");
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).topComment()).isNotNull();
+        assertThat(responses.get(0).topComment().id()).isEqualTo("comment-1");
+        assertThat(responses.get(0).topComment().authorNickname()).isEqualTo("评论者");
+        assertThat(responses.get(0).topComment().likeCount()).isEqualTo(3L);
+        assertThat(responses.get(0).topComment().liked()).isTrue();
+    }
+
+    @Test
+    void should_return_null_top_comment_when_post_has_no_comment() {
+        when(commentMapper.selectTopLikedByPostIds(List.of("post-1"))).thenReturn(List.of());
+        when(userMapper.selectBatchIds(anyCollection())).thenReturn(List.of(author()));
+        when(channelMapper.selectBatchIds(anyCollection())).thenReturn(List.of(channel()));
+        when(boardMapper.selectBatchIds(anyCollection())).thenReturn(List.of(board("board-1", "ch-1")));
+        when(postMediaMapper.selectList(any())).thenReturn(List.of());
+        when(interactionService.likedPostIds(any(), any())).thenReturn(Set.of());
+
+        List<PostResponse> responses = postService.toResponses(List.of(post()), null);
+
+        assertThat(responses.get(0).topComment()).isNull();
+        verify(interactionService, never()).likedCommentIds(any(), any());
+    }
+
+    private Comment comment(String id, String authorId) {
+        Comment comment = new Comment();
+        comment.setId(id);
+        comment.setPostId("post-1");
+        comment.setAuthorId(authorId);
+        comment.setContent("最高赞评论");
+        comment.setLikeCount(3L);
+        comment.setStatus(Comment.Status.PUBLISHED.name());
+        comment.setCreatedAt(LocalDateTime.now());
+        return comment;
+    }
+
+    private User otherAuthor() {
+        User user = new User();
+        user.setId("user-2");
+        user.setUsername("commenter");
+        user.setNickname("评论者");
+        user.setStatus(User.Status.ACTIVE.name());
+        return user;
+    }
+
     private Channel channel() {
         Channel channel = new Channel();
         channel.setId("ch-1");
@@ -215,6 +295,50 @@ class PostServiceTest {
         user.setAvatarUrl("/uploads/avatar.png");
         user.setStatus(User.Status.ACTIVE.name());
         return user;
+    }
+
+
+    /**
+     * 移除封面 / 清空标题必须真正落库。
+     *
+     * <p>MyBatis-Plus 的 {@code updateById} 默认跳过 null 字段，仅把内存值置 null 是「空转」：
+     * 保存成功但库里仍是旧值。这里同时锁两层——服务层确实把值置 null，实体字段确实声明了 ALWAYS。
+     */
+    @Test
+    void should_clear_cover_and_title_when_blank() {
+        Post existing = post();
+        existing.setTitle("旧标题");
+        existing.setCoverUrl("/uploads/old-cover.jpg");
+        when(postMapper.selectById("post-1")).thenReturn(existing);
+        when(postMapper.updateById(any(Post.class))).thenReturn(1);
+        when(userMapper.selectBatchIds(anyCollection())).thenReturn(List.of(author()));
+        when(channelMapper.selectBatchIds(anyCollection())).thenReturn(List.of(channel()));
+        when(boardMapper.selectBatchIds(anyCollection())).thenReturn(List.of(board("board-1", "ch-1")));
+        when(postMediaMapper.selectList(any())).thenReturn(List.of());
+        when(interactionService.likedPostIds(any(), any())).thenReturn(Set.of());
+        when(commentMapper.selectTopLikedByPostIds(any())).thenReturn(List.of());
+
+        postService.updatePost("post-1", new com.isles.post.dto.UpdatePostRequest("", "内容", "PLAIN", "", List.of()),
+                "user-1");
+
+        ArgumentCaptor<Post> captor = ArgumentCaptor.forClass(Post.class);
+        verify(postMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getCoverUrl()).isNull();
+        assertThat(captor.getValue().getTitle()).isNull();
+
+        // 字段策略回归锁：去掉 ALWAYS 后上面的 null 会被 updateById 静默丢弃
+        assertThat(updateStrategyOf("coverUrl")).isEqualTo(FieldStrategy.ALWAYS);
+        assertThat(updateStrategyOf("title")).isEqualTo(FieldStrategy.ALWAYS);
+    }
+
+    private FieldStrategy updateStrategyOf(String fieldName) {
+        try {
+            Field field = Post.class.getDeclaredField(fieldName);
+            TableField annotation = field.getAnnotation(TableField.class);
+            return annotation == null ? null : annotation.updateStrategy();
+        } catch (NoSuchFieldException ex) {
+            throw new AssertionError("字段不存在：" + fieldName, ex);
+        }
     }
 
     private Post post() {

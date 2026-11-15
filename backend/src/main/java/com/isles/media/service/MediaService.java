@@ -27,6 +27,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -45,10 +47,27 @@ public class MediaService {
 
     private static final long IMAGE_MAX_BYTES = 10L * 1024 * 1024;
     private static final long VIDEO_MAX_BYTES = 200L * 1024 * 1024;
-    private static final int HEADER_LENGTH = 16;
+    /** 读取文件头字节数：ISO BMFF（avif/heic/mp4/mov）需要读到兼容 brand 列表 */
+    private static final int HEADER_LENGTH = 32;
     private static final int THUMB_MAX_DIMENSION = 480;
-    private static final Set<String> IMAGE_MIMES = Set.of("image/jpeg", "image/png", "image/gif", "image/webp");
-    private static final Set<String> VIDEO_MIMES = Set.of("video/mp4", "video/webm");
+    /**
+     * 图片白名单：只收浏览器原生能渲染的格式（用户决策：不做服务端转码）。
+     *
+     * <p>AVIF / HEIC / HEIF 由 ImageIO 直接解码会失败，走 ffmpeg 兜底；两者都不可用时
+     * 降级为「原图直出 + 尺寸未知」，上传本身仍然成功。
+     */
+    private static final Set<String> IMAGE_MIMES = Set.of(
+            "image/jpeg", "image/png", "image/gif", "image/webp",
+            "image/avif", "image/bmp", "image/heic", "image/heif");
+    private static final Set<String> VIDEO_MIMES = Set.of(
+            "video/mp4", "video/webm", "video/quicktime", "video/x-m4v");
+    /** ISO BMFF 的 ftyp box 位置（bytes 4..7 = 'ftyp'，8..11 = major brand） */
+    private static final Set<String> BRAND_AVIF = Set.of("avif", "avis");
+    private static final Set<String> BRAND_HEIC = Set.of("heic", "heix", "hevc", "hevx", "heim", "heis");
+    private static final Set<String> BRAND_HEIF = Set.of("mif1", "msf1", "heif");
+    private static final Set<String> BRAND_M4V = Set.of("M4V ", "M4VH", "M4VP");
+    private static final String BRAND_QUICKTIME = "qt  ";
+
     /** ffmpeg 输出里的 Duration: 00:00:12.34 */
     private static final Pattern DURATION_PATTERN = Pattern.compile("Duration: (\\d+):(\\d+):(\\d+(?:\\.\\d+)?)");
     /** ffmpeg 输出里的 1080x1920 */
@@ -140,6 +159,10 @@ public class MediaService {
                 if (thumbStoragePath != null) {
                     thumbUrl = "/uploads/" + relativeDir + "/" + thumbStoragePath;
                 }
+            } else {
+                // ImageIO 与 ffmpeg 都无法解码（如未安装 ffmpeg 的 HEIC/AVIF）：
+                // 降级为原图直出，尺寸未知；前端按原始宽高比渲染，不影响发布。
+                log.info("图片无法解码，降级为原图直出（无缩略图/尺寸） mediaId={} mime={}", mediaId, detectedMime);
             }
         } else {
             // 视频：抽首帧做封面 + 读取时长/分辨率（列表不再显示黑块）
@@ -191,41 +214,85 @@ public class MediaService {
 
     /**
      * 依据文件头识别真实类型（docs/07 §5：MIME + magic number，不信任扩展名）。
+     *
+     * <p>ISO BMFF 家族（mp4 / mov / m4v / avif / heic / heif）文件头都是 {@code ftyp}，
+     * 必须按 major brand + 兼容 brand 区分，否则 HEIC 会被误判成 mp4。
+     *
+     * @return 识别出的 MIME；不认识返回 null
      */
-    private String detectMime(byte[] header) {
-        if (header.length >= 3 && (header[0] & 0xFF) == 0xFF && (header[1] & 0xFF) == 0xD8
-                && (header[2] & 0xFF) == 0xFF) {
+    static String detectMime(byte[] header) {
+        if (header == null || header.length < 3) {
+            return null;
+        }
+        if ((header[0] & 0xFF) == 0xFF && (header[1] & 0xFF) == 0xD8 && (header[2] & 0xFF) == 0xFF) {
             return "image/jpeg";
         }
         if (header.length >= 8 && (header[0] & 0xFF) == 0x89 && header[1] == 'P' && header[2] == 'N'
                 && header[3] == 'G') {
             return "image/png";
         }
-        if (header.length >= 4 && header[0] == 'G' && header[1] == 'I' && header[2] == 'F' && header[3] == '8') {
+        if (header[0] == 'G' && header[1] == 'I' && header[2] == 'F' && header[3] == '8') {
             return "image/gif";
+        }
+        if (header.length >= 4 && header[0] == 'B' && header[1] == 'M') {
+            return "image/bmp";
         }
         if (header.length >= 12 && header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F'
                 && header[8] == 'W' && header[9] == 'E' && header[10] == 'B' && header[11] == 'P') {
             return "image/webp";
         }
-        if (header.length >= 8 && header[4] == 'f' && header[5] == 't' && header[6] == 'y' && header[7] == 'p') {
-            return "video/mp4";
-        }
         if (header.length >= 4 && (header[0] & 0xFF) == 0x1A && (header[1] & 0xFF) == 0x45
                 && (header[2] & 0xFF) == 0xDF && (header[3] & 0xFF) == 0xA3) {
             return "video/webm";
         }
+        if (header.length >= 12 && header[4] == 'f' && header[5] == 't' && header[6] == 'y' && header[7] == 'p') {
+            return detectIsoBmffMime(header);
+        }
         return null;
     }
 
-    private String extensionFor(String mime) {
+    /**
+     * 解析 ISO BMFF 的 brand 列表：major brand（8..11）+ compatible brands（16 起每 4 字节）。
+     */
+    private static String detectIsoBmffMime(byte[] header) {
+        List<String> brands = new ArrayList<>(4);
+        brands.add(new String(header, 8, 4, StandardCharsets.US_ASCII));
+        for (int offset = 16; offset + 4 <= header.length; offset += 4) {
+            brands.add(new String(header, offset, 4, StandardCharsets.US_ASCII));
+        }
+        if (brands.stream().anyMatch(BRAND_AVIF::contains)) {
+            return "image/avif";
+        }
+        if (brands.stream().anyMatch(BRAND_HEIC::contains)) {
+            return "image/heic";
+        }
+        if (brands.stream().anyMatch(BRAND_HEIF::contains)) {
+            return "image/heif";
+        }
+        if (brands.contains(BRAND_QUICKTIME)) {
+            return "video/quicktime";
+        }
+        if (brands.stream().anyMatch(BRAND_M4V::contains)) {
+            return "video/x-m4v";
+        }
+        // isom / mp42 / avc1 等常规 MP4 brand
+        return "video/mp4";
+    }
+
+    static String extensionFor(String mime) {
         return switch (mime) {
             case "image/jpeg" -> "jpg";
             case "image/png" -> "png";
             case "image/gif" -> "gif";
             case "image/webp" -> "webp";
+            case "image/avif" -> "avif";
+            case "image/bmp" -> "bmp";
+            case "image/heic" -> "heic";
+            case "image/heif" -> "heif";
             case "video/mp4" -> "mp4";
             case "video/webm" -> "webm";
+            case "video/quicktime" -> "mov";
+            case "video/x-m4v" -> "m4v";
             default -> throw new AppException(ErrorCode.MEDIA_INVALID_TYPE);
         };
     }
@@ -238,8 +305,11 @@ public class MediaService {
             }
         } catch (IOException ex) {
             log.debug("ImageIO 读取失败，尝试 ffmpeg 解码 path={}", path);
+        } catch (RuntimeException ex) {
+            // 个别 ImageIO 插件对畸形/新格式文件抛运行时异常；不能让它冒泡成 500
+            log.debug("ImageIO 解码异常，尝试 ffmpeg 解码 path={} message={}", path, ex.getMessage());
         }
-        // ImageIO 默认不支持 WebP：交给 ffmpeg 转 PNG 再读，保证 WebP 也有尺寸与缩略图
+        // ImageIO 默认不支持 WebP/AVIF/HEIC：交给 ffmpeg 解码，保证有尺寸与缩略图
         return readImageViaFfmpeg(path);
     }
 

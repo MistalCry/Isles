@@ -118,17 +118,6 @@ class AdminServiceTest {
     }
 
     @Test
-    void should_map_legacy_report_status_filter() {
-        when(adminReportMapper.countPage("REJECTED", null, null)).thenReturn(0L);
-        when(adminReportMapper.selectPage("REJECTED", null, null, 20, 0)).thenReturn(List.of());
-
-        service.listReports("DISMISSED", null, null, 1, 20);
-
-        // 旧前端筛选值映射到统一后的状态，避免联调期查不到数据
-        verify(adminReportMapper).countPage("REJECTED", null, null);
-    }
-
-    @Test
     void should_write_accepted_status_and_handler_when_resolving() {
         when(currentUserProvider.requireUserId()).thenReturn("admin-1");
         when(adminReportMapper.selectById("report-1")).thenReturn(report("PENDING"));

@@ -99,7 +99,8 @@ public class OpenAiCompatibleProvider implements AiProvider {
                 ? textOf(message.path("reasoning_content"))
                 : textOf(message.path("reasoning"));
         return new AiChatResult(content == null ? "" : content, reasoning, parseUsage(root.path("usage")),
-                textOf(root.path("model")));
+                textOf(root.path("model")), parseToolCalls(message.path("tool_calls")),
+                textOf(choices.path(0).path("finish_reason")));
     }
 
     @Override
@@ -126,6 +127,8 @@ public class OpenAiCompatibleProvider implements AiProvider {
             throw statusException(response.statusCode(), errorBody);
         }
         AiUsage usage = AiUsage.empty();
+        Map<Integer, ToolCallBuffer> toolBuffers = new LinkedHashMap<>();
+        String finishReason = null;
         try (Stream<String> lines = response.body()) {
             Iterator<String> iterator = lines.iterator();
             while (iterator.hasNext()) {
@@ -152,7 +155,8 @@ public class OpenAiCompatibleProvider implements AiProvider {
                 }
                 JsonNode choices = node.path("choices");
                 if (choices.isArray() && choices.size() > 0) {
-                    JsonNode delta = choices.path(0).path("delta");
+                    JsonNode choice = choices.path(0);
+                    JsonNode delta = choice.path("delta");
                     String content = textOf(delta.path("content"));
                     if (content != null && !content.isEmpty()) {
                         listener.onDelta(content);
@@ -163,6 +167,11 @@ public class OpenAiCompatibleProvider implements AiProvider {
                     if (reasoning != null && !reasoning.isEmpty()) {
                         listener.onReasoning(reasoning);
                     }
+                    accumulateToolCalls(delta.path("tool_calls"), toolBuffers);
+                    String reason = textOf(choice.path("finish_reason"));
+                    if (reason != null && !reason.isBlank()) {
+                        finishReason = reason;
+                    }
                 }
                 if (node.has("usage") && !node.path("usage").isNull()) {
                     usage = parseUsage(node.path("usage"));
@@ -171,6 +180,10 @@ public class OpenAiCompatibleProvider implements AiProvider {
         }
         if (listener.isCancelled()) {
             return;
+        }
+        List<AiToolCall> toolCalls = toToolCalls(toolBuffers);
+        if (!toolCalls.isEmpty()) {
+            listener.onToolCalls(toolCalls, finishReason);
         }
         listener.onCompleted(usage);
     }
@@ -213,6 +226,11 @@ public class OpenAiCompatibleProvider implements AiProvider {
         if (request.maxTokens() > 0) {
             body.put("max_tokens", request.maxTokens());
         }
+        if (request.hasTools()) {
+            body.put("tools", toWireTools(request.tools()));
+            // auto：由模型决定是否调用；不强制（强制会导致简单问题也走工具）
+            body.put("tool_choice", "auto");
+        }
         if (request.reasoningCapable()) {
             // 不同后端开关思考的方式不同，按模型配置下发；关闭时必须显式传 false/none，
             // 否则模型会沿用模板默认继续思考（表现为「深度思考开关无效」）。
@@ -238,6 +256,21 @@ public class OpenAiCompatibleProvider implements AiProvider {
         for (AiChatMessage message : messages) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("role", message.role());
+            if (message.isToolResult()) {
+                item.put("tool_call_id", message.toolCallId());
+                item.put("content", message.content() == null ? "" : message.content());
+                wire.add(item);
+                continue;
+            }
+            if (message.hasToolCalls()) {
+                // 回填助手的工具调用：content 为 null 时按协议传 null，部分后端不接受空字符串
+                item.put("content", message.content() == null || message.content().isBlank()
+                        ? null
+                        : message.content());
+                item.put("tool_calls", toWireToolCalls(message.toolCalls()));
+                wire.add(item);
+                continue;
+            }
             if (message.hasImages()) {
                 List<Map<String, Object>> parts = new ArrayList<>();
                 if (message.content() != null && !message.content().isBlank()) {
@@ -253,6 +286,117 @@ public class OpenAiCompatibleProvider implements AiProvider {
             wire.add(item);
         }
         return wire;
+    }
+
+
+    // ---------------------------------------------------------------------
+    // 工具调用（function calling）
+    // ---------------------------------------------------------------------
+
+    private List<Map<String, Object>> toWireTools(List<AiToolDefinition> tools) {
+        List<Map<String, Object>> wire = new ArrayList<>(tools.size());
+        for (AiToolDefinition tool : tools) {
+            Map<String, Object> function = new LinkedHashMap<>();
+            function.put("name", tool.name());
+            function.put("description", tool.description());
+            function.put("parameters", tool.parameters());
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("type", "function");
+            item.put("function", function);
+            wire.add(item);
+        }
+        return wire;
+    }
+
+    private List<Map<String, Object>> toWireToolCalls(List<AiToolCall> toolCalls) {
+        List<Map<String, Object>> wire = new ArrayList<>(toolCalls.size());
+        for (AiToolCall call : toolCalls) {
+            Map<String, Object> function = new LinkedHashMap<>();
+            function.put("name", call.name());
+            function.put("arguments", call.arguments());
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", call.id());
+            item.put("type", "function");
+            item.put("function", function);
+            wire.add(item);
+        }
+        return wire;
+    }
+
+    /** 非流式响应里的 tool_calls（arguments 已是完整字符串）。 */
+    private List<AiToolCall> parseToolCalls(JsonNode toolCalls) {
+        if (toolCalls == null || !toolCalls.isArray() || toolCalls.size() == 0) {
+            return List.of();
+        }
+        List<AiToolCall> calls = new ArrayList<>(toolCalls.size());
+        int index = 0;
+        for (JsonNode item : toolCalls) {
+            String name = textOf(item.path("function").path("name"));
+            if (name == null || name.isBlank()) {
+                index++;
+                continue;
+            }
+            String id = textOf(item.path("id"));
+            calls.add(new AiToolCall(
+                    id == null || id.isBlank() ? "call_" + index : id,
+                    name,
+                    textOf(item.path("function").path("arguments"))));
+            index++;
+        }
+        return calls;
+    }
+
+    /**
+     * 流式增量拼接：同一 index 的 id/name/arguments 会分片下发，必须累积后再执行。
+     */
+    private void accumulateToolCalls(JsonNode toolCalls, Map<Integer, ToolCallBuffer> buffers) {
+        if (toolCalls == null || !toolCalls.isArray()) {
+            return;
+        }
+        for (JsonNode item : toolCalls) {
+            int index = item.path("index").asInt(0);
+            ToolCallBuffer buffer = buffers.computeIfAbsent(index, key -> new ToolCallBuffer());
+            String id = textOf(item.path("id"));
+            if (id != null && !id.isBlank()) {
+                buffer.id = id;
+            }
+            JsonNode function = item.path("function");
+            String name = textOf(function.path("name"));
+            if (name != null && !name.isBlank()) {
+                buffer.name.append(name);
+            }
+            String arguments = textOf(function.path("arguments"));
+            if (arguments != null) {
+                buffer.arguments.append(arguments);
+            }
+        }
+    }
+
+    private List<AiToolCall> toToolCalls(Map<Integer, ToolCallBuffer> buffers) {
+        if (buffers.isEmpty()) {
+            return List.of();
+        }
+        List<AiToolCall> calls = new ArrayList<>(buffers.size());
+        buffers.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> {
+                    ToolCallBuffer buffer = entry.getValue();
+                    if (buffer.name.isEmpty()) {
+                        return;
+                    }
+                    String id = buffer.id == null || buffer.id.isBlank()
+                            ? "call_" + entry.getKey()
+                            : buffer.id;
+                    calls.add(new AiToolCall(id, buffer.name.toString(), buffer.arguments.toString()));
+                });
+        return calls;
+    }
+
+    /** 流式 tool_calls 的累积缓冲（按 index 分组）。 */
+    private static final class ToolCallBuffer {
+        private String id;
+        private final StringBuilder name = new StringBuilder();
+        private final StringBuilder arguments = new StringBuilder();
     }
 
     private HttpRequest requestBuilder(String path, String accept, int timeoutSeconds, String body) {

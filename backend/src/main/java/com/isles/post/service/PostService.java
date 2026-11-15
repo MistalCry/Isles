@@ -10,6 +10,8 @@ import com.isles.channel.mapper.BoardMapper;
 import com.isles.channel.mapper.ChannelMapper;
 import com.isles.channel.service.ChannelAccessService;
 import com.isles.channel.service.ChannelPermissions;
+import com.isles.comment.entity.Comment;
+import com.isles.comment.mapper.CommentMapper;
 import com.isles.common.dto.MediaItem;
 import com.isles.common.error.AppException;
 import com.isles.common.error.ErrorCode;
@@ -23,6 +25,7 @@ import com.isles.interaction.service.InteractionService;
 import com.isles.post.dto.CreatePostRequest;
 import com.isles.post.dto.UpdatePostRequest;
 import com.isles.post.dto.PostResponse;
+import com.isles.post.dto.TopCommentResponse;
 import com.isles.post.entity.Post;
 import com.isles.post.entity.PostMedia;
 import com.isles.post.mapper.PostMapper;
@@ -58,9 +61,12 @@ public class PostService {
     private static final String TAB_LATEST = "latest";
     private static final String TAB_HOT = "hot";
     private static final String TAB_ESSENCE = "essence";
+    /** 置顶帖上限：与前端置顶区展示条数一致（docs/03 FR-POST-05）。 */
+    private static final int MAX_PINNED = 20;
 
     private final PostMapper postMapper;
     private final PostMediaMapper postMediaMapper;
+    private final CommentMapper commentMapper;
     private final ChannelMapper channelMapper;
     private final BoardMapper boardMapper;
     private final UserMapper userMapper;
@@ -248,11 +254,13 @@ public class PostService {
             nextCursor = null;
         } else if (TAB_ESSENCE.equals(tabValue)) {
             String cursorId = CursorUtils.validateIdCursor(cursor);
-            rows = postMapper.selectChannelLatest(channelId, boardId, true, cursorId, pageSize + 1);
+            rows = postMapper.selectChannelLatest(channelId, boardId, true, cursorId,
+                    cursorPinnedFlag(cursorId), pageSize + 1);
             nextCursor = null;
         } else if (TAB_LATEST.equals(tabValue)) {
             String cursorId = CursorUtils.validateIdCursor(cursor);
-            rows = postMapper.selectChannelLatest(channelId, boardId, false, cursorId, pageSize + 1);
+            rows = postMapper.selectChannelLatest(channelId, boardId, false, cursorId,
+                    cursorPinnedFlag(cursorId), pageSize + 1);
             nextCursor = null;
         } else {
             throw new AppException(ErrorCode.VALIDATION_ERROR, "tab 取值必须为 latest、hot 或 essence");
@@ -269,6 +277,29 @@ public class PostService {
                     : null;
         }
         return new PageResult<>(toResponses(page, viewerId), nextCursor);
+    }
+
+    /**
+     * 频道置顶帖列表（docs/03 FR-POST-05）：按置顶时间倒序，最多 20 条。
+     *
+     * <p>频道帖子流（latest）也会把置顶排在最前；本接口供「置顶区」独立渲染，避免翻页后置顶被冲走。
+     */
+    public PageResult<PostResponse> listPinnedPosts(String channelId, Integer limit, String viewerId) {
+        accessService.requireVisibleChannel(channelId, viewerId);
+        int pageSize = limit == null || limit <= 0 ? MAX_PINNED : Math.min(limit, MAX_PINNED);
+        List<Post> rows = postMapper.selectChannelPinned(channelId, null, pageSize);
+        return new PageResult<>(toResponses(rows, viewerId), null);
+    }
+
+    /**
+     * 游标帖自身的置顶状态：置顶流与普通流混排时用于复合游标。
+     */
+    private int cursorPinnedFlag(String cursorId) {
+        if (cursorId == null) {
+            return 0;
+        }
+        Post cursorPost = postMapper.selectById(cursorId);
+        return cursorPost != null && Boolean.TRUE.equals(cursorPost.getIsPinned()) ? 1 : 0;
     }
 
     /**
@@ -315,6 +346,15 @@ public class PostService {
         Set<String> channelIds = posts.stream().map(Post::getChannelId).collect(Collectors.toSet());
         Set<String> boardIds = posts.stream().map(Post::getBoardId).collect(Collectors.toSet());
 
+        // 每帖 top1 高赞评论：一次窗口函数查询取全，避免逐帖查询（N+1）
+        Map<String, Comment> topComments = commentMapper.selectTopLikedByPostIds(postIds).stream()
+                .collect(Collectors.toMap(Comment::getPostId, Function.identity(), (left, right) -> left));
+        topComments.values().stream().map(Comment::getAuthorId).forEach(authorIds::add);
+        Set<String> likedTopCommentIds = topComments.isEmpty()
+                ? Set.of()
+                : interactionService.likedCommentIds(
+                        topComments.values().stream().map(Comment::getId).toList(), viewerId);
+
         Map<String, User> authors = userMapper.selectBatchIds(authorIds).stream()
                 .collect(Collectors.toMap(User::getId, Function.identity()));
         Map<String, Channel> channels = channelMapper.selectBatchIds(channelIds).stream()
@@ -360,9 +400,28 @@ public class PostService {
                     Boolean.TRUE.equals(post.getIsPinned()),
                     Boolean.TRUE.equals(post.getIsEssence()),
                     post.getStatus(),
-                    ClockTimes.toInstant(post.getCreatedAt())));
+                    ClockTimes.toInstant(post.getCreatedAt()),
+                    toTopComment(topComments.get(post.getId()), authors, likedTopCommentIds)));
         }
         return responses;
+    }
+
+    private TopCommentResponse toTopComment(Comment comment, Map<String, User> authors,
+                                            Set<String> likedCommentIds) {
+        if (comment == null) {
+            return null;
+        }
+        User author = authors.get(comment.getAuthorId());
+        return new TopCommentResponse(
+                comment.getId(),
+                comment.getPostId(),
+                comment.getAuthorId(),
+                author == null ? null : author.getNickname(),
+                author == null ? null : author.getAvatarUrl(),
+                comment.getContent(),
+                comment.getLikeCount() == null ? 0L : comment.getLikeCount(),
+                likedCommentIds.contains(comment.getId()),
+                ClockTimes.toInstant(comment.getCreatedAt()));
     }
 
     private long hotScore(Post post) {

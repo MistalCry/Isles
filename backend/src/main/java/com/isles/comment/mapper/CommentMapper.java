@@ -50,6 +50,27 @@ public interface CommentMapper extends BaseMapper<Comment> {
                                  @Param("cursorId") String cursorId,
                                  @Param("limit") int limit);
 
+    /**
+     * 批量取每个帖子的「最高赞评论」各 1 条（帖子卡片预览用，docs/05 §2.3）。
+     *
+     * <p>用窗口函数一次取全，避免按帖循环查询造成 N+1；同赞数时取更早的评论（id 升序）。
+     */
+    @Select("""
+            <script>
+            SELECT * FROM (
+                SELECT c.*, ROW_NUMBER() OVER (
+                           PARTITION BY c.post_id ORDER BY c.like_count DESC, c.id ASC
+                       ) AS rn
+                FROM comments c
+                WHERE c.status = 'PUBLISHED' AND c.deleted_at IS NULL
+                  AND c.post_id IN
+                  <foreach item="pid" collection="postIds" open="(" separator="," close=")">#{pid}</foreach>
+            ) t
+            WHERE t.rn = 1
+            </script>
+            """)
+    List<Comment> selectTopLikedByPostIds(@Param("postIds") List<String> postIds);
+
     @Update("""
             UPDATE comments SET like_count = GREATEST(like_count + #{delta}, 0)
             WHERE id = #{id}

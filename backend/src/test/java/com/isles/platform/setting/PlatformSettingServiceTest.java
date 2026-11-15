@@ -105,6 +105,44 @@ class PlatformSettingServiceTest {
         assertThat(service.getBoolean("auth.register.enabled")).isFalse();
     }
 
+    /**
+     * 写后立即读：update / reset / updateBatch 都必须让 30 秒快照失效。
+     *
+     * <p>不失效时 {@code getString} 会继续返回旧快照，表现为「后台保存成功、前台/接口仍是旧值」。
+     */
+    @Test
+    void should_read_new_value_immediately_after_each_write_path() {
+        // 预热快照：默认值 群岛
+        assertThat(service.getString("site.name")).isEqualTo("群岛");
+        long loadsAfterWarmUp = org.mockito.Mockito.mockingDetails(settingMapper).getInvocations().stream()
+                .filter(invocation -> "selectList".equals(invocation.getMethod().getName()))
+                .count();
+        assertThat(loadsAfterWarmUp).isEqualTo(1);
+
+        // 1) update：写后立即读到新值（说明快照被失效并重新加载）
+        when(settingMapper.selectList(any())).thenReturn(List.of(setting("site.name", "新群岛")));
+        service.update("site.name", "新群岛", "admin-1");
+        assertThat(service.getString("site.name")).isEqualTo("新群岛");
+
+        // 2) updateBatch：批量写后同样立即生效
+        when(settingMapper.selectById("site.name")).thenReturn(setting("site.name", "新群岛"));
+        when(settingMapper.selectById("interaction.feed.pageSize")).thenReturn(null);
+        when(settingMapper.selectList(any())).thenReturn(List.of(
+                setting("site.name", "批量群岛"),
+                setting("interaction.feed.pageSize", "30")));
+        service.updateBatch(List.of(
+                new PlatformSettingDtos.BatchItem("site.name", "批量群岛"),
+                new PlatformSettingDtos.BatchItem("interaction.feed.pageSize", "30")), "admin-1");
+        assertThat(service.getString("site.name")).isEqualTo("批量群岛");
+        assertThat(service.getInt("interaction.feed.pageSize")).isEqualTo(30);
+
+        // 3) reset：删除覆盖行后立即回到默认值
+        when(settingMapper.selectById("site.name")).thenReturn(setting("site.name", "批量群岛"));
+        when(settingMapper.selectList(any())).thenReturn(List.of());
+        service.reset("site.name", "admin-1");
+        assertThat(service.getString("site.name")).isEqualTo("群岛");
+    }
+
     @Test
     void should_reset_to_default_and_keep_history() {
         when(settingMapper.selectById("site.name")).thenReturn(setting("site.name", "我的群岛"));

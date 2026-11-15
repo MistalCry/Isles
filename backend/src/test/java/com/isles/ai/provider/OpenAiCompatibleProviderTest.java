@@ -289,6 +289,92 @@ class OpenAiCompatibleProviderTest {
         assertThat(capturedBody.get()).doesNotContain("reasoning_effort");
     }
 
+
+    @Test
+    void should_parse_tool_calls_from_non_stream_response() throws IOException {
+        String response = """
+                {"model":"test-model","choices":[{"finish_reason":"tool_calls","message":{
+                  "role":"assistant","content":null,
+                  "tool_calls":[{"id":"call_1","type":"function",
+                    "function":{"name":"search_channel_posts","arguments":"{\\"query\\":\\"露营\\",\\"limit\\":3}"}}]}}]}
+                """;
+        start(jsonHandler(200, response));
+        OpenAiCompatibleProvider provider = provider("http://127.0.0.1:" + port() + "/v1", 0);
+
+        AiChatResult result = provider.chat(AiChatRequest.of("test-model", List.of(AiChatMessage.user("露营")),
+                false, false, 128).withTools(List.of(tool("search_channel_posts"))));
+
+        assertThat(result.hasToolCalls()).isTrue();
+        assertThat(result.finishReason()).isEqualTo("tool_calls");
+        assertThat(result.toolCalls()).hasSize(1);
+        AiToolCall call = result.toolCalls().get(0);
+        assertThat(call.id()).isEqualTo("call_1");
+        assertThat(call.name()).isEqualTo("search_channel_posts");
+        assertThat(call.arguments()).contains("露营");
+    }
+
+    @Test
+    void should_send_tools_and_merge_streamed_tool_call_fragments() throws IOException {
+        // SSE 每个 data 行必须是完整 JSON：分片只体现在 tool_calls 的 arguments 片段上
+        String first = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_9\","
+                + "\"type\":\"function\",\"function\":{\"name\":\"search_\",\"arguments\":\"{\\\"query\\\":\"}}]}}]}\n\n";
+        String second = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,"
+                + "\"function\":{\"name\":\"channel_posts\",\"arguments\":\"\\\"岛\\\"}\"}}]}}]}\n\n";
+        String sse = first + second
+                + "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n"
+                + "data: [DONE]\n\n";
+        AtomicReference<String> capturedBody = new AtomicReference<>();
+        start(exchange -> {
+            capturedBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            writeJson(exchange, 200, sse);
+        });
+        OpenAiCompatibleProvider provider = provider("http://127.0.0.1:" + port() + "/v1", 0);
+        AtomicReference<List<AiToolCall>> calls = new AtomicReference<>(List.of());
+
+        provider.streamChat(AiChatRequest.of("test-model", List.of(AiChatMessage.user("岛")), true, false, 128)
+                        .withTools(List.of(tool("search_channel_posts"))),
+                new AiStreamListener() {
+                    @Override
+                    public void onToolCalls(List<AiToolCall> toolCalls, String finishReason) {
+                        calls.set(toolCalls);
+                    }
+                });
+
+        // 请求体带 tools 与 tool_choice=auto
+        assertThat(capturedBody.get()).contains("\"tools\"").contains("\"tool_choice\":\"auto\"");
+        assertThat(capturedBody.get()).contains("search_channel_posts");
+        // 分片按 index 拼接成一个完整调用
+        assertThat(calls.get()).hasSize(1);
+        assertThat(calls.get().get(0).id()).isEqualTo("call_9");
+        assertThat(calls.get().get(0).name()).isEqualTo("search_channel_posts");
+        assertThat(calls.get().get(0).arguments()).isEqualTo("{\"query\":\"岛\"}");
+    }
+
+    @Test
+    void should_serialize_tool_result_messages() throws IOException {
+        AtomicReference<String> capturedBody = new AtomicReference<>();
+        start(exchange -> {
+            capturedBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            writeJson(exchange, 200, """
+                    {"model":"m","choices":[{"message":{"content":"ok"},"finish_reason":"stop"}]}
+                    """);
+        });
+        OpenAiCompatibleProvider provider = provider("http://127.0.0.1:" + port() + "/v1", 0);
+
+        provider.chat(AiChatRequest.of("m", List.of(
+                AiChatMessage.user("岛"),
+                AiChatMessage.assistantToolCalls(null, List.of(new AiToolCall("call_1", "search_channel_posts", "{}"))),
+                AiChatMessage.toolResult("call_1", "{\"results\":[]}")), false, false, 128));
+
+        assertThat(capturedBody.get()).contains("\"role\":\"tool\"")
+                .contains("\"tool_call_id\":\"call_1\"")
+                .contains("\"tool_calls\"");
+    }
+
+    private AiToolDefinition tool(String name) {
+        return new AiToolDefinition(name, "测试工具", java.util.Map.of("type", "object"));
+    }
+
     // ---------------------------------------------------------------------
     // 辅助
     // ---------------------------------------------------------------------

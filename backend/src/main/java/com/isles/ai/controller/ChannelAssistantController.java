@@ -4,6 +4,7 @@ import com.isles.ai.dto.AiRequests;
 import com.isles.ai.dto.AiResponses;
 import com.isles.ai.service.AiTaskService;
 import com.isles.ai.service.ChannelAiSettingsService;
+import com.isles.common.pagination.PageResult;
 import com.isles.common.security.CurrentUserProvider;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +46,15 @@ public class ChannelAssistantController {
     @GetMapping("/settings")
     public AiResponses.AssistantSettingsResponse settings(@PathVariable String channelId) {
         return settingsService.getSettings(channelId, currentUserProvider.requireUserId());
+    }
+
+    /**
+     * 频道侧可选模型列表（频道主为助手指定模型用，只返回启用中的模型）。
+     */
+    @GetMapping("/models")
+    public PageResult<AiResponses.SelectableModelResponse> models(@PathVariable String channelId) {
+        return new PageResult<>(settingsService.listSelectableModels(channelId,
+                currentUserProvider.requireUserId()), null);
     }
 
     /**
