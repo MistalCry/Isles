@@ -2,11 +2,13 @@
 -- 群岛（Isles）数据库结构（仅结构，不含任何数据）
 --
 -- 适用：MySQL 8.0+（utf8mb4 / utf8mb4_0900_ai_ci）
--- 生成：mysqldump --no-data（V1–V5 迁移全部应用后的结构）
--- 表数：31 张（不含 Flyway 的 flyway_schema_history）
+-- 生成：mysqldump --no-data（V1–V8 迁移全部应用后的结构）
+-- 表数：39 张（不含 Flyway 的 flyway_schema_history）
+--       V1–V4：核心/管理/AI/社交；V5：思考模式；V6：平台后台；V7：公告与敏感词；
+--       V8：频道助手可选模型 + AI 工具调用开关（仅加列，不新增表）
 --
 -- 两种初始化方式（二选一）：
---   A. 推荐：只建空库，启动后端由 Flyway 自动执行 V1–V5 迁移
+--   A. 推荐：只建空库，启动后端由 Flyway 自动执行 V1–V8 迁移
 --        CREATE DATABASE my_social_channel DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 --   B. 手工导入本文件（表已建好），启动后端时必须关闭 Flyway，否则会重复建表报错：
 --        CREATE DATABASE my_social_channel DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
@@ -18,7 +20,7 @@
 
 -- MySQL dump 10.13  Distrib 8.0.45, for Win64 (x86_64)
 --
--- Host: localhost    Database: my_social_channel
+-- Host: 127.0.0.1    Database: my_social_channel
 -- ------------------------------------------------------
 -- Server version	8.0.45
 
@@ -112,6 +114,7 @@ CREATE TABLE `ai_model_configs` (
   `vision_enabled` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否支持图片（多模态）',
   `reasoning_enabled` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否支持深度思考/推理参数',
   `thinking_mode` varchar(32) NOT NULL DEFAULT 'REASONING_EFFORT' COMMENT '思考参数下发方式：REASONING_EFFORT / CHAT_TEMPLATE / BOTH / NONE',
+  `tool_call_enabled` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否启用工具调用（function calling）；关闭时使用关键词检索',
   `is_default` tinyint(1) NOT NULL DEFAULT '0' COMMENT '默认模型',
   `enabled` tinyint(1) NOT NULL DEFAULT '1' COMMENT '启用状态',
   `timeout_seconds` int NOT NULL DEFAULT '60' COMMENT '请求超时（秒）',
@@ -164,6 +167,33 @@ CREATE TABLE `ai_task_logs` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `announcements`
+--
+
+DROP TABLE IF EXISTS `announcements`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `announcements` (
+  `id` char(26) NOT NULL COMMENT 'ULID',
+  `title` varchar(120) NOT NULL,
+  `content` varchar(1000) NOT NULL COMMENT '纯文本；前台按文本渲染',
+  `level` varchar(16) NOT NULL DEFAULT 'INFO' COMMENT 'INFO/WARNING/CRITICAL',
+  `placement` varchar(16) NOT NULL DEFAULT 'BANNER' COMMENT 'BANNER/MODAL/INBOX',
+  `status` varchar(16) NOT NULL DEFAULT 'DRAFT' COMMENT 'DRAFT/PUBLISHED/ARCHIVED',
+  `start_at` datetime(3) DEFAULT NULL COMMENT '生效开始；空=立即',
+  `end_at` datetime(3) DEFAULT NULL COMMENT '生效结束；空=长期',
+  `created_by` char(26) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_announcements_status_window` (`status`,`start_at`,`end_at`),
+  KEY `idx_announcements_created` (`created_at`),
+  KEY `fk_announcements_created_by` (`created_by`),
+  CONSTRAINT `fk_announcements_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='平台公告';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `boards`
 --
 
@@ -204,6 +234,7 @@ CREATE TABLE `channel_ai_settings` (
   `cover_url` varchar(500) DEFAULT NULL,
   `bio` varchar(500) DEFAULT NULL,
   `persona` varchar(2000) DEFAULT NULL COMMENT '助手设定/性格描述',
+  `model_config_id` char(26) DEFAULT NULL COMMENT '频道助手使用的模型配置；空=跟随平台默认',
   `enabled` tinyint(1) NOT NULL DEFAULT '0' COMMENT '频道助手总开关',
   `summary_daily_enabled` tinyint(1) NOT NULL DEFAULT '0',
   `summary_weekly_enabled` tinyint(1) NOT NULL DEFAULT '0',
@@ -221,8 +252,10 @@ CREATE TABLE `channel_ai_settings` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_channel_ai_settings_channel` (`channel_id`),
   KEY `fk_channel_ai_settings_assistant` (`assistant_user_id`),
+  KEY `idx_channel_ai_settings_model_config` (`model_config_id`),
   CONSTRAINT `fk_channel_ai_settings_assistant` FOREIGN KEY (`assistant_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
-  CONSTRAINT `fk_channel_ai_settings_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+  CONSTRAINT `fk_channel_ai_settings_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_channel_ai_settings_model_config` FOREIGN KEY (`model_config_id`) REFERENCES `ai_model_configs` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='频道助手设置';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -670,6 +703,92 @@ CREATE TABLE `notifications` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `platform_admin_grants`
+--
+
+DROP TABLE IF EXISTS `platform_admin_grants`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `platform_admin_grants` (
+  `id` char(26) NOT NULL COMMENT 'ULID',
+  `user_id` char(26) NOT NULL,
+  `role` varchar(24) NOT NULL COMMENT 'SUPER_ADMIN/OPERATOR/MODERATOR/VIEWER',
+  `granted_by` char(26) DEFAULT NULL,
+  `granted_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `expires_at` datetime(3) DEFAULT NULL COMMENT 'null=长期有效',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_platform_admin_grants_user` (`user_id`),
+  KEY `idx_platform_admin_grants_role` (`role`),
+  CONSTRAINT `fk_platform_admin_grants_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='平台管理员授权';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `platform_audit_logs`
+--
+
+DROP TABLE IF EXISTS `platform_audit_logs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `platform_audit_logs` (
+  `id` char(26) NOT NULL COMMENT 'ULID',
+  `actor_id` char(26) DEFAULT NULL,
+  `actor_name` varchar(32) DEFAULT NULL COMMENT '操作人快照',
+  `action` varchar(64) NOT NULL COMMENT 'platform.config.update / platform.user.ban',
+  `target_type` varchar(32) DEFAULT NULL COMMENT 'USER/CHANNEL/POST/COMMENT/REPORT/CONFIG/ADMIN',
+  `target_id` char(26) DEFAULT NULL,
+  `detail` json DEFAULT NULL COMMENT 'before/after、原因等',
+  `ip` varchar(45) DEFAULT NULL,
+  `user_agent` varchar(255) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_platform_audit_logs_created` (`created_at`),
+  KEY `idx_platform_audit_logs_actor_created` (`actor_id`,`created_at`),
+  KEY `idx_platform_audit_logs_action_created` (`action`,`created_at`),
+  KEY `idx_platform_audit_logs_target` (`target_type`,`target_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='平台操作审计';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `platform_setting_histories`
+--
+
+DROP TABLE IF EXISTS `platform_setting_histories`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `platform_setting_histories` (
+  `id` char(26) NOT NULL COMMENT 'ULID',
+  `setting_key` varchar(100) NOT NULL,
+  `old_value` text COMMENT '变更前（null=此前未覆盖）',
+  `new_value` text COMMENT '变更后（null=恢复默认）',
+  `actor_id` char(26) DEFAULT NULL,
+  `ip` varchar(45) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_platform_setting_histories_key_created` (`setting_key`,`created_at`),
+  KEY `idx_platform_setting_histories_actor` (`actor_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='平台配置变更历史';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `platform_settings`
+--
+
+DROP TABLE IF EXISTS `platform_settings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `platform_settings` (
+  `setting_key` varchar(100) NOT NULL COMMENT '配置键，如 site.name',
+  `setting_value` text COMMENT '覆盖值（字符串形式，按 value_type 解析）',
+  `updated_by` char(26) DEFAULT NULL COMMENT '最后修改人',
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`setting_key`),
+  KEY `fk_platform_settings_updated_by` (`updated_by`),
+  CONSTRAINT `fk_platform_settings_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='平台运行时配置';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `post_likes`
 --
 
@@ -785,14 +904,14 @@ DROP TABLE IF EXISTS `reports`;
 CREATE TABLE `reports` (
   `id` char(26) NOT NULL COMMENT 'ULID',
   `reporter_id` char(26) NOT NULL,
-  `channel_id` char(26) NOT NULL,
-  `target_type` varchar(16) NOT NULL COMMENT 'POST/COMMENT',
+  `channel_id` char(26) DEFAULT NULL COMMENT '所属频道；平台级举报为空',
+  `target_type` varchar(16) NOT NULL COMMENT 'POST/COMMENT/USER/CHANNEL',
   `target_id` char(26) NOT NULL,
   `reason` varchar(32) NOT NULL COMMENT 'SPAM/ABUSE/PORN/ILLEGAL/OTHER',
   `description` varchar(500) DEFAULT NULL,
   `status` varchar(16) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/ACCEPTED/REJECTED',
   `handler_id` char(26) DEFAULT NULL,
-  `handle_action` varchar(32) DEFAULT NULL COMMENT 'NONE/DELETE_CONTENT/MUTE_AUTHOR',
+  `handle_action` varchar(32) DEFAULT NULL COMMENT 'NONE/DELETE_CONTENT/MUTE_AUTHOR/WARN',
   `handle_note` varchar(500) DEFAULT NULL,
   `handled_at` datetime(3) DEFAULT NULL,
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -878,6 +997,85 @@ CREATE TABLE `search_logs` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `sensitive_word_hits`
+--
+
+DROP TABLE IF EXISTS `sensitive_word_hits`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sensitive_word_hits` (
+  `id` char(26) NOT NULL COMMENT 'ULID',
+  `word_id` char(26) DEFAULT NULL,
+  `word` varchar(100) NOT NULL COMMENT '命中词快照',
+  `scene` varchar(16) NOT NULL COMMENT 'POST/COMMENT',
+  `target_id` char(26) DEFAULT NULL,
+  `user_id` char(26) DEFAULT NULL,
+  `action` varchar(16) NOT NULL COMMENT '命中时的处置：BLOCK/REVIEW/MASK',
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_sensitive_word_hits_created` (`created_at`),
+  KEY `idx_sensitive_word_hits_word` (`word_id`,`created_at`),
+  KEY `idx_sensitive_word_hits_target` (`scene`,`target_id`),
+  KEY `fk_sensitive_word_hits_user` (`user_id`),
+  CONSTRAINT `fk_sensitive_word_hits_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+  CONSTRAINT `fk_sensitive_word_hits_word` FOREIGN KEY (`word_id`) REFERENCES `sensitive_words` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='敏感词命中记录';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `sensitive_words`
+--
+
+DROP TABLE IF EXISTS `sensitive_words`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sensitive_words` (
+  `id` char(26) NOT NULL COMMENT 'ULID',
+  `word` varchar(100) NOT NULL,
+  `category` varchar(32) DEFAULT NULL COMMENT 'POLITICS/PORN/AD/ABUSE/CUSTOM',
+  `action` varchar(16) NOT NULL DEFAULT 'REVIEW' COMMENT 'BLOCK/REVIEW/MASK',
+  `enabled` tinyint(1) NOT NULL DEFAULT '1',
+  `created_by` char(26) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_sensitive_words_word` (`word`),
+  KEY `idx_sensitive_words_enabled` (`enabled`),
+  KEY `fk_sensitive_words_created_by` (`created_by`),
+  CONSTRAINT `fk_sensitive_words_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='敏感词库';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `user_penalties`
+--
+
+DROP TABLE IF EXISTS `user_penalties`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `user_penalties` (
+  `id` char(26) NOT NULL COMMENT 'ULID',
+  `user_id` char(26) NOT NULL,
+  `type` varchar(16) NOT NULL COMMENT 'BAN/MUTE/WARN',
+  `scope` varchar(16) NOT NULL DEFAULT 'GLOBAL' COMMENT 'GLOBAL/CHANNEL',
+  `channel_id` char(26) DEFAULT NULL COMMENT 'scope=CHANNEL 时的频道',
+  `reason` varchar(200) NOT NULL,
+  `report_id` char(26) DEFAULT NULL COMMENT '关联举报',
+  `operator_id` char(26) DEFAULT NULL,
+  `start_at` datetime(3) NOT NULL,
+  `end_at` datetime(3) DEFAULT NULL COMMENT 'null=永久',
+  `status` varchar(16) NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE/EXPIRED/REVOKED',
+  `revoked_by` char(26) DEFAULT NULL,
+  `revoked_at` datetime(3) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_user_penalties_user_status` (`user_id`,`status`,`end_at`),
+  KEY `idx_user_penalties_created` (`created_at`),
+  CONSTRAINT `fk_user_penalties_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户处罚记录';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `users`
 --
 
@@ -914,4 +1112,4 @@ CREATE TABLE `users` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-11-15 13:28:11
+-- Dump completed on 2026-11-16  1:43:14

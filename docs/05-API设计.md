@@ -58,6 +58,7 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 | 409 | `USERNAME_TAKEN` / `ALREADY_JOINED` / `REPORT_ALREADY_EXISTS` | 冲突 |
 | 413 | `MEDIA_TOO_LARGE` | 上传超限 |
 | 422 | `BUSINESS_RULE_VIOLATION` / `OWNER_CANNOT_LEAVE` | 业务规则不满足 |
+| 422 | `REPORT_TARGET_INVALID` | 举报目标不存在或不可见（帖子/评论已删除、频道不可见、目标类型不匹配） |
 | 429 | `RATE_LIMITED` | 触发限流 |
 | 500 | `INTERNAL_ERROR` | 服务端异常 |
 
@@ -103,7 +104,8 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 
 | 方法 | 路径 | 说明 | 权限 |
 | --- | --- | --- | --- |
-| GET | `/channels/{id}/posts` | 频道帖子流：`tab=latest\|hot\|essence`、`boardId`、游标 | 🔓 |
+| GET | `/channels/{id}/posts` | 频道帖子流：`tab=latest\|hot\|essence`、`boardId`、游标；`latest` 置顶帖固定在最前 | 🔓 |
+| GET | `/channels/{id}/posts/pinned` | 频道置顶帖：`pinned_at DESC`，最多 20 条（`limit` 可调小） | 🔓 |
 | POST | `/channels/{id}/posts` | 发帖（10 次/分钟/用户） | 成员（受禁言限制） |
 | GET | `/posts/{id}` | 帖子详情（浏览量 +1） | 🔓 |
 | DELETE | `/posts/{id}` | 删除帖子（作者或管理员） | 作者 / `post.delete` |
@@ -140,6 +142,17 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 | 方法 | 路径 | 说明 | 权限 |
 | --- | --- | --- | --- |
 | POST | `/media/upload` | 上传图片/视频（`file`、`type=image\|video`，30 次/小时）；响应 `{ id, url, thumbUrl, mediaType: IMAGE\|VIDEO, width, height, durationMs }` | 登录 |
+
+**支持格式**（按文件头 magic number 判定，不信任扩展名；单图 ≤10MB，视频 ≤200MB）
+
+| 类别 | 允许的 MIME | 说明 |
+| --- | --- | --- |
+| 图片 | `image/jpeg`、`image/png`、`image/gif`、`image/webp`、`image/avif`、`image/bmp`、`image/heic`、`image/heif` | 只收浏览器原生可渲染格式，**不做服务端转码** |
+| 视频 | `video/mp4`、`video/webm`、`video/quicktime`（mov）、`video/x-m4v` | 视频不转码，仅抽首帧做封面 |
+
+> ISO BMFF 家族（mp4/mov/m4v/avif/heic/heif）按 `ftyp` 的 major brand + 兼容 brand 区分，避免 HEIC 被误判为 mp4。
+> 缩略图：ImageIO 可解码的走内置缩放；AVIF/HEIC 等交给 ffmpeg 解码。
+> **没有 ffmpeg 时降级为「原图直出 + `thumbUrl=null` + `width/height=null`」，上传仍返回 200**（不报 500），前端按原始宽高比渲染。
 
 ### 2.7 通知
 
@@ -219,12 +232,13 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 | POST | `/ai/conversations` | 新建会话 | 登录 |
 | GET / PATCH / DELETE | `/ai/conversations/{id}` | 详情 / 重命名 / 删除 | 本人 |
 | GET | `/ai/conversations/{id}/messages` | 会话消息 | 本人 |
-| POST | `/ai/conversations/{id}/messages/stream` | 提问（SSE：`meta`/`delta`/`reasoning`/`done`/`error`） | 本人 |
+| POST | `/ai/conversations/{id}/messages/stream` | 提问（SSE：`meta`/`delta`/`reasoning`/`sources`/`done`/`error`） | 本人 |
 | POST | `/ai/conversations/{id}/regenerate` | 重新生成最后一条回答（SSE） | 本人 |
 | POST | `/ai/messages/{id}/edit-stream` | 编辑历史提问并重发（SSE，截断后续） | 本人 |
 | POST | `/ai/messages/{id}/stop` | 停止生成 | 本人 |
 | GET | `/channels/{id}/ai/assistant` | 频道助手面板信息 | 频道可见 |
-| GET / PUT | `/channels/{id}/ai/settings` | 助手设置（账号/任务开关/频率） | `channel.ai.manage` |
+| GET | `/channels/{id}/ai/models` | 频道可选模型（仅启用项：`id`/`name`/`model`/`visionEnabled`/`reasoningEnabled`/`isDefault`） | `channel.ai.manage` |
+| GET / PUT | `/channels/{id}/ai/settings` | 助手设置（账号/任务开关/频率/`modelConfigId`） | `channel.ai.manage` |
 | POST | `/channels/{id}/ai/assistant-account` | 创建/修复助手虚拟账号 | `channel.ai.manage` |
 | GET | `/channels/{id}/ai/task-logs` | 任务执行日志（page/size） | `channel.ai.manage` |
 | POST | `/channels/{id}/ai/tasks/run` | 手动触发任务（幂等 + 频率上限） | `channel.ai.manage` |
@@ -383,6 +397,9 @@ data: {"conversationId":"...","messageId":"...","model":"qwen2.5","sources":[...
 event: delta
 data: {"content":"根据社区帖子，"}
 
+event: sources
+data: {"sources":[{"id":"...","title":"...","channelId":"...","channelName":"...","excerpt":"...","url":"/posts/..."}],"toolRounds":1}
+
 event: done
 data: {"messageId":"...","aborted":false,"status":"COMPLETED","tokenIn":120,"tokenOut":340}
 ```
@@ -396,6 +413,54 @@ Retry-After: 37
 { "error": { "code": "RATE_LIMITED", "message": "操作过于频繁（LOGIN：10 次/60 秒），请 37 秒后重试", "details": [], "requestId": "req_..." } }
 ```
 
+### 3.6 AI 工具调用契约（function calling）
+
+> 仅当 `ai_model_configs.tool_call_enabled=1`（默认 0）时启用；未开启、模型报错或不支持时**自动降级**为原有
+> 关键词检索，对话功能不受影响（降级写日志，任务状态照常落库）。
+
+**工具清单**（只读，沿用检索可见性：公开可见频道的已发布帖子；频道会话可读本频道）
+
+| 工具 | 参数 | 说明 |
+| --- | --- | --- |
+| `search_channel_posts` | `query`（string，必填）、`limit`（int，1–8，默认 5） | 频道会话专属，检索本频道帖子 |
+| `search_global_posts` | `query`、`limit` | 全站公开频道检索 |
+| `get_post_detail` | `postId`（string，必填） | 读取帖子正文（≤800 字摘要） |
+
+**请求侧**（服务端 → 模型，OpenAI 兼容）
+
+```json
+{
+  "model": "qwen2.5-7b",
+  "messages": [{"role": "user", "content": "岛上有露营攻略吗"}],
+  "tools": [{
+    "type": "function",
+    "function": {
+      "name": "search_channel_posts",
+      "description": "在当前频道内按关键词检索已发布的帖子",
+      "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["query"]}
+    }
+  }],
+  "tool_choice": "auto"
+}
+```
+
+**响应侧**：模型要工具时返回 `tool_calls`（流式下按 `index` 分片下发 `id` / `function.name` / `function.arguments`，
+服务端按 index 累积拼完整后才执行）。回填消息格式：
+
+```json
+{"role": "assistant", "content": null,
+ "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "search_channel_posts", "arguments": "{\"query\":\"露营\"}"}}]}
+{"role": "tool", "tool_call_id": "call_1", "content": "{\"total\":1,\"results\":[{\"postId\":\"...\",\"title\":\"...\"}]}"}
+```
+
+**约束**
+
+- 最多 **2 轮**工具调用；第 3 次请求不再下发 `tools`，保证收敛到自然语言回答。
+- 工具轮次计入回答总超时（每轮按剩余时间下发 `timeoutSeconds`）；用户点「停止」立即中断，未执行的工具不再执行。
+- 工具执行失败/参数非法/帖子不可见都返回结构化 `{"error":...,"message":...}` 给模型，不打断对话。
+- **来源引用**由工具实际命中的帖子生成（去重），不再预置上下文；`meta.sources` 先给关键词兜底结果，
+  工具跑完后再下发 `event: sources` 覆盖（并落库为最终引用）。未命中时沿用关键词结果，引用不会为空。
+
 ## 4. 响应模型（实际契约）
 
 > 后端返回**扁平字段**（如 `authorId`/`channelName`/`liked`），前端 `frontend/src/api/adapters.ts` 统一适配为嵌套模型。
@@ -408,7 +473,8 @@ Retry-After: 37
 | `UserCardResponse` | UserResponse 字段 + `channelId`、`joinedAt`、`roleName`、`memberStatus` |
 | `ChannelResponse` | `id`、`channelNo`、`name`、`avatarUrl`、`coverUrl`、`description`、`type`、`visibility`、`ownerId`、`memberCount`、`postCount`、`joined`、`myRoleName`、`createdAt` |
 | `BoardResponse` | `id`、`channelId`、`name`、`description`、`sort`、`postCount`、`createdAt` |
-| `PostResponse` | `id`、`channelId`、`channelName`、`channelAvatarUrl`、`boardId`、`boardName`、`authorId`、`authorNickname`、`authorAvatarUrl`、`title`、`content`、`contentFormat`、`coverUrl`、`media[]`、`viewCount`、`likeCount`、`commentCount`、`shareCount`、`liked`、`pinned`、`essence`、`status`、`createdAt` |
+| `PostResponse` | `id`、`channelId`、`channelName`、`channelAvatarUrl`、`boardId`、`boardName`、`authorId`、`authorNickname`、`authorAvatarUrl`、`title`、`content`、`contentFormat`、`coverUrl`、`media[]`、`viewCount`、`likeCount`、`commentCount`、`shareCount`、`liked`、`pinned`、`essence`、`status`、`createdAt`、`topComment` |
+| `TopCommentResponse` | `id`、`postId`、`authorId`、`authorNickname`、`authorAvatarUrl`、`content`、`likeCount`、`liked`、`createdAt`；帖子列表每帖返回 1 条最高赞评论（无评论为 `null`），批量查询不产生 N+1 |
 | `CommentResponse` | `id`、`postId`、`parentId`、`authorId`、`authorNickname`、`authorAvatarUrl`、`replyToUserId`、`replyToNickname`、`content`、`media[]`、`emoji[]`、`likeCount`、`liked`、`createdAt`、`replies[]` |
 | `SearchItemResponse` | `type`、`id`、`title`、`summary`、`channelId`、`channelName`、`channelAvatarUrl`、`avatarUrl`、`memberCount`、`likeCount`、`commentCount`、作者与板块字段、`createdAt` |
 | `MemberResponse` | `userId`、`username`、`nickname`、`avatarUrl`、`roleId`、`roleName`、`status`、`mutedUntil`、`muted`、`joinedAt` |
@@ -416,6 +482,8 @@ Retry-After: 37
 | `ReportResponse` | `id`、`reporterId`、`reporterNickname`、`channelId`、`targetType`、`targetId`、`targetPreview`、`reason`、`status`、`handleAction`、`handleNote`、`handledAt`、`createdAt` |
 | `AuditLogResponse` | `id`、`channelId`、`actorId`、`actorNickname`、`action`、`targetType`、`targetId`、`detail`、`ip`、`createdAt` |
 | `StatsOverviewResponse` | `channelId`、`memberCount`、`postCount`、`yesterday`、`memberDelta`、`postDelta` |
+| `SelectableModelResponse` | `id`、`name`、`model`、`visionEnabled`、`reasoningEnabled`、`isDefault`（频道可选模型，不含 Base URL/密钥） |
+| `AssistantSettingsResponse` | 原有字段 + `modelConfigId`（空=跟随平台默认）；`updatedAt` 之后追加，前端按字段名读取 |
 | `AssistantSettingsResponse` | `channelId`、`assistantUserId`、`nickname`、`avatarUrl`、`coverUrl`、`bio`、`persona`、`enabled`、六个任务开关、`dailySummaryHour`、三个每日频率 |
 | `TaskLogResponse` | `id`、`channelId`、`taskType`、`frequencyKey`、`status`、`resultText`、`postId`、`commentId`、`errorMessage`、`startedAt`、`finishedAt`、`createdAt` |
 | `PageResult<T>` | `items`、`nextCursor` |

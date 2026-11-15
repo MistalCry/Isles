@@ -9,6 +9,24 @@
 
 ### Added
 
+- **平台后台前端补全**：配置中心（元数据驱动，按 `type` 渲染控件、单键/批量保存、恢复默认、变更历史）、
+  管理员授权（远程搜索用户选择器）、审计日志、内容治理（帖子/评论下架与恢复）、敏感词库（CRUD/导入/试算/命中）、
+  公告管理、概览趋势与热词，后台共 11 个页面；菜单按 `permissions` 显隐，侧边栏新增「进入后台」。
+- **前台公告**：顶部横幅（多条轮播、按条关闭并记 localStorage）+ 用户菜单「公告」可重新查看当前生效公告。
+- **频道置顶**：新增 `GET /channels/{id}/posts/pinned`（≤20 条，`pinned_at DESC`）；频道流 `latest`/`essence`
+  置顶固定最前，游标改为「置顶标记 + id」复合条件，翻页不重复不漏帖。
+- 帖子列表与详情返回 `topComment`（每帖 1 条最高赞评论，窗口函数批量查询，无 N+1）。
+- 帖子编辑支持封面与媒体（增删、排序、多选上传），发布时能选的都能改。
+- **频道助手可选模型**：V8 迁移 `channel_ai_settings.model_config_id` + `GET /channels/{id}/ai/models`；
+  任务按频道模型调用，缺失/禁用回落平台默认并记 WARN。
+- **AI 工具调用**：`search_channel_posts` / `search_global_posts` / `get_post_detail`，最多 2 轮、计入总超时、可中断；
+  来源引用改由实际命中生成，新增 SSE `sources` 事件并落库；`ai_model_configs.tool_call_enabled` 默认关，
+  模型不支持或报错时自动降级到关键词检索。
+- 上传支持 AVIF / BMP / HEIC / HEIF / MOV / M4V，ISO BMFF 按 brand 区分（HEIC 不再误判为 mp4）；
+  解码失败降级为原图直出，不再 500。
+- `application-prod.yml`（不含任何默认密钥）+ `app.security.require-secrets`：生产缺 JWT / AI 密钥拒绝启动。
+- 测试：举报回归（组件 + e2e）、配置即时生效、媒体格式与降级、AI 工具调用两轮、助手模型回落；
+  前端 93 例 / 后端 281 例。
 - 前端单元测试（Vitest，`pnpm test`）：适配器字段映射、评论校验、裁剪尺寸计算、提及 token，共 27 个用例。
 - **全站 i18n 落地**：1186 条文案迁移到 vue-i18n（zh-CN / en-US），覆盖 82 个 `.vue`/`.ts` 文件；
   源码中已无硬编码中文（品牌名除外），用户菜单可切换语言，Element Plus 组件语言同步切换。
@@ -81,6 +99,17 @@
 
 ### Fixed
 
+- 修复**举报提交报「参数校验错误」**：举报原因改为提交代码（`SPAM/ABUSE/PORN/ILLEGAL/OTHER`），
+  文案仅用于展示；后台与频道管理中心的举报列表不再显示裸枚举，目标类型与处置动作一并中文化。
+- 补齐**评论举报入口**（此前只有帖子可举报），支持楼中楼。
+- 修复**清空帖子封面/标题不落库**：`updateById` 默认跳过 null，给 `Post.coverUrl`/`title` 加
+  `updateStrategy = ALWAYS`，并补单测锁住注解（删掉注解测试即失败）。
+- 修复**清空个人头像/签名/地区、频道封面/简介不生效**：后端约定 `null` = 不修改，前端清空时误传 `null`，
+  改为传空串。
+- 修复**后台保存配置后前台仍显示旧值**：`/platform/config` 由 `max-age=60` 改为 `no-store`，
+  保存/批量保存/恢复默认后前端立即重取。
+- 修复图片解码失败时上传报 500：降级为原图直出，`thumbUrl/width/height` 为空。
+- 修复置顶 30 天前的旧帖在频道首屏不可见（此前既无置顶排序也无置顶查询）。
 - 修复 i18n 文案里的 `@` 被 vue-i18n 当作链接语法导致渲染崩溃（`Invalid linked format`）：
   「回复 @昵称」「响应@提及」等 6 条文案在生成时统一转义为 `{'@'}`。
 - 修复 `constants/app.ts` 在模块加载时求值 `t()` 导致切换语言不生效：改为 getter / 函数（举报原因、性别、频道类型等）。
@@ -165,10 +194,22 @@
 
 ### Changed
 
+- 举报页状态改用 `ACCEPTED`/`REJECTED` 并映射中文，新增目标类型与关键字筛选、处置动作选择；
+  平台后台不再依赖 `DISMISSED`/`RESOLVED` 兼容垫片。
+- `/platform/config` 缓存策略改为 `no-store, must-revalidate`，后台保存即时生效（原先 60 秒内读旧值）。
+- 部署：`docker-compose.yml` 的 `SPRING_PROFILES_ACTIVE` 默认 `prod`，`COOKIE_SECURE` 默认 `false`
+  （HTTP 临时方案）；`docs/09` 明确「HTTP 部署不可用于生产」，443/证书留 TODO。
+- `database/schema.sql` 重导为 V1–V8（39 表），README / database/README / docs/06 措辞同步。
+- `docs/11` 实施状态拆成「后端 / 前端」两列，未交付项不再提前标 ✅。
 - 交付策略调整：取消 M1/M2/M3 分期，改为**全量交付**（2026-11-14，负责人决定）。
   `docs/03` §10 改为 WP1–WP7 工作包，`docs/10` 改为全量交付计划。
 - 文档同步至全量实现：`docs/05`（全量接口清单 + 限流/SSE 示例）、`docs/06`（V2–V4 表结构）、
   `docs/07`（限流实现与安全落地）、`docs/08`（测试落地情况）、`docs/10`（WP 状态与验证记录）、`README`。
+
+### Removed
+
+- 移除 `/admin/reports` 的 `DISMISSED`/`RESOLVED` 状态兼容垫片（前端已迁移到 `ACCEPTED`/`REJECTED`，
+  传旧值将查不到数据）。
 
 ### Added（历史条目）
 

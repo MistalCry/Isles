@@ -52,7 +52,7 @@ cd MySocialChannel2
 
 ### 2. 初始化数据库
 
-**方式 A（推荐）**：只建空库，启动后端时由 Flyway 自动执行 V1–V5 迁移。
+**方式 A（推荐）**：只建空库，启动后端时由 Flyway 自动执行 V1–V8 迁移。
 
 ```sql
 CREATE DATABASE my_social_channel CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
@@ -64,7 +64,7 @@ GRANT ALL PRIVILEGES ON my_social_channel_test.* TO 'isles_app'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-**方式 B**：手工导入结构文件（**不含任何数据**，31 张表）。
+**方式 B**：手工导入结构文件（**不含任何数据**，39 张表）。
 
 ```bash
 mysql -u root -p -e "CREATE DATABASE my_social_channel CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
@@ -72,7 +72,7 @@ mysql -u root -p my_social_channel < database/schema.sql
 # 表已建好，启动后端时必须关闭 Flyway：SPRING_FLYWAY_ENABLED=false
 ```
 
-> `database/schema.sql` 由 `mysqldump --no-data` 从 V1–V5 全部应用后的库导出，说明见 [database/README.md](database/README.md)。
+> `database/schema.sql` 由 `mysqldump --no-data` 从 V1–V8 全部应用后的库导出，说明见 [database/README.md](database/README.md)。
 
 ### 3. 配置环境变量
 
@@ -101,7 +101,7 @@ mvn spring-boot:run
 ```
 
 - 默认端口 `8080`，健康检查：<http://127.0.0.1:8080/actuator/health> 应返回 `{"status":"UP"}`
-- 首次启动会自动执行 Flyway 迁移（V1–V5），并创建上传目录
+- 首次启动会自动执行 Flyway 迁移（V1–V8），并创建上传目录
 - 可用 `SERVER__PORT=8082 mvn spring-boot:run` 换端口
 
 ### 5. 启动前端
@@ -275,7 +275,7 @@ MySocialChannel2/
 │   ├── src/main/java/com/isles/{common,config,auth,user,channel,post,comment,interaction,
 │   │                              feed,search,notification,media,manage,analytics,dm,social,ai,admin,realtime}
 │   └── src/main/resources/
-│       ├── db/migration/     # Flyway V1–V5
+│       ├── db/migration/     # Flyway V1–V8
 │       └── openapi/          # OpenAPI 契约（isles-api.yaml）
 ├── frontend/                 # Vue 3 + TypeScript + Vite 前端
 │   └── src/{api,components,composables,layouts,pages,router,stores,styles,types,utils}
@@ -294,7 +294,7 @@ MySocialChannel2/
 | [架构设计](docs/02-架构设计.md) | 系统架构、技术选型、模块划分 |
 | [需求规格](docs/03-需求规格.md) | 功能需求、权限矩阵、验收标准 |
 | [API 设计](docs/05-API设计.md) | 全量接口契约；机器可读：`backend/src/main/resources/openapi/isles-api.yaml` |
-| [数据库设计](docs/06-数据库设计.md) | 表结构、索引与 V1–V5 变更 |
+| [数据库设计](docs/06-数据库设计.md) | 表结构、索引与 V1–V8 变更 |
 | [安全与合规](docs/07-安全与合规.md) | 认证、授权、限流、上传、隐私与 AI 内容规则 |
 | [测试策略](docs/08-测试策略.md) | 分层测试、必测场景与落地情况 |
 | [部署与运维](docs/09-部署与运维.md) | Docker Compose / Nginx / 备份 |

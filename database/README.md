@@ -4,7 +4,7 @@
 
 | 文件 | 内容 |
 | --- | --- |
-| `schema.sql` | 31 张表的完整 DDL（含索引、外键、注释），由 `mysqldump --no-data` 从 V1–V5 迁移全部应用后的库导出 |
+| `schema.sql` | 39 张表的完整 DDL（含索引、外键、注释），由 `mysqldump --no-data` 从 V1–V8 迁移全部应用后的库导出 |
 
 > 不含 `flyway_schema_history`：该表由 Flyway 自行维护，手工导入时不需要。
 
@@ -15,7 +15,7 @@ mysql -u root -p -e "CREATE DATABASE my_social_channel CHARACTER SET utf8mb4 COL
 ```
 
 配置好 `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` 后启动后端，Flyway 会按
-`backend/src/main/resources/db/migration/V1..V5` 顺序建表，无需手工执行任何 SQL。
+`backend/src/main/resources/db/migration/V1..V8` 顺序建表，无需手工执行任何 SQL。
 
 ## 方式 B：手工导入结构文件
 

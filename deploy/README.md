@@ -24,7 +24,7 @@ docker compose ps           # 等待 mysql/redis/backend healthy
 curl http://127.0.0.1/api/v1/actuator/health  # 实际会被 nginx 拦截，直接查看 backend 容器日志/健康检查
 ```
 
-首次启动：MySQL 初始化数据库 → 后端启动时 Flyway 自动执行迁移（V1/V2/V3/V4）。
+首次启动：MySQL 初始化数据库 → 后端启动时 Flyway 自动执行迁移（V1–V7）。
 
 ## 常用运维
 
@@ -48,5 +48,7 @@ docker run --rm -v isles_uploads:/data -v "$PWD":/backup alpine tar czf /backup/
 ## 注意
 
 - `deploy/.env` 已被 `.gitignore` 忽略；不要提交真实密钥。
+- 默认 `SPRING_PROFILES_ACTIVE=prod`：缺 `JWT_SECRET` / `AI_API_KEY_SECRET` 会直接拒绝启动（不降级为明文/默认密钥）。
+- **当前 HTTP 部署不可用于生产**：`COOKIE_SECURE` 默认 `false` 仅为临时联调；接入 HTTPS 后必须改回 `true`（docs/09 §9）。
 - 生产必须启用 HTTPS（前置 Caddy/Nginx TLS 或云负载均衡）；`COOKIE_SECURE=true` 要求 HTTPS。
 - 本机无 Docker，配置为「待服务器验证」状态；验证后更新 docs/09 与发布记录。
