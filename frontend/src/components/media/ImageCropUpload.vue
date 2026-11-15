@@ -15,7 +15,7 @@ import { ElMessage } from 'element-plus'
 import { Picture } from '@element-plus/icons-vue'
 import { mediaApi } from '@/api'
 import { resolveErrorMessage } from '@/api/client'
-import { MAX_IMAGE_SIZE_MB } from '@/constants/app'
+import { IMAGE_ACCEPT, MAX_IMAGE_SIZE_MB } from '@/constants/app'
 import { resolveBaseScale, resolveCropRect, resolveExportSize } from '@/utils/crop'
 
 const { t } = useI18n()
@@ -174,7 +174,14 @@ async function handleFileChange(event: Event): Promise<void> {
     await nextTick()
     centerImage()
   } catch {
-    ElMessage.error(t('media.crop.readFailed'))
+    // HEIC/HEIF 等无法解码的格式：不弹「读取失败」死路，改为按原图上传并说明原因
+    if (mediaApi.isPreviewUnsupported(file)) {
+      sourceFile.value = file
+      ElMessage.info(t('media.heicNoPreview'))
+      await useOriginal()
+    } else {
+      ElMessage.error(t('media.crop.readFailed'))
+    }
   } finally {
     loadingImage.value = false
   }
@@ -355,7 +362,7 @@ onBeforeUnmount(() => {
       </el-button>
       <el-button v-if="modelValue && !disabled" size="small" text type="danger" @click="clearImage">{{ t('common.remove') }}</el-button>
     </div>
-    <input ref="fileInput" type="file" accept="image/*" class="visually-hidden" @change="handleFileChange" />
+    <input ref="fileInput" type="file" :accept="IMAGE_ACCEPT" class="visually-hidden" @change="handleFileChange" />
 
     <el-dialog
       v-model="dialogVisible"

@@ -11,10 +11,13 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AdminTrendChart: typeof import('./components/admin/AdminTrendChart.vue')['default']
     AiChatPanel: typeof import('./components/ai/AiChatPanel.vue')['default']
     AiMessageItem: typeof import('./components/ai/AiMessageItem.vue')['default']
     AiSessionSidebar: typeof import('./components/ai/AiSessionSidebar.vue')['default']
     AiSourceList: typeof import('./components/ai/AiSourceList.vue')['default']
+    AnnouncementBanner: typeof import('./components/AnnouncementBanner.vue')['default']
+    AnnouncementDialog: typeof import('./components/AnnouncementDialog.vue')['default']
     ChannelAssistantPanel: typeof import('./components/ai/ChannelAssistantPanel.vue')['default']
     ChannelCard: typeof import('./components/ChannelCard.vue')['default']
     ChannelHeader: typeof import('./components/ChannelHeader.vue')['default']

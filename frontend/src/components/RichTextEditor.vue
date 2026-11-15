@@ -10,6 +10,7 @@ import { useI18n } from 'vue-i18n'
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Link, Picture, VideoCamera } from '@element-plus/icons-vue'
+import { IMAGE_ACCEPT, VIDEO_ACCEPT } from '@/constants/app'
 import { mediaApi } from '@/api'
 import { resolveErrorMessage } from '@/api/client'
 
@@ -189,6 +190,9 @@ async function handleMediaPick(event: Event, kind: 'image' | 'video'): Promise<v
         ElMessage.warning(invalid)
         continue
       }
+      if (mediaApi.isPreviewUnsupported(file)) {
+        ElMessage.info(t('media.heicNoPreview'))
+      }
       const before = mediaCount()
       const uploaded = await mediaApi.uploadMedia(file)
       const node = document.createElement(kind === 'video' ? 'video' : 'img')
@@ -356,7 +360,7 @@ defineExpose({ insertText, focus: () => editorRef.value?.focus() })
     <input
       ref="fileInput"
       type="file"
-      accept="image/*"
+      :accept="IMAGE_ACCEPT"
       multiple
       class="visually-hidden"
       @change="handleMediaPick($event, 'image')"
@@ -364,7 +368,7 @@ defineExpose({ insertText, focus: () => editorRef.value?.focus() })
     <input
       ref="videoInput"
       type="file"
-      accept="video/*"
+      :accept="VIDEO_ACCEPT"
       multiple
       class="visually-hidden"
       @change="handleMediaPick($event, 'video')"

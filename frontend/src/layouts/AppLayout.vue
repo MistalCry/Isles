@@ -5,6 +5,8 @@ import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { Bell, Menu, Search } from '@element-plus/icons-vue'
 import Sidebar from '@/components/Sidebar.vue'
+import AnnouncementBanner from '@/components/AnnouncementBanner.vue'
+import AnnouncementDialog from '@/components/AnnouncementDialog.vue'
 import { useChannelStore } from '@/stores/channel'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notifications'
@@ -25,6 +27,13 @@ const realtimeStore = useRealtimeStore()
 const { isAuthenticated } = storeToRefs(auth)
 const { unreadCount } = storeToRefs(notificationStore)
 const mobileNavOpen = ref(false)
+const announcementOpen = ref(false)
+const announcementFocus = ref<string | null>(null)
+
+function openAnnouncements(id: string | null = null): void {
+  announcementFocus.value = id
+  announcementOpen.value = true
+}
 
 function closeMobileNav(): void {
   mobileNavOpen.value = false
@@ -80,11 +89,11 @@ watch(
 <template>
   <div class="app-layout">
     <aside class="app-layout__sidebar" :aria-label="t('layout.sidebarLabel')">
-      <Sidebar />
+      <Sidebar @open-announcements="openAnnouncements()" />
     </aside>
 
     <el-drawer v-model="mobileNavOpen" direction="ltr" size="264px" :with-header="false">
-      <Sidebar @navigate="closeMobileNav" />
+      <Sidebar @navigate="closeMobileNav" @open-announcements="openAnnouncements()" />
     </el-drawer>
 
     <div class="app-layout__main">
@@ -105,10 +114,15 @@ watch(
         </div>
       </header>
 
+      <!-- 后台不展示前台公告横幅：管理员看的是管理界面，公告已在「公告管理」里 -->
+      <AnnouncementBanner v-if="!route.path.startsWith('/admin')" @open="openAnnouncements($event.id)" />
+
       <main class="app-layout__content">
         <RouterView />
       </main>
     </div>
+
+    <AnnouncementDialog v-model="announcementOpen" :focus-id="announcementFocus" />
   </div>
 </template>
 

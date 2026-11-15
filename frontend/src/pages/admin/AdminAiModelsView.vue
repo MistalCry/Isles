@@ -43,6 +43,8 @@ function emptyForm(): ModelConfigPayload {
     model: '',
     visionEnabled: false,
     reasoningEnabled: false,
+    // 后端缺省 false：这里显式带上，保证新建时也有明确取值
+    toolCallEnabled: false,
     thinkingMode: 'REASONING_EFFORT',
     isDefault: false,
     enabled: true,
@@ -81,6 +83,7 @@ function openEdit(model: AiModel): void {
     model: model.model,
     visionEnabled: model.visionEnabled,
     reasoningEnabled: model.reasoningEnabled,
+    toolCallEnabled: Boolean(model.toolCallEnabled),
     thinkingMode: model.thinkingMode ?? 'REASONING_EFFORT',
     isDefault: model.isDefault,
     enabled: model.enabled,
@@ -233,6 +236,7 @@ onMounted(load)
           <div class="model-card__tags">
             <el-tag v-if="model.visionEnabled" size="small" effect="plain">{{ t('ai.chat.visionTag') }}</el-tag>
             <el-tag v-if="model.reasoningEnabled" size="small" effect="plain" type="warning">{{ t('ai.chat.deepThinking') }}</el-tag>
+            <el-tag v-if="model.toolCallEnabled" size="small" effect="plain" type="success">{{ t('ai.chat.toolCallTag') }}</el-tag>
             <el-tag size="small" effect="plain" :type="model.apiKeyConfigured ? 'success' : 'info'">
               {{ model.apiKeyConfigured ? t('admin.aiModels.keyConfigured') : t('admin.aiModels.keyNotNeeded') }}
             </el-tag>
@@ -290,6 +294,10 @@ onMounted(load)
             <el-switch v-model="form.reasoningEnabled" />
           </el-form-item>
         </div>
+        <el-form-item :label="t('admin.models.toolCall')">
+          <el-switch v-model="form.toolCallEnabled" class="tool-call-switch" />
+          <p class="form-hint">{{ t('admin.models.toolCallHint') }}</p>
+        </el-form-item>
         <el-form-item v-if="form.reasoningEnabled" :label="t('admin.models.thinkingMode')">
           <el-select v-model="form.thinkingMode" class="thinking-mode">
             <el-option :label="t('admin.models.thinkingEffort')" value="REASONING_EFFORT" />

@@ -77,9 +77,10 @@ async function save(): Promise<void> {
   try {
     const updated = await manageApi.updateChannel(props.channel.id, {
       name: form.name.trim(),
-      description: form.description.trim() || null,
-      avatarUrl: form.avatarUrl || null,
-      coverUrl: form.coverUrl || null,
+      // 空串 = 清空；后端约定 null 表示「不修改」，所以清空必须显式传 ""
+      description: form.description.trim(),
+      avatarUrl: form.avatarUrl,
+      coverUrl: form.coverUrl,
       type: form.type,
       ...(canEditVisibility.value ? { visibility: form.visibility } : {}),
     })

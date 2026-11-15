@@ -66,10 +66,11 @@ async function save(): Promise<void> {
   try {
     const updated = await usersApi.updateMe({
       nickname,
-      avatarUrl: form.avatarUrl.trim() || null,
-      signature: form.signature.trim() || undefined,
+      // 空串 = 清空；后端约定 null 表示「不修改」，所以清空必须显式传 ""
+      avatarUrl: form.avatarUrl.trim(),
+      signature: form.signature.trim(),
       gender: form.gender,
-      region: form.region.trim() || undefined,
+      region: form.region.trim(),
     })
     auth.currentUser = { ...(auth.currentUser ?? updated), ...updated }
     ElMessage.success(t('profile.saved'))

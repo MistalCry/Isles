@@ -2,15 +2,16 @@
 import { useI18n } from 'vue-i18n'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ChatDotRound, EditPen, Share, Star, StarFilled, View } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, ChatDotRound, EditPen, Share, Star, StarFilled, View } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { channelsApi, postsApi } from '@/api'
+import { channelsApi, mediaApi, postsApi } from '@/api'
 import { AppError, resolveErrorMessage } from '@/api/client'
 import { useRequireLogin } from '@/composables/useRequireLogin'
 import { useAuthStore } from '@/stores/auth'
 import { formatCount, formatDateTime, sortMedia } from '@/utils/format'
 import { renderContent } from '@/utils/sanitize'
-import type { Comment, Post } from '@/types/models'
+import type { Comment, MediaItem, Post } from '@/types/models'
+import { MAX_MEDIA_COUNT, MEDIA_ACCEPT } from '@/constants/app'
 import UserAvatar from '@/components/UserAvatar.vue'
 import UserCardPopover from '@/components/UserCardPopover.vue'
 import MediaViewer from '@/components/MediaViewer.vue'
@@ -18,6 +19,7 @@ import CommentSection from '@/components/CommentSection.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
 import ReportDialog from '@/components/ReportDialog.vue'
 import ShareToDmDialog from '@/components/dm/ShareToDmDialog.vue'
+import ImageCropUpload from '@/components/media/ImageCropUpload.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 
@@ -36,7 +38,10 @@ const shareOpen = ref(false)
 const editOpen = ref(false)
 const editSaving = ref(false)
 const auth = useAuthStore()
-const editForm = reactive({ title: '', content: '' })
+const editForm = reactive({ title: '', content: '', coverUrl: '' as string, media: [] as MediaItem[] })
+/** 编辑弹窗里新增媒体用的文件选择器 */
+const editMediaInput = ref<HTMLInputElement>()
+const editMediaUploading = ref(false)
 /** null = 未知（不阻塞交互，由后端兜底）；false = 确认未加入频道 */
 const joined = ref<boolean | null>(null)
 const commentsRef = ref<HTMLElement | null>(null)
@@ -76,7 +81,58 @@ function openEdit(): void {
   if (!post.value) return
   editForm.title = post.value.title ?? ''
   editForm.content = post.value.content ?? ''
+  editForm.coverUrl = post.value.coverUrl ?? ''
+  // 复制一份，避免直接改到已渲染的 post 数据（取消编辑时应还原）
+  editForm.media = sortMedia(post.value.media).map((item) => ({ ...item }))
   editOpen.value = true
+}
+
+function removeEditMedia(index: number): void {
+  editForm.media.splice(index, 1)
+}
+
+/** 调整顺序：封面/媒体顺序即前台展示顺序 */
+function moveEditMedia(index: number, delta: number): void {
+  const target = index + delta
+  if (target < 0 || target >= editForm.media.length) return
+  const next = [...editForm.media]
+  const [item] = next.splice(index, 1)
+  next.splice(target, 0, item)
+  editForm.media = next
+}
+
+function triggerEditMediaPick(): void {
+  editMediaInput.value?.click()
+}
+
+async function handleEditMediaPick(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = ''
+  if (files.length === 0) return
+  const remaining = MAX_MEDIA_COUNT - editForm.media.length
+  if (remaining <= 0) {
+    ElMessage.warning(t('comment.mediaLimit', { n: MAX_MEDIA_COUNT }))
+    return
+  }
+  editMediaUploading.value = true
+  try {
+    for (const file of files.slice(0, remaining)) {
+      const invalid = mediaApi.validateMediaFile(file)
+      if (invalid) {
+        ElMessage.warning(invalid)
+        continue
+      }
+      if (mediaApi.isPreviewUnsupported(file)) {
+        ElMessage.info(t('media.heicNoPreview'))
+      }
+      editForm.media.push(await mediaApi.uploadMedia(file))
+    }
+  } catch (err) {
+    ElMessage.error(resolveErrorMessage(err, t('comment.mediaUploadFailed')))
+  } finally {
+    editMediaUploading.value = false
+  }
 }
 
 async function saveEdit(): Promise<void> {
@@ -92,6 +148,9 @@ async function saveEdit(): Promise<void> {
       title: editForm.title.trim() || undefined,
       content: editForm.content,
       contentFormat: isRichText.value ? 'HTML' : 'PLAIN',
+      // 空串表示清除封面（后端把 null 视为「不修改」）
+      coverUrl: editForm.coverUrl ? editForm.coverUrl : '',
+      media: editForm.media,
     })
     post.value = updated
     editOpen.value = false
@@ -324,12 +383,81 @@ function goBack(): void {
         />
       </section>
 
-      <el-dialog v-model="editOpen" :title="t('post.detail.edit')" width="min(680px, 96vw)" top="6vh" append-to-body>
+      <el-dialog v-model="editOpen" :title="t('post.detail.edit')" width="min(720px, 96vw)" top="5vh" append-to-body>
         <el-input v-model="editForm.title" maxlength="200" show-word-limit :placeholder="t('common.optionalTitle')" />
+
+        <section class="post-detail__edit-section">
+          <h4 class="post-detail__edit-label">{{ t('post.edit.cover') }}</h4>
+          <div class="post-detail__edit-cover">
+            <ImageCropUpload
+              v-model="editForm.coverUrl"
+              :aspect-ratio="16 / 9"
+              :max-output-width="0"
+              shape="rect"
+              :label="t('post.edit.cover')"
+              :hint="t('post.edit.coverHint')"
+              :box-width="320"
+            />
+            <el-button v-if="editForm.coverUrl" link type="danger" @click="editForm.coverUrl = ''">
+              {{ t('post.edit.removeCover') }}
+            </el-button>
+          </div>
+        </section>
+
         <div class="post-detail__edit-body">
           <RichTextEditor v-if="isRichText" v-model="editForm.content" :min-height="240" />
           <el-input v-else v-model="editForm.content" type="textarea" :rows="8" maxlength="5000" show-word-limit />
         </div>
+
+        <section class="post-detail__edit-section">
+          <h4 class="post-detail__edit-label">
+            {{ t('post.edit.media') }}
+            <span class="muted">{{ t('post.edit.mediaHint', { n: MAX_MEDIA_COUNT }) }}</span>
+          </h4>
+
+          <div class="post-detail__edit-media">
+            <div v-for="(item, index) in editForm.media" :key="`${item.url}-${index}`" class="edit-media-item">
+              <img v-if="item.type === 'IMAGE'" :src="item.thumbUrl || item.url" :alt="item.url" />
+              <video v-else :src="item.url" muted playsinline preload="metadata" />
+              <div class="edit-media-item__tools">
+                <button type="button" :aria-label="t('post.edit.moveLeft')" :disabled="index === 0" @click="moveEditMedia(index, -1)">
+                  <el-icon :size="12"><ArrowLeft /></el-icon>
+                </button>
+                <button
+                  type="button"
+                  :aria-label="t('post.edit.moveRight')"
+                  :disabled="index === editForm.media.length - 1"
+                  @click="moveEditMedia(index, 1)"
+                >
+                  <el-icon :size="12"><ArrowRight /></el-icon>
+                </button>
+                <button type="button" class="edit-media-item__remove" :aria-label="t('common.remove')" @click="removeEditMedia(index)">
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <button
+              v-if="editForm.media.length < MAX_MEDIA_COUNT"
+              type="button"
+              class="edit-media-add"
+              :disabled="editMediaUploading"
+              @click="triggerEditMediaPick"
+            >
+              <span>{{ editMediaUploading ? t('post.edit.uploading') : t('post.edit.addMedia') }}</span>
+            </button>
+          </div>
+
+          <input
+            ref="editMediaInput"
+            type="file"
+            :accept="MEDIA_ACCEPT"
+            multiple
+            class="visually-hidden"
+            @change="handleEditMediaPick"
+          />
+        </section>
+
         <template #footer>
           <el-button @click="editOpen = false">{{ t('common.cancel') }}</el-button>
           <el-button type="primary" :loading="editSaving" @click="saveEdit">{{ t('common.save') }}</el-button>
@@ -467,6 +595,104 @@ function goBack(): void {
   margin-top: var(--isles-space-5);
   padding-top: var(--isles-space-4);
   border-top: 1px solid var(--isles-border);
+}
+
+.post-detail__edit-section {
+  margin-top: var(--isles-space-3);
+}
+
+.post-detail__edit-label {
+  display: flex;
+  gap: var(--isles-space-2);
+  align-items: baseline;
+  margin-bottom: var(--isles-space-2);
+  font-size: var(--isles-font-sm);
+  font-weight: 600;
+}
+
+.post-detail__edit-cover {
+  display: flex;
+  gap: var(--isles-space-3);
+  align-items: flex-start;
+}
+
+.post-detail__edit-media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--isles-space-2);
+}
+
+.edit-media-item {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+  background: var(--isles-surface-muted);
+  border: 1px solid var(--isles-border);
+  border-radius: var(--isles-radius-sm);
+
+  img,
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.edit-media-item__tools {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  display: flex;
+  gap: 2px;
+
+  button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    color: #fff;
+    cursor: pointer;
+    background: rgb(0 0 0 / 55%);
+    border: none;
+    border-radius: 3px;
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.4;
+    }
+  }
+}
+
+.edit-media-item__remove {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.edit-media-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  color: var(--isles-text-muted);
+  font-size: var(--isles-font-xs);
+  cursor: pointer;
+  background: transparent;
+  border: 1px dashed var(--isles-border);
+  border-radius: var(--isles-radius-sm);
+
+  &:hover:not(:disabled) {
+    color: var(--isles-primary);
+    border-color: var(--isles-primary);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
 }
 
 .post-detail__edit-body {

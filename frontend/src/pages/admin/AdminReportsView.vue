@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
@@ -11,13 +11,21 @@ import {
   listAdminReports,
   type AdminReport,
   type AdminReportPage,
+  type ReportStatus,
 } from './adminApi'
 import { resolveErrorMessage } from '@/api/client'
 import { formatDateTime } from '@/utils/format'
+import { hasPermission } from './adminPermissions'
+import { reportReasonLabel } from '@/constants/app'
+import { useAdminAccess } from '@/composables/useAdminAccess'
 
 const { t } = useI18n()
+const { identity } = useAdminAccess()
+const canHandle = computed(() => hasPermission(identity.value, 'REPORT_HANDLE'))
 
 const status = ref('')
+const targetType = ref('')
+const keyword = ref('')
 const page = ref(1)
 const size = ref(20)
 const data = ref<AdminReportPage | null>(null)
@@ -27,14 +35,59 @@ const error = ref<string | null>(null)
 const actionDialogVisible = ref(false)
 const actingReport = ref<AdminReport | null>(null)
 const action = ref<'DISMISS' | 'RESOLVE'>('RESOLVE')
+const handleAction = ref<'NONE' | 'DELETE_CONTENT' | 'MUTE_AUTHOR' | 'WARN'>('NONE')
 const note = ref('')
 const submitting = ref(false)
+
+/** 后端已统一为 ACCEPTED/REJECTED，这里不再出现 DISMISSED/RESOLVED */
+const STATUS_LABEL_KEYS: Record<ReportStatus, string> = {
+  PENDING: 'admin.reportStatus.pending',
+  ACCEPTED: 'admin.reportStatus.accepted',
+  REJECTED: 'admin.reportStatus.rejected',
+}
+
+function statusLabel(value?: string | null): string {
+  const key = STATUS_LABEL_KEYS[(value ?? 'PENDING') as ReportStatus]
+  return key ? t(key) : (value ?? '')
+}
+
+/** 处置动作与目标类型也走中文映射，避免表格里出现裸枚举值 */
+const HANDLE_ACTION_LABEL_KEYS: Record<string, string> = {
+  NONE: 'admin.reports.handleNone',
+  DELETE_CONTENT: 'admin.reports.handleDelete',
+  MUTE_AUTHOR: 'admin.reports.handleMute',
+  WARN: 'admin.reports.handleWarn',
+}
+
+function handleActionLabel(value?: string | null): string {
+  if (!value) return '—'
+  const key = HANDLE_ACTION_LABEL_KEYS[value]
+  return key ? t(key) : value
+}
+
+function targetTypeLabel(value?: string | null): string {
+  if (value === 'POST') return t('admin.reports.targetPost')
+  if (value === 'COMMENT') return t('admin.reports.targetComment')
+  return value || '—'
+}
+
+function statusTagType(value?: string | null): 'warning' | 'success' | 'info' {
+  if (value === 'ACCEPTED') return 'success'
+  if (value === 'REJECTED') return 'info'
+  return 'warning'
+}
 
 async function load(): Promise<void> {
   loading.value = true
   error.value = null
   try {
-    data.value = await listAdminReports({ status: status.value || undefined, page: page.value, size: size.value })
+    data.value = await listAdminReports({
+      status: status.value || undefined,
+      targetType: targetType.value || undefined,
+      keyword: keyword.value.trim() || undefined,
+      page: page.value,
+      size: size.value,
+    })
   } catch (cause) {
     error.value = resolveErrorMessage(cause, t('manage.reports.loadFailed'))
   } finally {
@@ -50,6 +103,7 @@ function search(): void {
 function openHandle(report: AdminReport): void {
   actingReport.value = report
   action.value = 'RESOLVE'
+  handleAction.value = 'NONE'
   note.value = ''
   actionDialogVisible.value = true
 }
@@ -58,7 +112,7 @@ async function submitHandle(): Promise<void> {
   if (!actingReport.value) return
   submitting.value = true
   try {
-    await handleAdminReport(actingReport.value.id, action.value, note.value.trim() || undefined)
+    await handleAdminReport(actingReport.value.id, action.value, note.value.trim() || undefined, handleAction.value)
     ElMessage.success(t('admin.reports.submitted'))
     actionDialogVisible.value = false
     await load()
@@ -83,11 +137,31 @@ onMounted(load)
     </header>
 
     <div class="admin-filters">
+      <el-input
+        v-model="keyword"
+        :placeholder="t('admin.reports.keywordPlaceholder')"
+        :prefix-icon="Search"
+        clearable
+        class="admin-filters__search"
+        @keyup.enter="search"
+        @clear="search"
+      />
       <el-select v-model="status" :placeholder="t('common.allStatus')" clearable class="admin-filters__select" @change="search">
-        <el-option :label="t('manage.reports.pending')" value="PENDING" />
-        <el-option :label="t('manage.reports.rejected')" value="DISMISSED" />
-        <el-option :label="t('admin.reports.doneStatus')" value="RESOLVED" />
+        <el-option :label="t('admin.reportStatus.pending')" value="PENDING" />
+        <el-option :label="t('admin.reportStatus.accepted')" value="ACCEPTED" />
+        <el-option :label="t('admin.reportStatus.rejected')" value="REJECTED" />
       </el-select>
+      <el-select
+        v-model="targetType"
+        :placeholder="t('admin.reports.targetType')"
+        clearable
+        class="admin-filters__select"
+        @change="search"
+      >
+        <el-option :label="t('admin.reports.targetPost')" value="POST" />
+        <el-option :label="t('admin.reports.targetComment')" value="COMMENT" />
+      </el-select>
+      <el-button type="primary" :icon="Search" @click="search">{{ t('common.query') }}</el-button>
     </div>
 
     <el-alert
@@ -105,28 +179,39 @@ onMounted(load)
     <LoadingState v-if="loading && !data" :rows="3" />
     <ErrorState v-else-if="error" :message="error" @retry="load" />
     <EmptyState
-      v-else-if="data && data.available && data.items.length === 0"
+      v-else-if="data && data.items.length === 0"
       :title="t('admin.reports.empty')"
       :description="t('admin.reports.emptyHint')"
     />
-    <template v-else-if="data && data.available">
+    <template v-else-if="data">
       <el-table :data="data.items" class="admin-table" row-key="id">
         <el-table-column prop="id" :label="t('admin.reports.id')" width="200" show-overflow-tooltip />
         <el-table-column :label="t('admin.reports.target')" min-width="160">
           <template #default="{ row }">
-            <p>{{ row.targetType || '—' }}</p>
+            <p>{{ targetTypeLabel(row.targetType) }}</p>
             <p class="cell-sub">{{ row.targetId || '—' }}</p>
           </template>
         </el-table-column>
-        <el-table-column :label="t('admin.reports.reason')" min-width="240">
+        <el-table-column :label="t('admin.reports.reason')" min-width="220">
           <template #default="{ row }">
-            <p>{{ row.reason || '—' }}</p>
+            <p>{{ row.reason ? reportReasonLabel(row.reason) : '—' }}</p>
             <p class="cell-sub line-clamp-2">{{ row.detail }}</p>
           </template>
         </el-table-column>
         <el-table-column :label="t('common.status')" width="110">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain">{{ row.status || 'PENDING' }}</el-tag>
+            <el-tag size="small" effect="plain" :type="statusTagType(row.status)">
+              {{ statusLabel(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('admin.reports.handler')" width="150">
+          <template #default="{ row }">
+            <template v-if="row.handledAt">
+              <p class="cell-sub">{{ handleActionLabel(row.handleAction) }}</p>
+              <p class="cell-sub">{{ formatDateTime(row.handledAt) }}</p>
+            </template>
+            <span v-else class="muted">—</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('common.time')" width="160">
@@ -134,7 +219,15 @@ onMounted(load)
         </el-table-column>
         <el-table-column :label="t('common.actions')" width="100" align="right">
           <template #default="{ row }">
-            <el-button size="small" link type="primary" @click="openHandle(row as AdminReport)">{{ t('admin.reports.handle') }}</el-button>
+            <el-button
+              size="small"
+              link
+              type="primary"
+              :disabled="!canHandle || row.status !== 'PENDING'"
+              @click="openHandle(row as AdminReport)"
+            >
+              {{ t('admin.reports.handle') }}
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -155,9 +248,17 @@ onMounted(load)
       <el-form label-position="top">
         <el-form-item :label="t('admin.reports.action')">
           <el-radio-group v-model="action">
-            <el-radio value="RESOLVE">{{ t('admin.reports.done') }}</el-radio>
-            <el-radio value="DISMISS">{{ t('manage.reports.reject') }}</el-radio>
+            <el-radio value="RESOLVE">{{ t('admin.reportStatus.accepted') }}</el-radio>
+            <el-radio value="DISMISS">{{ t('admin.reportStatus.rejected') }}</el-radio>
           </el-radio-group>
+        </el-form-item>
+        <el-form-item :label="t('admin.reports.handleAction')">
+          <el-select v-model="handleAction" class="dialog-select">
+            <el-option :label="t('admin.reports.handleNone')" value="NONE" />
+            <el-option :label="t('admin.reports.handleDelete')" value="DELETE_CONTENT" />
+            <el-option :label="t('admin.reports.handleMute')" value="MUTE_AUTHOR" />
+            <el-option :label="t('admin.reports.handleWarn')" value="WARN" />
+          </el-select>
         </el-form-item>
         <el-form-item :label="t('admin.reports.note')">
           <el-input v-model="note" type="textarea" :rows="3" maxlength="500" show-word-limit />
@@ -201,6 +302,10 @@ onMounted(load)
   width: 140px;
 }
 
+.admin-filters__search {
+  width: 240px;
+}
+
 .reports-dependency {
   margin-bottom: var(--isles-space-3);
 }
@@ -216,19 +321,22 @@ onMounted(load)
   font-size: var(--isles-font-xs);
 }
 
+.admin-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--isles-space-3);
+  color: var(--isles-text-muted);
+  font-size: var(--isles-font-sm);
+}
+
 .dialog-hint {
   margin-bottom: var(--isles-space-3);
   color: var(--isles-text-muted);
   font-size: var(--isles-font-sm);
 }
 
-.admin-pager {
-  display: flex;
-  gap: var(--isles-space-3);
-  align-items: center;
-  justify-content: space-between;
-  margin-top: var(--isles-space-3);
-  color: var(--isles-text-muted);
-  font-size: var(--isles-font-xs);
+.dialog-select {
+  width: 100%;
 }
 </style>

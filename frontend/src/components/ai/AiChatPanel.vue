@@ -9,6 +9,7 @@ import AiMessageItem from './AiMessageItem.vue'
 import AiSessionSidebar from './AiSessionSidebar.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
+import { IMAGE_ACCEPT } from '@/constants/app'
 import { useAiStore } from '@/stores/ai'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -27,7 +28,7 @@ import {
   type StreamHandlers,
 } from '@/api/ai'
 import { AppError, resolveErrorMessage } from '@/api/client'
-import { uploadMedia, validateMediaFile } from '@/api/media'
+import { isPreviewUnsupported, uploadMedia, validateMediaFile } from '@/api/media'
 
 const { t } = useI18n()
 
@@ -487,6 +488,9 @@ async function handleFileChange(event: Event): Promise<void> {
       ElMessage.warning(invalid)
       continue
     }
+    if (isPreviewUnsupported(file)) {
+      ElMessage.info(t('media.heicNoPreview'))
+    }
     uploading.value = true
     try {
       const media = await uploadMedia(file)
@@ -695,7 +699,7 @@ function retryMessages(): void {
               <input
                 ref="fileInput"
                 type="file"
-                accept="image/*"
+                :accept="IMAGE_ACCEPT"
                 multiple
                 class="visually-hidden"
                 @change="handleFileChange"

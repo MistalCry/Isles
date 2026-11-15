@@ -1,18 +1,32 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { computed, onMounted, ref } from 'vue'
-import { Refresh } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { Delete, Refresh } from '@element-plus/icons-vue'
 import ErrorState from '@/components/ErrorState.vue'
 import LoadingState from '@/components/LoadingState.vue'
-import { getAdminOverview, type AdminOverview } from './adminApi'
+import AdminTrendChart from '@/components/admin/AdminTrendChart.vue'
+import {
+  deleteAdminHotKeyword,
+  getAdminOverview,
+  getAdminTrend,
+  listAdminHotKeywords,
+  type AdminHotKeyword,
+  type AdminOverview,
+  type AdminTrendPoint,
+} from './adminApi'
 import { resolveErrorMessage } from '@/api/client'
-import { formatCount } from '@/utils/format'
+import { formatCount, formatDateTime } from '@/utils/format'
 
 const { t } = useI18n()
 
 const overview = ref<AdminOverview | null>(null)
+const trend = ref<AdminTrendPoint[]>([])
+const hotKeywords = ref<AdminHotKeyword[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
+/** 趋势默认 30 天；后端上限 90，这里只暴露 7/30/90 三档 */
+const trendDays = ref(30)
 
 const cards = computed(() => {
   if (!overview.value) return []
@@ -36,11 +50,38 @@ async function load(): Promise<void> {
   loading.value = true
   error.value = null
   try {
-    overview.value = await getAdminOverview()
+    // 三块数据互不阻塞：趋势/热词失败不应让整页空白
+    const [summary, trendData, keywords] = await Promise.all([
+      getAdminOverview(),
+      getAdminTrend(trendDays.value).catch(() => [] as AdminTrendPoint[]),
+      listAdminHotKeywords(10).catch(() => [] as AdminHotKeyword[]),
+    ])
+    overview.value = summary
+    trend.value = trendData
+    hotKeywords.value = keywords
   } catch (cause) {
     error.value = resolveErrorMessage(cause, t('admin.overview.loadFailed'))
   } finally {
     loading.value = false
+  }
+}
+
+async function changeDays(days: number): Promise<void> {
+  trendDays.value = days
+  try {
+    trend.value = await getAdminTrend(days)
+  } catch (cause) {
+    ElMessage.error(resolveErrorMessage(cause, t('admin.trend.loadFailed')))
+  }
+}
+
+async function removeKeyword(item: AdminHotKeyword): Promise<void> {
+  try {
+    await deleteAdminHotKeyword(item.id)
+    hotKeywords.value = hotKeywords.value.filter((entry) => entry.id !== item.id)
+    ElMessage.success(t('admin.trend.keywordDeleted'))
+  } catch (cause) {
+    ElMessage.error(resolveErrorMessage(cause, t('admin.trend.keywordDeleteFailed')))
   }
 }
 
@@ -67,6 +108,42 @@ onMounted(load)
           <p class="overview-card__hint">{{ card.hint }}</p>
         </article>
       </div>
+      <section class="overview-section">
+        <header class="overview-section__head">
+          <div>
+            <h3>{{ t('admin.trend.title') }}</h3>
+            <p class="muted">{{ t('admin.trend.subtitle') }}</p>
+          </div>
+          <el-radio-group :model-value="trendDays" size="small" @update:model-value="changeDays(Number($event))">
+            <el-radio-button :value="7">{{ t('admin.trend.days7') }}</el-radio-button>
+            <el-radio-button :value="30">{{ t('admin.trend.days30') }}</el-radio-button>
+            <el-radio-button :value="90">{{ t('admin.trend.days90') }}</el-radio-button>
+          </el-radio-group>
+        </header>
+        <AdminTrendChart v-if="trend.length > 0" :points="trend" />
+        <el-empty v-else :description="t('admin.trend.empty')" />
+      </section>
+
+      <section class="overview-section">
+        <header class="overview-section__head">
+          <div>
+            <h3>{{ t('admin.trend.hotKeywords') }}</h3>
+            <p class="muted">{{ t('admin.trend.hotKeywordsHint') }}</p>
+          </div>
+        </header>
+        <el-empty v-if="hotKeywords.length === 0" :description="t('admin.trend.hotKeywordsEmpty')" />
+        <ul v-else class="hot-keywords">
+          <li v-for="item in hotKeywords" :key="item.id" class="hot-keyword">
+            <span class="hot-keyword__text">{{ item.keyword }}</span>
+            <span class="muted">{{ t('admin.trend.searchCount', { n: item.searchCount }) }}</span>
+            <span class="muted">{{ formatDateTime(item.lastSearchedAt) }}</span>
+            <el-button size="small" link type="danger" :icon="Delete" @click="removeKeyword(item)">
+              {{ t('common.delete') }}
+            </el-button>
+          </li>
+        </ul>
+      </section>
+
       <el-alert
         v-if="!overview.reportTableReady"
         class="overview-alert"
@@ -134,5 +211,48 @@ onMounted(load)
 
 .overview-alert {
   margin-top: var(--isles-space-4);
+}
+
+.overview-section {
+  margin-top: var(--isles-space-5);
+  padding: var(--isles-space-4);
+  background: var(--isles-surface);
+  border: 1px solid var(--isles-border);
+  border-radius: var(--isles-radius-lg);
+}
+
+.overview-section__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--isles-space-3);
+
+  h3 {
+    font-size: var(--isles-font-md);
+    font-weight: 600;
+  }
+}
+
+.hot-keywords {
+  display: flex;
+  flex-direction: column;
+}
+
+.hot-keyword {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px 160px 60px;
+  gap: var(--isles-space-2);
+  align-items: center;
+  padding: var(--isles-space-2) 0;
+  font-size: var(--isles-font-sm);
+  border-bottom: 1px dashed var(--isles-border);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.hot-keyword__text {
+  font-weight: 600;
 }
 </style>

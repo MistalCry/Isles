@@ -10,12 +10,13 @@ import { useCursorList } from '@/composables/useCursorList'
 import { useRequireLogin } from '@/composables/useRequireLogin'
 import { validateComment } from '@/utils/validators'
 import { formatCount } from '@/utils/format'
-import { EMOJI_LIST, MAX_MEDIA_COUNT } from '@/constants/app'
+import { EMOJI_LIST, MAX_MEDIA_COUNT, MEDIA_ACCEPT } from '@/constants/app'
 import type { Comment, CommentSort, MediaItem } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
 import MentionPicker from './MentionPicker.vue'
 import { mentionToken } from '@/utils/mention'
 import CommentItem from './CommentItem.vue'
+import ReportDialog from './ReportDialog.vue'
 import LoadingState from './LoadingState.vue'
 import ErrorState from './ErrorState.vue'
 import EmptyState from './EmptyState.vue'
@@ -49,6 +50,9 @@ const emit = defineEmits<{
 }>()
 
 const auth = useAuthStore()
+/** 评论举报：记录被举报的评论，弹窗由 ReportDialog 负责提交 */
+const reportTarget = ref<Comment | null>(null)
+const reportOpen = ref(false)
 const { requireLogin } = useRequireLogin()
 
 const sort = ref<CommentSort>(props.defaultSort)
@@ -119,6 +123,10 @@ async function handleFiles(event: Event): Promise<void> {
       ElMessage.warning(invalid)
       continue
     }
+    if (mediaApi.isPreviewUnsupported(file)) {
+      // HEIC 等格式浏览器无法预览，明确告知「按原图上传」，避免用户以为是失败
+      ElMessage.info(t('media.heicNoPreview'))
+    }
     uploading.value = true
     try {
       mediaItems.value.push(await mediaApi.uploadMedia(file))
@@ -161,6 +169,12 @@ function insertMention(payload: { id: string; name: string }): void {
     const caret = start + token.length
     textarea.setSelectionRange(caret, caret)
   })
+}
+
+function handleReport(comment: Comment): void {
+  if (!requireLogin(t('post.detail.reportLoginRequired'))) return
+  reportTarget.value = comment
+  reportOpen.value = true
 }
 
 async function handleDelete(comment: Comment): Promise<void> {
@@ -335,6 +349,7 @@ const placeholder = () => (auth.isAuthenticated ? t('comment.placeholder') : t('
               class="comment-composer__tool"
               :disabled="uploading || !auth.isAuthenticated"
               :aria-label="t('media.uploadMedia')"
+              :title="t('media.formatsHint')"
               @click="triggerFilePicker"
             >
               <el-icon :size="15"><Picture /></el-icon>
@@ -355,12 +370,19 @@ const placeholder = () => (auth.isAuthenticated ? t('comment.placeholder') : t('
         <input
           ref="fileInput"
           type="file"
-          accept="image/*,video/*"
+          :accept="MEDIA_ACCEPT"
           multiple
           class="visually-hidden"
           @change="handleFiles"
         />
-        <p v-if="!auth.isAuthenticated" class="comment-section__guest-tip">{{ t('comment.guestHint') }}</p>
+        <ReportDialog
+        v-if="reportTarget"
+        v-model="reportOpen"
+        target-type="comment"
+        :target-id="reportTarget.id"
+      />
+
+      <p v-if="!auth.isAuthenticated" class="comment-section__guest-tip">{{ t('comment.guestHint') }}</p>
       </div>
     </div>
 
@@ -387,6 +409,7 @@ const placeholder = () => (auth.isAuthenticated ? t('comment.placeholder') : t('
         @reply="handleReply"
         @like="handleLike"
         @delete="handleDelete"
+        @report="handleReport"
       />
 
       <div class="comment-section__more">

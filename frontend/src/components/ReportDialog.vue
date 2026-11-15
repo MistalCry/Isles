@@ -4,7 +4,7 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { manageApi } from '@/api'
 import { resolveErrorMessage } from '@/api/client'
-import { reportReasons } from '@/constants/app'
+import { REPORT_REASON_CODES, reportReasonLabel, type ReportReasonCode } from '@/constants/app'
 
 const { t } = useI18n()
 
@@ -23,15 +23,15 @@ const visible = computed({
   set: (value: boolean) => emit('update:modelValue', value),
 })
 
-const reasons = computed(() => reportReasons())
-const reason = ref<string>(reasons.value[0])
+/** 只提交代码（SPAM/ABUSE/…），文案仅用于展示 */
+const reason = ref<ReportReasonCode>(REPORT_REASON_CODES[0])
 const description = ref('')
 const submitting = ref(false)
 const errorMessage = ref<string | null>(null)
 
 watch(visible, (open) => {
   if (open) {
-    reason.value = reasons.value[0]
+    reason.value = REPORT_REASON_CODES[0]
     description.value = ''
     errorMessage.value = null
   }
@@ -66,7 +66,9 @@ async function handleSubmit(): Promise<void> {
     <p class="report-dialog__hint">{{ t('report.hint') }}</p>
     <el-alert v-if="errorMessage" :title="errorMessage" type="error" :closable="false" show-icon class="report-dialog__alert" />
     <el-radio-group v-model="reason" class="report-dialog__reasons">
-      <el-radio v-for="item in reasons" :key="item" :value="item">{{ item }}</el-radio>
+      <el-radio v-for="item in REPORT_REASON_CODES" :key="item" :value="item">
+        {{ reportReasonLabel(item) }}
+      </el-radio>
     </el-radio-group>
     <el-input
       v-model="description"

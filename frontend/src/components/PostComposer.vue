@@ -7,7 +7,7 @@ import { channelsApi, mediaApi } from '@/api'
 import { resolveErrorMessage } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useRequireLogin } from '@/composables/useRequireLogin'
-import { EMOJI_LIST, MAX_MEDIA_COUNT } from '@/constants/app'
+import { EMOJI_LIST, MAX_MEDIA_COUNT, MEDIA_ACCEPT } from '@/constants/app'
 import type { Board, MediaItem, Post } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
 import RichTextEditor from './RichTextEditor.vue'
@@ -89,6 +89,10 @@ async function handleFiles(event: Event): Promise<void> {
     if (invalid) {
       ElMessage.warning(invalid)
       continue
+    }
+    if (mediaApi.isPreviewUnsupported(file)) {
+      // HEIC 等格式浏览器无法预览，明确告知「按原图上传」，避免用户以为是失败
+      ElMessage.info(t('media.heicNoPreview'))
     }
     uploading.value = true
     errorMessage.value = null
@@ -223,7 +227,14 @@ function insertMention(payload: { id: string; name: string }): void {
         </div>
       </el-popover>
 
-      <button type="button" class="composer-btn" :disabled="uploading" :aria-label="t('media.uploadMedia')" @click="triggerFilePicker">
+      <button
+        type="button"
+        class="composer-btn"
+        :disabled="uploading"
+        :aria-label="t('media.uploadMedia')"
+        :title="t('media.formatsHint')"
+        @click="triggerFilePicker"
+      >
         <el-icon><Picture /></el-icon>
         {{ uploading ? t('common.uploading') : t('post.mediaLabel') }}
       </button>
@@ -278,7 +289,7 @@ function insertMention(payload: { id: string; name: string }): void {
     <input
       ref="fileInputRef"
       type="file"
-      accept="image/*,video/*"
+      :accept="MEDIA_ACCEPT"
       multiple
       class="visually-hidden"
       :aria-label="t('media.pickFile')"

@@ -7,6 +7,7 @@ import { mediaApi } from '@/api'
 import { resolveErrorMessage } from '@/api/client'
 import { useChannelStore } from '@/stores/channel'
 import { validateChannelDescription, validateChannelName } from '@/utils/validators'
+import { IMAGE_ACCEPT } from '@/constants/app'
 import type { Channel, ChannelType, ChannelVisibility } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
 
@@ -152,7 +153,7 @@ async function handleSubmit(): Promise<void> {
         <input
           ref="fileInputRef"
           type="file"
-          accept="image/*"
+          :accept="IMAGE_ACCEPT"
           class="visually-hidden"
           :aria-label="t('channel.avatarPick')"
           @change="handleAvatarChange"

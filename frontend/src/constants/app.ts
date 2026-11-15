@@ -15,6 +15,25 @@ export const SEARCH_PAGE_SIZE = 20
 export const MAX_SEARCH_HISTORY = 10
 export const MAX_MEDIA_COUNT = 9
 
+/**
+ * 上传控件 accept：与产品支持的格式保持一致（后端 MIME 白名单另有一套，
+ * 这里放宽是为了让系统文件框能选到，真正校验仍以后端为准）。
+ */
+export const IMAGE_ACCEPT = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/avif',
+  'image/bmp',
+  'image/heic',
+  'image/heif',
+].join(',')
+
+export const VIDEO_ACCEPT = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v'].join(',')
+
+export const MEDIA_ACCEPT = `${IMAGE_ACCEPT},${VIDEO_ACCEPT}`
+
 export const MAX_IMAGE_SIZE_MB = 10
 export const MAX_VIDEO_SIZE_MB = 200
 
@@ -51,15 +70,27 @@ export const CHANNEL_VISIBILITY_LABELS = {
   },
 } as const
 
-/** 举报原因：返回数组而非常量，保证切换语言后重新取到当前语言文案 */
-export function reportReasons(): string[] {
-  return [
-    t('report.reason.spam'),
-    t('report.reason.abuse'),
-    t('report.reason.porn'),
-    t('report.reason.illegal'),
-    t('common.other'),
-  ]
+/**
+ * 举报原因代码：必须与后端 `ReportCreateRequest.reason` 的
+ * `@Pattern(SPAM|ABUSE|PORN|ILLEGAL|OTHER)` 完全一致。
+ * 提交接口只认代码，展示才用文案（见 reportReasonLabel）。
+ */
+export const REPORT_REASON_CODES = ['SPAM', 'ABUSE', 'PORN', 'ILLEGAL', 'OTHER'] as const
+export type ReportReasonCode = (typeof REPORT_REASON_CODES)[number]
+
+const REPORT_REASON_LABEL_KEYS: Record<ReportReasonCode, string> = {
+  SPAM: 'report.reason.spam',
+  ABUSE: 'report.reason.abuse',
+  PORN: 'report.reason.porn',
+  ILLEGAL: 'report.reason.illegal',
+  OTHER: 'common.other',
+}
+
+/** 举报原因代码 → 当前语言文案；未知代码原样返回，避免列表出现空白 */
+export function reportReasonLabel(code?: string | null): string {
+  if (!code) return ''
+  const key = REPORT_REASON_LABEL_KEYS[code as ReportReasonCode]
+  return key ? t(key) : code
 }
 
 export const POST_TAB_LABELS = {

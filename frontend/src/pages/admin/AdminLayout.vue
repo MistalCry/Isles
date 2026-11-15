@@ -1,41 +1,40 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
-import { DataAnalysis, Document, Picture, Setting, User } from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
-import { getAdminIdentity, type AdminIdentity } from './adminApi'
+import { ADMIN_ROLE_LABEL_KEYS, hasPermission, visibleNav } from './adminPermissions'
+import type { AdminPermission } from './adminApi'
+import { useAdminAccess } from '@/composables/useAdminAccess'
 import { resolveErrorMessage } from '@/api/client'
 
 const { t } = useI18n()
 
-interface AdminNavItem {
-  name: string
-  path: string
-  label: string
-  icon: typeof DataAnalysis
-}
-
-const navItems: AdminNavItem[] = [
-  { name: 'admin-overview', path: '/admin/overview', label: t('admin.layout.overview'), icon: DataAnalysis },
-  { name: 'admin-ai-models', path: '/admin/ai-models', label: t('admin.layout.ai'), icon: Setting },
-  { name: 'admin-reports', path: '/admin/reports', label: t('admin.layout.reports'), icon: Document },
-  { name: 'admin-users', path: '/admin/users', label: t('admin.layout.users'), icon: User },
-  { name: 'admin-channels', path: '/admin/channels', label: t('admin.channels.title'), icon: Picture },
-]
-
 const route = useRoute()
 const router = useRouter()
-const identity = ref<AdminIdentity | null>(null)
+// 与侧边栏共用同一份身份缓存：后台内所有页面都能读到 permissions
+const adminAccess = useAdminAccess()
+const { identity } = adminAccess
 const loading = ref(true)
 const error = ref<string | null>(null)
+
+/** 菜单按权限点过滤：角色变化无需改前端 */
+const navItems = computed(() =>
+  visibleNav(identity.value).map((item) => ({ ...item, label: t(item.labelKey) })),
+)
+
+const roleLabel = computed(() => {
+  const role = identity.value?.platformRole as keyof typeof ADMIN_ROLE_LABEL_KEYS | undefined
+  return role && ADMIN_ROLE_LABEL_KEYS[role] ? t(ADMIN_ROLE_LABEL_KEYS[role]) : (identity.value?.platformRole ?? '')
+})
 
 async function loadIdentity(): Promise<void> {
   loading.value = true
   error.value = null
   try {
-    identity.value = await getAdminIdentity()
+    await adminAccess.ensure(true)
+    ensureRouteAllowed()
   } catch (cause) {
     error.value = resolveErrorMessage(cause, t('admin.layout.authFailed'))
   } finally {
@@ -43,10 +42,25 @@ async function loadIdentity(): Promise<void> {
   }
 }
 
+/**
+ * 直接输入 URL 进入无权限页面时，跳到自己有权限的第一个页面，
+ * 避免出现「菜单里没有、页面却能打开」的越权错觉。
+ */
+function ensureRouteAllowed(): void {
+  const required = route.meta.permission as AdminPermission | undefined
+  if (!required || hasPermission(identity.value, required)) return
+  // 身份还没取到（加载中/接口失败）时不跳转：交给页面的骨架与错误态处理，
+  // 否则一次网络抖动就会把管理员弹回前台。
+  if (!identity.value?.admin) return
+  const fallback = navItems.value[0]
+  if (fallback) void router.replace(fallback.path)
+}
+
 function isActive(name: string): boolean {
   return route.name === name
 }
 
+watch(() => route.fullPath, ensureRouteAllowed)
 onMounted(loadIdentity)
 </script>
 
@@ -58,7 +72,7 @@ onMounted(loadIdentity)
         <p class="page-subtitle">{{ t('admin.layout.subtitle') }}</p>
       </div>
       <div v-if="identity" class="admin-layout__identity">
-        <el-tag size="small" type="warning" effect="plain">{{ identity.platformRole }}</el-tag>
+        <el-tag size="small" type="warning" effect="plain">{{ roleLabel }}</el-tag>
         <span>{{ identity.username }}</span>
       </div>
     </header>

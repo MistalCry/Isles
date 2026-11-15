@@ -33,7 +33,11 @@ config.global.stubs = {
     template: '<a class="router-link-stub"><slot /></a>',
   },
   'el-icon': { template: '<i class="el-icon-stub"><slot /></i>' },
-  'el-tag': { template: '<span class="el-tag-stub"><slot /></span>' },
+  // type 透传到 DOM：举报状态/内容状态的用例靠它断言标签配色
+  'el-tag': {
+    props: ['type', 'size', 'effect', 'closable'],
+    template: '<span class="el-tag-stub" :type="type"><slot /></span>',
+  },
   'el-button': {
     props: ['disabled', 'loading'],
     emits: ['click'],
@@ -41,10 +45,10 @@ config.global.stubs = {
       '<button class="el-button-stub" :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>',
   },
   'el-input': {
-    props: ['modelValue', 'placeholder'],
+    props: ['modelValue', 'placeholder', 'disabled'],
     emits: ['update:modelValue'],
     template:
-      '<input class="el-input-stub" :value="modelValue" :placeholder="placeholder" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+      '<input class="el-input-stub" :value="modelValue" :placeholder="placeholder" :disabled="disabled" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
   'el-image': {
     props: ['src', 'alt'],
@@ -59,6 +63,16 @@ config.global.stubs = {
     template: '<span class="el-switch-stub">{{ activeText }}</span>',
   },
   'el-slider': { template: '<div class="el-slider-stub"></div>' },
+  'el-skeleton': { props: ['rows', 'animated'], template: '<div class="el-skeleton-stub" />' },
+  'el-drawer': {
+    props: ['modelValue', 'title', 'size'],
+    template: '<div class="el-drawer-stub"><slot /></div>',
+  },
+  'el-empty': { props: ['description'], template: '<div class="el-empty-stub">{{ description }}</div>' },
+  'el-dialog': {
+    props: ['modelValue', 'title'],
+    template: '<div class="el-dialog-stub"><slot /><slot name="footer" /></div>',
+  },
   'el-popover': {
     props: ['visible', 'width', 'trigger', 'placement', 'disabled'],
     emits: ['update:visible'],

@@ -7,8 +7,9 @@ import { APP_NAME, appSlogan } from '@/constants/app'
  * 平台公开配置（后端 `GET /api/v1/platform/config`）。
  *
  * 只包含 `publicVisible=true` 的项：站点名称/Logo/简介/备案号/联系邮箱、注册开关。
- * 后端允许缓存 60 秒，因此这里只在应用启动时拉一次；失败时静默回落到内置常量，
- * 不让「配置接口挂了」演变成「整站白屏」。
+ * 后端已改为 `no-store`，响应不再被浏览器缓存，因此取值需要主动刷新：
+ * 应用启动时拉一次（`App.vue`），后台保存/恢复配置后由 `AdminSettingsView` 调 `load(true)` 立即重取；
+ * 失败时静默回落到内置常量，不让「配置接口挂了」演变成「整站白屏」。
  */
 export interface SiteConfig {
   name: string

@@ -30,6 +30,7 @@ const emit = defineEmits<{
   reply: [comment: Comment]
   like: [comment: Comment]
   delete: [comment: Comment]
+  report: [comment: Comment]
 }>()
 
 const authorName = computed(
@@ -45,6 +46,11 @@ const hasReplies = computed(() => (props.comment.replies?.length ?? 0) > 0)
 
 function canDelete(target: Comment): boolean {
   return Boolean(props.currentUserId) && target.author.id === props.currentUserId
+}
+
+/** 已登录且不是自己的评论才显示举报 */
+function canReport(target: Comment): boolean {
+  return Boolean(props.currentUserId) && target.author.id !== props.currentUserId
 }
 
 function displayName(user?: UserSummary | null): string {
@@ -100,6 +106,12 @@ function handleLike(comment: Comment): void {
         </button>
         <button type="button" class="comment-action" @click="handleReply(comment)">{{ t('common.reply') }}</button>
         <button
+          v-if="canReport(comment)"
+          type="button"
+          class="comment-action"
+          @click="emit('report', comment)"
+        >{{ t('post.detail.report') }}</button>
+        <button
           v-if="canDelete(comment)"
           type="button"
           class="comment-action comment-action--danger"
@@ -139,6 +151,12 @@ function handleLike(comment: Comment): void {
                 <span>{{ reply.likeCount > 0 ? formatCount(reply.likeCount) : t('common.like') }}</span>
               </button>
               <button type="button" class="comment-action" @click="handleReply(reply)">{{ t('common.reply') }}</button>
+              <button
+                v-if="canReport(reply)"
+                type="button"
+                class="comment-action"
+                @click="emit('report', reply)"
+              >{{ t('post.detail.report') }}</button>
               <button
                 v-if="canDelete(reply)"
                 type="button"

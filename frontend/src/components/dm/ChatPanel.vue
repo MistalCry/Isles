@@ -10,7 +10,7 @@ import type { DmConversation, DmMessage } from '@/types/models'
 import type { SendDmMessagePayload } from '@/api/dm'
 import UserAvatar from '../UserAvatar.vue'
 import MediaViewer from '../MediaViewer.vue'
-import { EMOJI_LIST } from '@/constants/app'
+import { EMOJI_LIST, IMAGE_ACCEPT } from '@/constants/app'
 
 const { t } = useI18n()
 
@@ -95,6 +95,9 @@ async function handleImagePick(event: Event): Promise<void> {
   if (invalid) {
     ElMessage.warning(invalid)
     return
+  }
+  if (mediaApi.isPreviewUnsupported(file)) {
+    ElMessage.info(t('media.heicNoPreview'))
   }
   uploading.value = true
   try {
@@ -241,7 +244,7 @@ onMounted(() => {
       <input
         ref="fileInput"
         type="file"
-        accept="image/*"
+        :accept="IMAGE_ACCEPT"
         class="visually-hidden"
         :aria-label="t('dm.pickImage')"
         @change="handleImagePick"

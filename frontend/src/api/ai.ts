@@ -28,6 +28,8 @@ export interface AiModel {
   model: string
   visionEnabled: boolean
   reasoningEnabled: boolean
+  /** 是否允许模型调用检索工具（function calling） */
+  toolCallEnabled: boolean
   thinkingMode?: 'REASONING_EFFORT' | 'CHAT_TEMPLATE' | 'BOTH' | 'NONE'
   isDefault: boolean
   enabled: boolean
@@ -130,6 +132,16 @@ export interface AssistantInfo {
   persona?: string | null
 }
 
+/** 频道主可为助手指定的模型（后端 /channels/{id}/ai/models） */
+export interface SelectableAiModel {
+  id: string
+  name: string
+  model: string
+  visionEnabled: boolean
+  reasoningEnabled: boolean
+  isDefault: boolean
+}
+
 export interface AssistantSettings {
   channelId: string
   assistantUserId?: string | null
@@ -151,6 +163,8 @@ export interface AssistantSettings {
   autoPostPerDay: number
   autoCommentPerDay: number
   autoLikePerDay: number
+  /** null/空=跟随平台默认；非空=指定模型 */
+  modelConfigId?: string | null
   updatedAt?: string | null
 }
 
@@ -172,6 +186,8 @@ export interface AssistantSettingsPayload {
   autoPostPerDay: number
   autoCommentPerDay: number
   autoLikePerDay: number
+  /** '' = 跟随平台默认（后端约定：null 不修改、空串清除） */
+  modelConfigId?: string | null
 }
 
 export interface AiTaskLog {
@@ -337,6 +353,14 @@ export async function getAssistantInfo(channelId: string): Promise<AssistantInfo
     silent: true,
   })
   return data
+}
+
+/** 频道主可选的助手模型列表（只返回启用中的模型） */
+export async function listAssistantModels(channelId: string): Promise<SelectableAiModel[]> {
+  const { data } = await http.get<{ items: SelectableAiModel[] }>(
+    `/channels/${encodeURIComponent(channelId)}/ai/models`,
+  )
+  return data.items ?? []
 }
 
 export async function getAssistantSettings(channelId: string): Promise<AssistantSettings> {

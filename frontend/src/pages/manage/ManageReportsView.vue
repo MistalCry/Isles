@@ -6,6 +6,7 @@ import { Refresh } from '@element-plus/icons-vue'
 import { manageApi } from '@/api'
 import { resolveErrorMessage } from '@/api/client'
 import { formatDateTime } from '@/utils/format'
+import { reportReasonLabel } from '@/constants/app'
 import type { Channel, ReportHandleAction, ReportItem } from '@/types/models'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
@@ -124,7 +125,7 @@ onMounted(() => {
       <article v-for="report in reports" :key="report.id" class="report-card isles-card">
         <div class="report-card__main">
           <div class="report-card__head">
-            <el-tag size="small" type="danger" effect="plain">{{ report.reason }}</el-tag>
+            <el-tag size="small" type="danger" effect="plain">{{ reportReasonLabel(report.reason) }}</el-tag>
             <el-tag size="small" type="info" effect="plain">{{ report.targetType }}</el-tag>
             <el-tag size="small" effect="plain">{{ statusLabel(report.status) }}</el-tag>
             <span class="muted">{{ formatDateTime(report.createdAt) }}</span>

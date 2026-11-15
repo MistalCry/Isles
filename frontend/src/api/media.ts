@@ -4,6 +4,16 @@ import type { MediaItem, MediaType } from '@/types/models'
 import { toMediaItem } from './adapters'
 import { http } from './client'
 
+/**
+ * HEIC/HEIF：浏览器普遍无法本地解码（<img> 与 canvas 都会失败），
+ * 但后端仍按原图保存。用于「不静默失败」的提示与裁剪降级。
+ */
+export function isPreviewUnsupported(file: File): boolean {
+  const type = (file.type || '').toLowerCase()
+  const name = (file.name || '').toLowerCase()
+  return type.includes('heic') || type.includes('heif') || /\.(heic|heif)$/.test(name)
+}
+
 export function detectMediaType(file: File): MediaType | null {
   if (file.type.startsWith('image/')) return 'IMAGE'
   if (file.type.startsWith('video/')) return 'VIDEO'

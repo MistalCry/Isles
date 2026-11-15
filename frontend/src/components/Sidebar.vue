@@ -23,13 +23,14 @@ import { useDmStore } from '@/stores/dm'
 import { useRequireLogin } from '@/composables/useRequireLogin'
 import { APP_NAME, APP_NAME_EN } from '@/constants/app'
 import { useSiteStore } from '@/stores/site'
+import { useAdminAccess } from '@/composables/useAdminAccess'
 import { formatRelativeTime } from '@/utils/format'
 import UserAvatar from './UserAvatar.vue'
 import ProfileEditDialog from './ProfileEditDialog.vue'
 import CreateChannelDialog from './CreateChannelDialog.vue'
 import type { Channel } from '@/types/models'
 
-const emit = defineEmits<{ navigate: [] }>()
+const emit = defineEmits<{ navigate: []; openAnnouncements: [] }>()
 
 const route = useRoute()
 const router = useRouter()
@@ -42,6 +43,8 @@ const site = useSiteStore()
 /** 站点名来自平台配置，未加载时回落到内置常量 */
 const siteName = computed(() => site.config.name || APP_NAME)
 const { requireLogin } = useRequireLogin()
+const adminAccess = useAdminAccess()
+const { isAdmin } = adminAccess
 const { currentUser, isAuthenticated } = storeToRefs(auth)
 const { myChannels, loadingMyChannels, currentChannel } = storeToRefs(channelStore)
 const { unreadCount } = storeToRefs(notificationStore)
@@ -121,6 +124,12 @@ function handleUserCommand(command: string | number | object): void {
     goTo('notifications')
   } else if (command === 'profile') {
     profileOpen.value = true
+  } else if (command === 'announcements') {
+    emit('openAnnouncements')
+    notifyNavigate()
+  } else if (command === 'admin') {
+    void router.push('/admin/overview')
+    notifyNavigate()
   } else if (command === 'logout') {
     void handleLogout()
   } else if (typeof command === 'string' && command.startsWith('lang-')) {
@@ -138,14 +147,21 @@ function goConversation(conversationId: string): void {
   void router.push({ name: 'message-detail', params: { id: conversationId } })
 }
 
+// 只有「已登录 → 未登录」才清缓存：首帧 isAuthenticated 可能仍是 false（bootstrap 未完成），
+// 此时 reset() 会把后台页面刚取到的身份清掉，导致 /admin/* 误判无权限跳回 /feed。
+const wasAuthenticated = ref(isAuthenticated.value)
+
 watch(
   () => isAuthenticated.value,
   (loggedIn) => {
     if (loggedIn) {
       void channelStore.fetchMyChannels(true)
-    } else {
+      void adminAccess.ensure()
+    } else if (wasAuthenticated.value) {
       channelStore.clear()
+      adminAccess.reset()
     }
+    wasAuthenticated.value = loggedIn
   },
   { immediate: true },
 )
@@ -339,6 +355,8 @@ watch(
             <el-dropdown-item command="friends">{{ t('nav.friends') }}</el-dropdown-item>
             <el-dropdown-item command="notifications">{{ t('nav.notificationCenter') }}</el-dropdown-item>
             <el-dropdown-item command="profile">{{ t('nav.profile') }}</el-dropdown-item>
+            <el-dropdown-item command="announcements">{{ t('announcement.menu') }}</el-dropdown-item>
+            <el-dropdown-item v-if="isAdmin" command="admin">{{ t('admin.layout.enter') }}</el-dropdown-item>
             <el-dropdown-item command="lang-zh-CN">{{ t('nav.languageZh') }}</el-dropdown-item>
             <el-dropdown-item command="lang-en-US">{{ t('nav.languageEn') }}</el-dropdown-item>
             <el-dropdown-item command="logout" divided>{{ t('common.logout') }}</el-dropdown-item>

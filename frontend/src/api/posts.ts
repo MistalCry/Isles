@@ -1,4 +1,4 @@
-import type { LikeResult, Post } from '@/types/models'
+import type { LikeResult, MediaItem, Post } from '@/types/models'
 import { http } from './client'
 import { toLikeResult, toPost } from './adapters'
 
@@ -10,7 +10,14 @@ export async function getPost(id: string): Promise<Post> {
 /** 编辑帖子（仅作者）：返回更新后的帖子。 */
 export async function updatePost(
   id: string,
-  payload: { title?: string; content?: string; contentFormat?: 'PLAIN' | 'HTML'; coverUrl?: string | null },
+  payload: {
+    title?: string
+    content?: string
+    contentFormat?: 'PLAIN' | 'HTML'
+    /** 空串=清除封面；不传=保持不变 */
+    coverUrl?: string | null
+    media?: MediaItem[]
+  },
 ): Promise<Post> {
   const { data } = await http.patch(`/posts/${encodeURIComponent(id)}`, payload)
   return toPost(data)

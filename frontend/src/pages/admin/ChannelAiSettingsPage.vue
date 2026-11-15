@@ -11,6 +11,7 @@ import ImageCropUpload from '@/components/media/ImageCropUpload.vue'
 import {
   ensureAssistantAccount,
   getAssistantSettings,
+  listAssistantModels,
   listAssistantTaskLogs,
   runAssistantTask,
   saveAssistantSettings,
@@ -18,6 +19,7 @@ import {
   type AiTaskType,
   type AssistantSettings,
   type AssistantSettingsPayload,
+  type SelectableAiModel,
 } from '@/api/ai'
 import { resolveErrorMessage } from '@/api/client'
 import { formatDateTime } from '@/utils/format'
@@ -55,6 +57,9 @@ const logPage = ref(1)
 const logPageSize = ref(10)
 const logTaskType = ref<AiTaskType | ''>('')
 const runningTask = ref<AiTaskType | null>(null)
+/** 助手可选模型；接口不可用时只保留「跟随平台默认」 */
+const models = ref<SelectableAiModel[]>([])
+const modelsLoading = ref(false)
 const creatingAccount = ref(false)
 
 const assistantConfigured = computed(() => Boolean(settings.value?.assistantUserId))
@@ -79,6 +84,7 @@ function emptyForm(): AssistantSettingsPayload {
     autoPostPerDay: 1,
     autoCommentPerDay: 3,
     autoLikePerDay: 10,
+    modelConfigId: '',
   }
 }
 
@@ -106,13 +112,30 @@ async function load(): Promise<void> {
       autoPostPerDay: data.autoPostPerDay ?? 1,
       autoCommentPerDay: data.autoCommentPerDay ?? 3,
       autoLikePerDay: data.autoLikePerDay ?? 10,
+      modelConfigId: data.modelConfigId ?? '',
     }
-    await loadLogs()
+    await Promise.all([loadLogs(), loadModels()])
   } catch (cause) {
     error.value = resolveErrorMessage(cause, t('assistant.page.loadFailed'))
   } finally {
     loading.value = false
   }
+}
+
+/** 可选模型：接口不可用时降级为只有「跟随平台默认」，不阻塞其它设置 */
+async function loadModels(): Promise<void> {
+  modelsLoading.value = true
+  try {
+    models.value = await listAssistantModels(props.channelId)
+  } catch {
+    models.value = []
+  } finally {
+    modelsLoading.value = false
+  }
+}
+
+function modelOptionLabel(model: SelectableAiModel): string {
+  return model.model ? `${model.name} · ${model.model}` : model.name
 }
 
 async function save(): Promise<void> {
@@ -125,6 +148,8 @@ async function save(): Promise<void> {
       coverUrl: form.value.coverUrl?.trim() || null,
       bio: form.value.bio?.trim() || null,
       persona: form.value.persona?.trim() || null,
+      // 空串 = 跟随平台默认（后端约定 null 表示不修改，这里始终显式提交）
+      modelConfigId: form.value.modelConfigId || '',
     })
     settings.value = data
     ElMessage.success(t('assistant.page.saved'))
@@ -302,6 +327,15 @@ onMounted(load)
             <el-form-item :label="t('assistant.page.master')">
               <el-switch v-model="form.enabled" />
               <span class="form-hint">{{ t('assistant.page.masterHint') }}</span>
+            </el-form-item>
+            <el-form-item :label="t('assistant.page.model')">
+              <el-select v-model="form.modelConfigId" :loading="modelsLoading" class="model-select">
+                <el-option :label="t('assistant.page.modelDefault')" value="" />
+                <el-option v-for="item in models" :key="item.id" :label="modelOptionLabel(item)" :value="item.id" />
+              </el-select>
+              <span class="form-hint">
+                {{ models.length === 0 ? t('assistant.page.modelEmpty') : t('assistant.page.modelHint') }}
+              </span>
             </el-form-item>
           </el-form>
         </section>
@@ -587,6 +621,10 @@ onMounted(load)
   :deep(.el-form-item__content) {
     align-items: flex-start;
   }
+}
+
+.model-select {
+  width: 100%;
 }
 
 .form-hint {
