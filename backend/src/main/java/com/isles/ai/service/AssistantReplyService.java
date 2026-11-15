@@ -45,6 +45,8 @@ public class AssistantReplyService {
 
     /** 任务日志类型（与自动任务的枚举分开，避免被手动试运行触发） */
     public static final String TASK_TYPE = "REPLY_COMMENT";
+    /** 被 @ 触发时的任务日志类型 */
+    public static final String TASK_TYPE_MENTION = "REPLY_MENTION";
     private static final String AI_MARKER = "（AI 生成）";
     private static final int MAX_REPLY_LENGTH = 300;
     private static final int POST_EXCERPT_LENGTH = 300;
@@ -92,6 +94,74 @@ public class AssistantReplyService {
                         event.channelId(), event.commentId(), ex.getMessage());
             }
         });
+    }
+
+    /**
+     * 有人在帖子/评论里 @ 了助手：同样走异步回复，但与「回复我的评论」分开计幂等键。
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onMentioned(com.isles.comment.event.AssistantMentionedEvent event) {
+        if (!properties.schedulerEnabled()) {
+            return;
+        }
+        executor.execute(() -> {
+            try {
+                handleMention(event);
+            } catch (RuntimeException ex) {
+                log.warn("频道助手响应@提及失败 channelId={} postId={} message={}",
+                        event.channelId(), event.postId(), ex.getMessage());
+            }
+        });
+    }
+
+    private void handleMention(com.isles.comment.event.AssistantMentionedEvent event) {
+        ChannelAiSetting setting = settingMapper.selectOne(Wrappers.<ChannelAiSetting>lambdaQuery()
+                .eq(ChannelAiSetting::getChannelId, event.channelId()));
+        if (setting == null || !Boolean.TRUE.equals(setting.getEnabled())
+                || setting.getAssistantUserId() == null) {
+            return;
+        }
+        // 若这条评论本身就是「回复助手评论」，交给 REPLY_COMMENT 处理，
+        // 否则「回复 + @」同一条评论会触发两次回复。
+        if (event.commentId() != null) {
+            Comment incoming = commentMapper.selectById(event.commentId());
+            if (incoming != null && incoming.getParentId() != null) {
+                Comment parent = commentMapper.selectById(incoming.getParentId());
+                if (parent != null && setting.getAssistantUserId().equals(parent.getAuthorId())) {
+                    return;
+                }
+            }
+        }
+        String key = event.commentId() != null ? event.commentId() : event.postId();
+        if (taskLogMapper.selectByKey(event.channelId(), TASK_TYPE_MENTION, key) != null) {
+            return;
+        }
+        LocalDateTime now = ClockTimes.nowUtc();
+        if (overDailyLimit(setting, now)) {
+            return;
+        }
+        AiModelConfig model = modelConfigService.resolveDefault();
+        if (model == null) {
+            return;
+        }
+        AiTaskLog taskLog = startLog(setting, event.channelId(), TASK_TYPE_MENTION, key, now);
+        if (taskLog == null) {
+            return;
+        }
+        try {
+            String reply = composeReply(setting, model, event.postId(), event.commentId(), event.commentId());
+            if (reply == null || reply.isBlank()) {
+                finish(taskLog, AiTaskLog.Status.SKIPPED, "模型未返回内容", null);
+                return;
+            }
+            var created = commentService.createComment(event.postId(),
+                    new CreateCommentRequest(reply + AI_MARKER, event.commentId(), event.authorId(),
+                            List.of(), List.of()),
+                    setting.getAssistantUserId());
+            finish(taskLog, AiTaskLog.Status.SUCCESS, "已响应@提及：" + abbreviate(reply, 100), created.id());
+        } catch (RuntimeException ex) {
+            finish(taskLog, AiTaskLog.Status.FAILED, ex.getMessage(), null);
+        }
     }
 
     private void handle(CommentRepliedEvent event) {
@@ -153,9 +223,17 @@ public class AssistantReplyService {
     }
 
     private String generateReply(ChannelAiSetting setting, AiModelConfig model, CommentRepliedEvent event) {
-        Post post = postMapper.selectById(event.postId());
-        Comment parent = commentMapper.selectById(event.parentCommentId());
-        Comment incoming = commentMapper.selectById(event.commentId());
+        return composeReply(setting, model, event.postId(), event.parentCommentId(), event.commentId());
+    }
+
+    /**
+     * 生成回复文本：parentCommentId 为助手自己的评论，incomingCommentId 为触发内容（可为 null，表示帖子正文）。
+     */
+    private String composeReply(ChannelAiSetting setting, AiModelConfig model, String postId,
+                                String parentCommentId, String incomingCommentId) {
+        Post post = postMapper.selectById(postId);
+        Comment parent = parentCommentId == null ? null : commentMapper.selectById(parentCommentId);
+        Comment incoming = incomingCommentId == null ? null : commentMapper.selectById(incomingCommentId);
         String persona = setting.getPersona() == null || setting.getPersona().isBlank()
                 ? "友善、简洁、乐于帮助岛民"
                 : setting.getPersona();
@@ -181,12 +259,17 @@ public class AssistantReplyService {
     }
 
     private AiTaskLog startLog(ChannelAiSetting setting, CommentRepliedEvent event, LocalDateTime now) {
+        return startLog(setting, event.channelId(), TASK_TYPE, event.commentId(), now);
+    }
+
+    private AiTaskLog startLog(ChannelAiSetting setting, String channelId, String taskType, String frequencyKey,
+                               LocalDateTime now) {
         AiTaskLog taskLog = new AiTaskLog();
         taskLog.setId(UlidGenerator.generate());
-        taskLog.setChannelId(event.channelId());
+        taskLog.setChannelId(channelId);
         taskLog.setSettingId(setting.getId());
-        taskLog.setTaskType(TASK_TYPE);
-        taskLog.setFrequencyKey(event.commentId());
+        taskLog.setTaskType(taskType);
+        taskLog.setFrequencyKey(frequencyKey);
         taskLog.setStatus(AiTaskLog.Status.RUNNING.name());
         taskLog.setStartedAt(now);
         taskLog.setCreatedAt(now);

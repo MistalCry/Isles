@@ -27,6 +27,8 @@ public enum ErrorCode {
     CANNOT_OPERATE_OWNER(HttpStatus.FORBIDDEN, "不能对频道主执行该操作"),
     SYSTEM_ROLE_PROTECTED(HttpStatus.FORBIDDEN, "系统身份组不支持该操作"),
     PERMISSION_EXCEEDED(HttpStatus.FORBIDDEN, "不能授予或使用超过自身的权限"),
+    USER_BANNED(HttpStatus.FORBIDDEN, "账号已被封禁，如有疑问请联系平台管理员"),
+    ADMIN_SELF_REVOKE_FORBIDDEN(HttpStatus.FORBIDDEN, "不能撤销自己的管理员权限"),
 
     // 404
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "资源不存在"),
@@ -44,6 +46,10 @@ public enum ErrorCode {
     REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "举报记录不存在"),
     FRIEND_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "好友申请不存在或已处理"),
     CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "私信会话不存在或无权访问"),
+    SETTING_NOT_FOUND(HttpStatus.NOT_FOUND, "配置项不存在"),
+    PENALTY_NOT_FOUND(HttpStatus.NOT_FOUND, "处罚记录不存在"),
+    ANNOUNCEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "公告不存在"),
+    SENSITIVE_WORD_NOT_FOUND(HttpStatus.NOT_FOUND, "敏感词不存在"),
 
     // 405
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "请求方法不支持"),
@@ -56,6 +62,7 @@ public enum ErrorCode {
     JOIN_REQUEST_HANDLED(HttpStatus.CONFLICT, "该加入申请已处理"),
     REPORT_ALREADY_EXISTS(HttpStatus.CONFLICT, "你已举报过该内容，请等待处理"),
     REPORT_ALREADY_HANDLED(HttpStatus.CONFLICT, "该举报已处理"),
+    SENSITIVE_WORD_DUPLICATE(HttpStatus.CONFLICT, "该敏感词已存在"),
     ALREADY_FRIENDS(HttpStatus.CONFLICT, "你们已经是好友"),
     FRIEND_REQUEST_PENDING(HttpStatus.CONFLICT, "已有待处理的好友申请"),
     CONFLICT(HttpStatus.CONFLICT, "资源冲突"),
@@ -70,6 +77,9 @@ public enum ErrorCode {
     OWNER_CANNOT_LEAVE(HttpStatus.UNPROCESSABLE_CONTENT, "频道主不能退出频道，请先转让或解散频道"),
     LAST_BOARD_CANNOT_DELETE(HttpStatus.UNPROCESSABLE_CONTENT, "至少保留一个板块"),
     REPORT_TARGET_INVALID(HttpStatus.UNPROCESSABLE_CONTENT, "举报目标不存在或不可见"),
+    SETTING_VALIDATION_FAILED(HttpStatus.UNPROCESSABLE_CONTENT, "配置值不合法"),
+    PENALTY_ALREADY_ACTIVE(HttpStatus.UNPROCESSABLE_CONTENT, "该用户已有同类生效中的处罚"),
+    ADMIN_LAST_SUPER_ADMIN(HttpStatus.UNPROCESSABLE_CONTENT, "至少需要保留一个超级管理员"),
 
     // 429
     RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "请求过于频繁，请稍后再试"),

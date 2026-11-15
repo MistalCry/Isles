@@ -37,8 +37,10 @@ public interface AiContextMapper {
             JOIN channels c ON c.id = p.channel_id
             WHERE p.status = 'PUBLISHED' AND p.deleted_at IS NULL
               AND c.status = 'ACTIVE' AND c.deleted_at IS NULL
-              AND (c.type = 'PUBLIC' OR c.visibility = 'PUBLIC_VISIBLE')
-            <if test="channelId != null">AND p.channel_id = #{channelId}</if>
+            <choose>
+              <when test="channelId != null">AND p.channel_id = #{channelId}</when>
+              <otherwise>AND (c.type = 'PUBLIC' OR c.visibility = 'PUBLIC_VISIBLE')</otherwise>
+            </choose>
               AND
               <foreach item="kw" collection="patterns" open="(" separator=" OR " close=")">
                 (p.title LIKE #{kw} OR p.content LIKE #{kw})
@@ -62,8 +64,10 @@ public interface AiContextMapper {
             JOIN channels c ON c.id = p.channel_id
             WHERE p.status = 'PUBLISHED' AND p.deleted_at IS NULL
               AND c.status = 'ACTIVE' AND c.deleted_at IS NULL
-              AND (c.type = 'PUBLIC' OR c.visibility = 'PUBLIC_VISIBLE')
-            <if test="channelId != null">AND p.channel_id = #{channelId}</if>
+            <choose>
+              <when test="channelId != null">AND p.channel_id = #{channelId}</when>
+              <otherwise>AND (c.type = 'PUBLIC' OR c.visibility = 'PUBLIC_VISIBLE')</otherwise>
+            </choose>
             <if test="since != null">AND p.created_at &gt;= #{since}</if>
             ORDER BY (p.view_count + p.like_count * 3 + p.comment_count * 5) DESC, p.id DESC
             LIMIT #{limit}

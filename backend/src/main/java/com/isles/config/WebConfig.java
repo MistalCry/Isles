@@ -1,6 +1,8 @@
 package com.isles.config;
 
 import com.isles.common.ratelimit.RateLimitInterceptor;
+import com.isles.platform.penalty.PlatformMuteInterceptor;
+import com.isles.platform.permission.PlatformPermissionInterceptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,16 +29,31 @@ public class WebConfig implements WebMvcConfigurer {
 
     private final String uploadDir;
     private final RateLimitInterceptor rateLimitInterceptor;
+    private final PlatformPermissionInterceptor platformPermissionInterceptor;
+    private final PlatformMuteInterceptor platformMuteInterceptor;
 
     public WebConfig(@Value("${app.upload-dir:./uploads}") String uploadDir,
-                     RateLimitInterceptor rateLimitInterceptor) {
+                     RateLimitInterceptor rateLimitInterceptor,
+                     PlatformPermissionInterceptor platformPermissionInterceptor,
+                     PlatformMuteInterceptor platformMuteInterceptor) {
         this.uploadDir = uploadDir;
         this.rateLimitInterceptor = rateLimitInterceptor;
+        this.platformPermissionInterceptor = platformPermissionInterceptor;
+        this.platformMuteInterceptor = platformMuteInterceptor;
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(rateLimitInterceptor).addPathPatterns("/api/**");
+        // 平台权限先于限流：无权限的请求不消耗配额；/admin/me 供任意登录用户判断是否展示后台入口
+        registry.addInterceptor(platformPermissionInterceptor)
+                .addPathPatterns("/api/v1/admin/**")
+                .excludePathPatterns("/api/v1/admin/me")
+                .order(0);
+        // 全站禁言：只拦内容生产接口，未登录请求交给安全链返回 401
+        registry.addInterceptor(platformMuteInterceptor)
+                .addPathPatterns("/api/v1/**")
+                .order(1);
+        registry.addInterceptor(rateLimitInterceptor).addPathPatterns("/api/**").order(2);
     }
 
     @Override

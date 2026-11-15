@@ -3,6 +3,7 @@ package com.isles.channel.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.isles.channel.entity.ChannelMember;
 import com.isles.channel.mapper.row.CommonMemberRow;
+import com.isles.channel.mapper.row.MentionCandidateRow;
 import com.isles.channel.mapper.row.RoleMemberCountRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -104,4 +105,25 @@ public interface ChannelMemberMapper extends BaseMapper<ChannelMember> {
     List<CommonMemberRow> countCommonMembers(@Param("candidateIds") List<String> candidateIds,
                                              @Param("baseChannelIds") List<String> baseChannelIds,
                                              @Param("userId") String userId);
+
+    /**
+     * @提及候选：频道内 ACTIVE 成员（含频道助手虚拟账号），按昵称/用户名模糊过滤。
+     */
+    @Select("""
+            <script>
+            SELECT u.id AS id, u.username AS username, u.nickname AS nickname, u.avatar_url AS avatarUrl
+            FROM channel_members m
+            JOIN users u ON u.id = m.user_id
+            WHERE m.channel_id = #{channelId} AND m.status = 'ACTIVE'
+              AND u.status = 'ACTIVE' AND u.deleted_at IS NULL
+            <if test="keyword != null and keyword != ''">
+              AND (u.nickname LIKE CONCAT('%', #{keyword}, '%') OR u.username LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            ORDER BY m.joined_at ASC
+            LIMIT #{limit}
+            </script>
+            """)
+    List<MentionCandidateRow> selectMentionCandidates(@Param("channelId") String channelId,
+                                                      @Param("keyword") String keyword,
+                                                      @Param("limit") int limit);
 }

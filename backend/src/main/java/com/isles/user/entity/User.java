@@ -26,6 +26,11 @@ public class User {
     private String gender;
     private String region;
     private String status;
+    /**
+     * 平台角色（V3 新增列，USER/ADMIN）。仅作为「引导超管」的兼容标记；
+     * 日常平台授权走 {@code platform_admin_grants}（docs/11 §7.1）。
+     */
+    private String platformRole;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;

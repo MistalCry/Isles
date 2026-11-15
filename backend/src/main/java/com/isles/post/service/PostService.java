@@ -68,6 +68,8 @@ public class PostService {
     private final InteractionService interactionService;
     private final ChannelViewService channelViewService;
     private final AuditLogService auditLogService;
+    private final com.isles.channel.service.MentionService mentionService;
+    private final com.isles.platform.wordfilter.SensitiveWordService sensitiveWordService;
 
     /**
      * 发帖：校验成员身份、禁言状态、板块归属与媒体合法性；事务内写帖子、媒体与计数。
@@ -141,6 +143,11 @@ public class PostService {
         boardMapper.addPostCount(board.getId(), 1);
         auditLogService.record(channelId, userId, ChannelAuditLog.Action.POST_CREATE, "POST", post.getId(),
                 Map.of("boardId", board.getId()));
+        // @提及：通知被提及的成员；提及频道助手会触发助手回复
+        mentionService.notifyMentions(channelId, post.getId(), null, content, userId);
+        // 敏感词：REVIEW 模式只记录命中，不阻断发布（docs/11 §5.5）
+        sensitiveWordService.scanAndRecord("POST", post.getId(), userId, content,
+                Post.ContentFormat.HTML.name().equals(contentFormat));
         return toResponses(List.of(post), userId).get(0);
     }
 

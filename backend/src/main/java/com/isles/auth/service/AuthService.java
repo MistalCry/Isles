@@ -11,6 +11,8 @@ import com.isles.common.id.UlidGenerator;
 import com.isles.common.security.CurrentUserProvider;
 import com.isles.common.security.TokenHasher;
 import com.isles.common.time.ClockTimes;
+import com.isles.platform.penalty.PenaltyService;
+import com.isles.platform.setting.PlatformSettingService;
 import com.isles.user.dto.UserResponse;
 import com.isles.user.entity.User;
 import com.isles.user.service.UserService;
@@ -48,6 +50,8 @@ public class AuthService {
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
     private final CurrentUserProvider currentUserProvider;
+    private final PlatformSettingService platformSettingService;
+    private final PenaltyService penaltyService;
 
     @Value("${app.auth.refresh-token-days:7}")
     private long refreshTokenDays;
@@ -66,6 +70,10 @@ public class AuthService {
 
     @Transactional
     public UserResponse register(RegisterRequest request) {
+        // 平台运行时开关（docs/11 §5.2）：后台关闭注册后，注册接口立即拒绝
+        if (!platformSettingService.getBoolean("auth.register.enabled")) {
+            throw new AppException(ErrorCode.BUSINESS_RULE_VIOLATION, "平台当前未开放注册");
+        }
         String username = request.username().trim();
         if (userService.existsByUsername(username)) {
             throw new AppException(ErrorCode.USERNAME_TAKEN);
@@ -83,11 +91,18 @@ public class AuthService {
     @Transactional
     public LoginResult login(LoginRequest request, String userAgent, String ip) {
         User user = userService.findByUsername(request.username().trim()).orElse(null);
-        if (user == null
-                || !User.Status.ACTIVE.name().equals(user.getStatus())
-                || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            // 不记录密码与令牌；不区分用户是否存在
+        // 先校验凭据：用户不存在与密码错误返回同一错误，避免账号枚举
+        if (user == null || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             log.info("登录失败：凭据无效");
+            throw new AppException(ErrorCode.INVALID_CREDENTIALS);
+        }
+        // 凭据正确后，封禁状态给出明确提示（处罚记录是事实来源，users.status 只是同步结果）
+        if (penaltyService.isBanned(user.getId())) {
+            log.info("登录失败：账号处于封禁状态 userId={}", user.getId());
+            throw new AppException(ErrorCode.USER_BANNED);
+        }
+        if (!User.Status.ACTIVE.name().equals(user.getStatus())) {
+            log.info("登录失败：账号状态不可用 userId={} status={}", user.getId(), user.getStatus());
             throw new AppException(ErrorCode.INVALID_CREDENTIALS);
         }
         String accessToken = jwtService.generateAccessToken(user.getId(), user.getUsername());

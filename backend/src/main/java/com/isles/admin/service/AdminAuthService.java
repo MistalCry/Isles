@@ -6,63 +6,40 @@ import com.isles.admin.mapper.AdminUserMapper;
 import com.isles.common.error.AppException;
 import com.isles.common.error.ErrorCode;
 import com.isles.common.security.CurrentUserProvider;
-import org.springframework.beans.factory.annotation.Value;
+import com.isles.platform.permission.PlatformAdminService;
+import com.isles.platform.permission.PlatformRole;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.Arrays;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.List;
 
 /**
- * 平台管理员鉴权（docs/03 FR-PADM、docs/02 §5.3）。
+ * 平台管理员身份查询（docs/11 §7）。
  *
- * <p>判定：{@code users.platform_role = 'ADMIN'}，或用户名命中配置白名单
- * {@code app.platform-admin-usernames}（逗号分隔，便于本地/应急提权）。两者都没有则 403。
+ * <p>角色解析统一委托 {@link PlatformAdminService}（授权表 → {@code users.platform_role} → 环境变量白名单），
+ * 本类只负责「当前登录用户的身份展示」与兼容旧调用方的 {@code requireAdmin}。
  */
 @Service
+@RequiredArgsConstructor
 public class AdminAuthService {
-
-    private static final String ADMIN_ROLE = "ADMIN";
 
     private final AdminUserMapper adminUserMapper;
     private final CurrentUserProvider currentUserProvider;
-    private final Set<String> whitelist;
-
-    public AdminAuthService(AdminUserMapper adminUserMapper,
-                            CurrentUserProvider currentUserProvider,
-                            @Value("${app.platform-admin-usernames:}") String whitelist) {
-        this.adminUserMapper = adminUserMapper;
-        this.currentUserProvider = currentUserProvider;
-        this.whitelist = Arrays.stream(whitelist == null ? new String[0] : whitelist.split(","))
-                .map(String::trim)
-                .filter(value -> !value.isEmpty())
-                .collect(Collectors.toUnmodifiableSet());
-    }
+    private final PlatformAdminService platformAdminService;
 
     /**
-     * 要求平台管理员身份，返回当前管理员 userId。
+     * 要求平台管理员身份（任意角色），返回当前管理员 userId。
      */
     public String requireAdmin() {
-        String userId = currentUserProvider.requireUserId();
-        if (!isAdmin(userId)) {
-            throw new AppException(ErrorCode.FORBIDDEN, "需要平台管理员权限");
-        }
-        return userId;
+        return platformAdminService.requireAdmin();
     }
 
     public boolean isAdmin(String userId) {
-        AdminUserRow row = adminUserMapper.selectRowById(userId);
-        if (row == null) {
-            return false;
-        }
-        if (ADMIN_ROLE.equalsIgnoreCase(row.getPlatformRole())) {
-            return true;
-        }
-        return row.getUsername() != null && whitelist.contains(row.getUsername());
+        return platformAdminService.resolveRole(userId) != null;
     }
 
     /**
-     * 当前身份（任意登录用户可调用）：前端据此决定是否展示平台后台入口。
+     * 当前身份（任意登录用户可调用）：前端据此决定后台入口与菜单可见性。
      */
     public AdminDtos.AdminIdentityResponse identity() {
         String userId = currentUserProvider.requireUserId();
@@ -70,7 +47,9 @@ public class AdminAuthService {
         if (row == null) {
             throw new AppException(ErrorCode.USER_NOT_FOUND);
         }
-        boolean admin = ADMIN_ROLE.equalsIgnoreCase(row.getPlatformRole()) || whitelist.contains(row.getUsername());
-        return new AdminDtos.AdminIdentityResponse(admin, row.getId(), row.getUsername(), row.getPlatformRole());
+        PlatformRole role = platformAdminService.resolveRole(userId);
+        return new AdminDtos.AdminIdentityResponse(role != null, row.getId(), row.getUsername(),
+                role == null ? "USER" : role.name(),
+                role == null ? List.of() : role.permissions().stream().map(Enum::name).sorted().toList());
     }
 }

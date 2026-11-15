@@ -21,12 +21,16 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 媒体上传服务（docs/07 §5、FR-MEDIA-01/02/04）。
@@ -45,13 +49,20 @@ public class MediaService {
     private static final int THUMB_MAX_DIMENSION = 480;
     private static final Set<String> IMAGE_MIMES = Set.of("image/jpeg", "image/png", "image/gif", "image/webp");
     private static final Set<String> VIDEO_MIMES = Set.of("video/mp4", "video/webm");
+    /** ffmpeg 输出里的 Duration: 00:00:12.34 */
+    private static final Pattern DURATION_PATTERN = Pattern.compile("Duration: (\\d+):(\\d+):(\\d+(?:\\.\\d+)?)");
+    /** ffmpeg 输出里的 1080x1920 */
+    private static final Pattern SIZE_PATTERN = Pattern.compile("(\\d{2,5})x(\\d{2,5})");
 
     private final MediaFileMapper mediaFileMapper;
     private final Path uploadRoot;
+    private final String ffmpegBin;
 
     public MediaService(MediaFileMapper mediaFileMapper,
-                        @Value("${app.upload-dir:./uploads}") String uploadDir) {
+                        @Value("${app.upload-dir:./uploads}") String uploadDir,
+                        @Value("${app.media.ffmpeg:ffmpeg}") String ffmpegBin) {
         this.mediaFileMapper = mediaFileMapper;
+        this.ffmpegBin = ffmpegBin;
         this.uploadRoot = Paths.get(uploadDir).toAbsolutePath().normalize();
         try {
             Files.createDirectories(this.uploadRoot);
@@ -129,6 +140,18 @@ public class MediaService {
                 if (thumbStoragePath != null) {
                     thumbUrl = "/uploads/" + relativeDir + "/" + thumbStoragePath;
                 }
+            }
+        } else {
+            // 视频：抽首帧做封面 + 读取时长/分辨率（列表不再显示黑块）
+            VideoMeta meta = probeVideo(target);
+            if (meta != null) {
+                width = meta.width();
+                height = meta.height();
+                durationMs = meta.durationMs();
+            }
+            String posterStoragePath = writeVideoPoster(target, directory, mediaId);
+            if (posterStoragePath != null) {
+                thumbUrl = "/uploads/" + relativeDir + "/" + posterStoragePath;
             }
         }
 
@@ -209,16 +232,55 @@ public class MediaService {
 
     private BufferedImage readImage(Path path) {
         try {
-            return ImageIO.read(path.toFile());
+            BufferedImage image = ImageIO.read(path.toFile());
+            if (image != null) {
+                return image;
+            }
         } catch (IOException ex) {
-            // WebP 等 ImageIO 不支持的格式：保留原图，尺寸/缩略图为空
-            log.warn("图片解析失败，跳过尺寸与缩略图 path={}", path);
+            log.debug("ImageIO 读取失败，尝试 ffmpeg 解码 path={}", path);
+        }
+        // ImageIO 默认不支持 WebP：交给 ffmpeg 转 PNG 再读，保证 WebP 也有尺寸与缩略图
+        return readImageViaFfmpeg(path);
+    }
+
+    private BufferedImage readImageViaFfmpeg(Path path) {
+        Path temp = null;
+        try {
+            temp = Files.createTempFile("isles-media-", ".png");
+            ProcessBuilder builder = new ProcessBuilder(ffmpegBin, "-y", "-i", path.toString(),
+                    "-frames:v", "1", temp.toString());
+            builder.redirectErrorStream(true);
+            builder.redirectOutput(ProcessBuilder.Redirect.DISCARD);
+            Process process = builder.start();
+            if (!process.waitFor(15, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return null;
+            }
+            if (process.exitValue() != 0) {
+                log.warn("图片解码失败（ffmpeg 不可用或格式不支持） path={}", path);
+                return null;
+            }
+            return ImageIO.read(temp.toFile());
+        } catch (IOException ex) {
+            log.warn("图片解码失败 path={} message={}", path, ex.getMessage());
             return null;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return null;
+        } finally {
+            if (temp != null) {
+                try {
+                    Files.deleteIfExists(temp);
+                } catch (IOException ignored) {
+                    // 临时文件清理失败不影响主流程
+                }
+            }
         }
     }
 
     /**
-     * 生成缩略图（最大边 480px，JPEG）。返回相对文件名，失败返回 null。
+     * 生成缩略图（最大边 480px）。带透明通道的源图输出 PNG，其余输出 JPEG（白底）。
+     * 返回相对文件名，失败返回 null。
      */
     private String writeThumbnail(BufferedImage source, Path directory, String mediaId) {
         try {
@@ -227,23 +289,112 @@ public class MediaService {
             double scale = Math.min(1.0, (double) THUMB_MAX_DIMENSION / Math.max(sourceWidth, sourceHeight));
             int thumbWidth = Math.max(1, (int) Math.round(sourceWidth * scale));
             int thumbHeight = Math.max(1, (int) Math.round(sourceHeight * scale));
-            BufferedImage thumbnail = new BufferedImage(thumbWidth, thumbHeight, BufferedImage.TYPE_INT_RGB);
+            boolean hasAlpha = source.getColorModel().hasAlpha();
+            BufferedImage thumbnail = new BufferedImage(thumbWidth, thumbHeight,
+                    hasAlpha ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
             Graphics2D graphics = thumbnail.createGraphics();
             try {
                 graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
                         RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-                graphics.setColor(Color.WHITE);
-                graphics.fillRect(0, 0, thumbWidth, thumbHeight);
+                if (!hasAlpha) {
+                    graphics.setColor(Color.WHITE);
+                    graphics.fillRect(0, 0, thumbWidth, thumbHeight);
+                }
                 graphics.drawImage(source, 0, 0, thumbWidth, thumbHeight, null);
             } finally {
                 graphics.dispose();
             }
-            String thumbName = mediaId + "_thumb.jpg";
-            ImageIO.write(thumbnail, "jpg", directory.resolve(thumbName).toFile());
+            String thumbName = mediaId + (hasAlpha ? "_thumb.png" : "_thumb.jpg");
+            ImageIO.write(thumbnail, hasAlpha ? "png" : "jpg", directory.resolve(thumbName).toFile());
             return thumbName;
         } catch (IOException | RuntimeException ex) {
             log.warn("缩略图生成失败 mediaId={}", mediaId, ex);
             return null;
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // 视频探测 / 首帧封面（ffmpeg；不可用时优雅降级）
+    // ---------------------------------------------------------------------
+
+    /** 视频元信息（尺寸与时长，探测失败为 null）。 */
+    private record VideoMeta(Integer width, Integer height, Long durationMs) {
+    }
+
+    /**
+     * 用 ffmpeg 读取视频分辨率与时长。ffmpeg 不可用时返回 null，不影响上传本身。
+     */
+    private VideoMeta probeVideo(Path path) {
+        try {
+            ProcessBuilder builder = new ProcessBuilder(ffmpegBin, "-hide_banner", "-i", path.toString());
+            builder.redirectErrorStream(true);
+            Process process = builder.start();
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return null;
+            }
+            Integer width = null;
+            Integer height = null;
+            Matcher size = SIZE_PATTERN.matcher(output);
+            if (size.find()) {
+                width = Integer.parseInt(size.group(1));
+                height = Integer.parseInt(size.group(2));
+            }
+            Long durationMs = null;
+            Matcher duration = DURATION_PATTERN.matcher(output);
+            if (duration.find()) {
+                long hours = Long.parseLong(duration.group(1));
+                long minutes = Long.parseLong(duration.group(2));
+                double seconds = Double.parseDouble(duration.group(3));
+                durationMs = Math.round((hours * 3600 + minutes * 60 + seconds) * 1000);
+            }
+            return width == null && durationMs == null ? null : new VideoMeta(width, height, durationMs);
+        } catch (IOException ex) {
+            log.debug("ffmpeg 不可用，跳过视频探测: {}", ex.getMessage());
+            return null;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return null;
+        } catch (RuntimeException ex) {
+            log.warn("视频探测失败 path={}", path, ex);
+            return null;
+        }
+    }
+
+    /**
+     * 抽取视频首帧作为封面（JPEG，最大边 480）。失败返回 null。
+     */
+    private String writeVideoPoster(Path video, Path directory, String mediaId) {
+        String posterName = mediaId + "_poster.jpg";
+        Path poster = directory.resolve(posterName);
+        if (runFfmpegPoster(video, poster, true) || runFfmpegPoster(video, poster, false)) {
+            return posterName;
+        }
+        return null;
+    }
+
+    private boolean runFfmpegPoster(Path video, Path poster, boolean seek) {
+        try {
+            ProcessBuilder builder = seek
+                    ? new ProcessBuilder(ffmpegBin, "-y", "-ss", "0", "-i", video.toString(), "-frames:v", "1",
+                            "-vf", "scale='min(480,iw)':-2", poster.toString())
+                    : new ProcessBuilder(ffmpegBin, "-y", "-i", video.toString(), "-frames:v", "1",
+                            "-vf", "scale='min(480,iw)':-2", poster.toString());
+            builder.redirectErrorStream(true);
+            builder.redirectOutput(ProcessBuilder.Redirect.DISCARD);
+            Process process = builder.start();
+            if (!process.waitFor(20, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return false;
+            }
+            return process.exitValue() == 0 && Files.exists(poster) && Files.size(poster) > 0;
+        } catch (IOException ex) {
+            log.debug("ffmpeg 不可用，跳过视频封面: {}", ex.getMessage());
+            return false;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return false;
         }
     }
 }

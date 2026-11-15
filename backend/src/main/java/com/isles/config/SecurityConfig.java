@@ -71,6 +71,8 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         // 健康检查与错误页
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/error").permitAll()
+                        // 根路径落地页：前后端分离，直接打开后端地址时给出前端入口说明
+                        .requestMatchers(HttpMethod.GET, "/", "/index.html", "/favicon.ico").permitAll()
                         // WebSocket 握手放行：鉴权在 STOMP CONNECT 帧由 ChannelInterceptor 完成（docs/02 §5.4）
                         .requestMatchers("/ws", "/ws/**").permitAll()
                         // 上传文件静态访问
@@ -93,6 +95,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/hot").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/search/hot").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/channels/*/search").permitAll()
+                        // 公开只读：平台公开配置（站点名/公告开关/注册开关，docs/11 §5.1）
+                        .requestMatchers(HttpMethod.GET, "/api/v1/platform/config").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/platform/announcements").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(this::handleUnauthorized)

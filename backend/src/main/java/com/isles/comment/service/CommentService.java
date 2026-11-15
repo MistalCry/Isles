@@ -63,6 +63,8 @@ public class CommentService {
     private final JsonSupport jsonSupport;
     private final AuditLogService auditLogService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+    private final com.isles.channel.service.MentionService mentionService;
+    private final com.isles.platform.wordfilter.SensitiveWordService sensitiveWordService;
 
     /**
      * 评论列表：默认按点赞数排序，支持最新排序，游标分页；回复一次性批量加载避免 N+1。
@@ -150,6 +152,10 @@ public class CommentService {
                 comment.getId(), Map.of("postId", postId));
 
         notifyComment(post, parent, comment, userId);
+        // @提及：通知被提及的成员；提及频道助手会触发助手回复
+        mentionService.notifyMentions(post.getChannelId(), postId, comment.getId(), content, userId);
+        // 敏感词：REVIEW 模式只记录命中，不阻断评论（docs/11 §5.5）
+        sensitiveWordService.scanAndRecord("COMMENT", comment.getId(), userId, content, false);
         if (parent != null) {
             // 事务提交后由 AI 模块判断是否需要「助手接话」（CommentService 不直接依赖 AI 模块）
             eventPublisher.publishEvent(new com.isles.comment.event.CommentRepliedEvent(

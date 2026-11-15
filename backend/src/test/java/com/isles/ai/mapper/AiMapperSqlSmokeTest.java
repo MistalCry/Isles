@@ -1,9 +1,19 @@
 package com.isles.ai.mapper;
 
 import com.isles.admin.mapper.AdminChannelMapper;
+import com.isles.admin.mapper.AdminContentMapper;
 import com.isles.admin.mapper.AdminReportMapper;
 import com.isles.admin.mapper.AdminStatsMapper;
+import com.isles.admin.mapper.AdminTrendMapper;
 import com.isles.admin.mapper.AdminUserMapper;
+import com.isles.platform.announcement.AnnouncementMapper;
+import com.isles.platform.audit.PlatformAuditLogMapper;
+import com.isles.platform.penalty.UserPenaltyMapper;
+import com.isles.platform.permission.PlatformAdminGrantMapper;
+import com.isles.platform.permission.PlatformAdminQueryMapper;
+import com.isles.platform.setting.PlatformSettingHistoryMapper;
+import com.isles.platform.wordfilter.SensitiveWordHitMapper;
+import com.isles.platform.wordfilter.SensitiveWordMapper;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.Test;
@@ -27,7 +37,17 @@ class AiMapperSqlSmokeTest {
             AdminUserMapper.class,
             AdminChannelMapper.class,
             AdminStatsMapper.class,
-            AdminReportMapper.class);
+            AdminReportMapper.class,
+            AdminContentMapper.class,
+            AdminTrendMapper.class,
+            AnnouncementMapper.class,
+            SensitiveWordMapper.class,
+            SensitiveWordHitMapper.class,
+            PlatformSettingHistoryMapper.class,
+            PlatformAuditLogMapper.class,
+            PlatformAdminGrantMapper.class,
+            PlatformAdminQueryMapper.class,
+            UserPenaltyMapper.class);
 
     /**
      * 非 {@code <script>} 包裹的 SQL 是纯文本，MyBatis 不会解码 XML 实体；

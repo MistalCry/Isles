@@ -1,10 +1,12 @@
 package com.isles.admin.controller;
 
-import com.isles.admin.service.AdminAuthService;
 import com.isles.ai.dto.AiRequests;
 import com.isles.ai.dto.AiResponses;
 import com.isles.ai.service.AiModelConfigService;
 import com.isles.common.pagination.PageResult;
+import com.isles.common.security.CurrentUserProvider;
+import com.isles.platform.permission.PlatformPermission;
+import com.isles.platform.permission.RequirePlatformPermission;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -21,19 +23,19 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 平台后台 AI 配置接口（docs/03 FR-PADM-01）：LMStudio / OpenAI 兼容模型配置 CRUD、连通性测试、模型列表。
  *
- * <p>仅平台管理员可访问；API Key 只写不读（响应只返回掩码与是否已配置）。
+ * <p>权限点 {@code AI_MANAGE}；API Key 只写不读（响应只返回掩码与是否已配置）。
  */
 @RestController
 @RequestMapping("/api/v1/admin/ai")
 @RequiredArgsConstructor
 public class AdminAiConfigController {
 
-    private final AdminAuthService adminAuthService;
     private final AiModelConfigService modelConfigService;
+    private final CurrentUserProvider currentUserProvider;
 
     @GetMapping("/models")
+    @RequirePlatformPermission(PlatformPermission.AI_MANAGE)
     public PageResult<AiResponses.ModelResponse> models() {
-        adminAuthService.requireAdmin();
         return new PageResult<>(modelConfigService.listAll().stream()
                 .map(modelConfigService::toResponse)
                 .toList(), null);
@@ -41,22 +43,22 @@ public class AdminAiConfigController {
 
     @PostMapping("/models")
     @ResponseStatus(HttpStatus.CREATED)
+    @RequirePlatformPermission(PlatformPermission.AI_MANAGE)
     public AiResponses.ModelResponse create(@Valid @RequestBody AiRequests.ModelConfigRequest request) {
-        String adminId = adminAuthService.requireAdmin();
-        return modelConfigService.create(request, adminId);
+        return modelConfigService.create(request, currentUserProvider.requireUserId());
     }
 
     @PutMapping("/models/{id}")
+    @RequirePlatformPermission(PlatformPermission.AI_MANAGE)
     public AiResponses.ModelResponse update(@PathVariable String id,
                                             @Valid @RequestBody AiRequests.ModelConfigRequest request) {
-        adminAuthService.requireAdmin();
         return modelConfigService.update(id, request);
     }
 
     @DeleteMapping("/models/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @RequirePlatformPermission(PlatformPermission.AI_MANAGE)
     public void delete(@PathVariable String id) {
-        adminAuthService.requireAdmin();
         modelConfigService.delete(id);
     }
 
@@ -64,8 +66,8 @@ public class AdminAiConfigController {
      * 用已保存配置测试连通性（拉取 /models 列表）。
      */
     @PostMapping("/models/{id}/test")
+    @RequirePlatformPermission(PlatformPermission.AI_MANAGE)
     public AiResponses.ConnectionTestResponse test(@PathVariable String id) {
-        adminAuthService.requireAdmin();
         return modelConfigService.testConnection(id);
     }
 
@@ -73,9 +75,9 @@ public class AdminAiConfigController {
      * 用未保存配置测试连通性（表单「测试连接」）。
      */
     @PostMapping("/test-connection")
+    @RequirePlatformPermission(PlatformPermission.AI_MANAGE)
     public AiResponses.ConnectionTestResponse testConnection(
             @Valid @RequestBody AiRequests.TestConnectionRequest request) {
-        adminAuthService.requireAdmin();
         return modelConfigService.testConnection(request);
     }
 
@@ -83,14 +85,14 @@ public class AdminAiConfigController {
      * 拉取上游模型列表，便于管理后台选择模型 ID。
      */
     @GetMapping("/models/{id}/remote-models")
+    @RequirePlatformPermission(PlatformPermission.AI_MANAGE)
     public PageResult<String> remoteModels(@PathVariable String id) {
-        adminAuthService.requireAdmin();
         return new PageResult<>(modelConfigService.remoteModels(id), null);
     }
 
     @GetMapping("/status")
+    @RequirePlatformPermission(PlatformPermission.AI_MANAGE)
     public AiResponses.AiStatusResponse status() {
-        adminAuthService.requireAdmin();
         return modelConfigService.status();
     }
 }

@@ -12,23 +12,30 @@ import com.isles.comment.mapper.CommentMapper;
 import com.isles.common.error.AppException;
 import com.isles.common.error.ErrorCode;
 import com.isles.common.security.CurrentUserProvider;
+import com.isles.manage.entity.Report;
+import com.isles.notification.service.NotificationService;
+import com.isles.platform.audit.PlatformAuditService;
+import com.isles.platform.penalty.PenaltyDtos;
+import com.isles.platform.penalty.PenaltyService;
 import com.isles.post.mapper.PostMapper;
 import com.isles.user.mapper.UserMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 平台后台服务单元测试：概览聚合、举报表未就绪降级、用户禁用治理（不能禁用自己）。
+ * 平台后台服务单元测试（docs/11 §5）：概览聚合、举报处置状态与处理人、封禁走处罚记录。
  */
 class AdminServiceTest {
 
@@ -42,6 +49,10 @@ class AdminServiceTest {
     private CommentMapper commentMapper;
     private AiConversationService aiConversationService;
     private CurrentUserProvider currentUserProvider;
+    private PenaltyService penaltyService;
+    private AdminModerationService moderationService;
+    private NotificationService notificationService;
+    private PlatformAuditService auditService;
     private AdminService service;
 
     @BeforeEach
@@ -56,8 +67,13 @@ class AdminServiceTest {
         commentMapper = mock(CommentMapper.class);
         aiConversationService = mock(AiConversationService.class);
         currentUserProvider = mock(CurrentUserProvider.class);
+        penaltyService = mock(PenaltyService.class);
+        moderationService = mock(AdminModerationService.class);
+        notificationService = mock(NotificationService.class);
+        auditService = mock(PlatformAuditService.class);
         service = new AdminService(adminUserMapper, adminChannelMapper, adminReportMapper, adminStatsMapper,
-                userMapper, channelMapper, postMapper, commentMapper, aiConversationService, currentUserProvider);
+                userMapper, channelMapper, postMapper, commentMapper, aiConversationService, currentUserProvider,
+                penaltyService, moderationService, notificationService, auditService);
     }
 
     @Test
@@ -71,7 +87,7 @@ class AdminServiceTest {
         when(adminStatsMapper.countUsersSince(any())).thenReturn(2L);
         when(adminStatsMapper.countPostsSince(any())).thenReturn(5L);
         when(adminStatsMapper.countActiveUsersSince(any())).thenReturn(42L);
-        when(adminReportMapper.countReportsTable()).thenReturn(0L);
+        when(adminReportMapper.countPage("PENDING", null, null)).thenReturn(3L);
 
         AdminDtos.PlatformOverviewResponse overview = service.overview();
 
@@ -84,29 +100,76 @@ class AdminServiceTest {
         assertThat(overview.todayActiveUsers()).isEqualTo(42L);
         assertThat(overview.aiConversationCount()).isEqualTo(9L);
         assertThat(overview.aiMessageCount()).isEqualTo(27L);
-        assertThat(overview.reportTableReady()).isFalse();
-        assertThat(overview.pendingReportCount()).isZero();
+        assertThat(overview.reportTableReady()).isTrue();
+        assertThat(overview.pendingReportCount()).isEqualTo(3L);
     }
 
     @Test
-    void should_return_unavailable_reports_when_table_missing() {
-        when(adminReportMapper.countReportsTable()).thenReturn(0L);
+    void should_map_reports_with_unified_status() {
+        when(adminReportMapper.countPage("PENDING", null, null)).thenReturn(1L);
+        when(adminReportMapper.selectPage("PENDING", null, null, 20, 0)).thenReturn(List.of(report("PENDING")));
 
-        AdminDtos.ReportPage page = service.listReports("PENDING", 1, 20);
+        AdminDtos.ReportPage page = service.listReports("PENDING", null, null, 1, 20);
 
-        assertThat(page.available()).isFalse();
-        assertThat(page.items()).isEmpty();
-        assertThat(page.dependency()).contains("reports");
+        assertThat(page.available()).isTrue();
+        assertThat(page.items()).hasSize(1);
+        assertThat(page.items().get(0).status()).isEqualTo("PENDING");
+        assertThat(page.items().get(0).channelId()).isEqualTo("ch-1");
     }
 
     @Test
-    void should_reject_report_handling_when_table_missing() {
-        when(adminReportMapper.countReportsTable()).thenReturn(0L);
+    void should_map_legacy_report_status_filter() {
+        when(adminReportMapper.countPage("REJECTED", null, null)).thenReturn(0L);
+        when(adminReportMapper.selectPage("REJECTED", null, null, 20, 0)).thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.handleReport("report-1", "DISMISS", null))
+        service.listReports("DISMISSED", null, null, 1, 20);
+
+        // 旧前端筛选值映射到统一后的状态，避免联调期查不到数据
+        verify(adminReportMapper).countPage("REJECTED", null, null);
+    }
+
+    @Test
+    void should_write_accepted_status_and_handler_when_resolving() {
+        when(currentUserProvider.requireUserId()).thenReturn("admin-1");
+        when(adminReportMapper.selectById("report-1")).thenReturn(report("PENDING"));
+        when(adminReportMapper.handle("report-1", "ACCEPTED", "admin-1", "NONE", "已核实"))
+                .thenReturn(1);
+
+        AdminDtos.HandleReportResponse response = service.handleReport("report-1",
+                new AdminDtos.HandleReportRequest("RESOLVE", "已核实", null));
+
+        assertThat(response.status()).isEqualTo("ACCEPTED");
+        verify(adminReportMapper).handle("report-1", "ACCEPTED", "admin-1", "NONE", "已核实");
+        verify(notificationService).notifySystem(eq("reporter-1"), any(), eq("ch-1"), eq("post-1"), eq(null),
+                eq("举报已处理"), any(), eq(null));
+        verify(auditService).record(eq("admin-1"), eq(null), eq("platform.report.handle"), eq("REPORT"),
+                eq("report-1"), any());
+    }
+
+    @Test
+    void should_write_rejected_status_when_dismissing() {
+        when(currentUserProvider.requireUserId()).thenReturn("admin-1");
+        when(adminReportMapper.selectById("report-1")).thenReturn(report("PENDING"));
+        when(adminReportMapper.handle("report-1", "REJECTED", "admin-1", "NONE", null)).thenReturn(1);
+
+        AdminDtos.HandleReportResponse response = service.handleReport("report-1",
+                new AdminDtos.HandleReportRequest("DISMISS", null, "DELETE_CONTENT"));
+
+        // 驳回时忽略处置动作，避免误下架
+        assertThat(response.status()).isEqualTo("REJECTED");
+        verify(adminReportMapper).handle("report-1", "REJECTED", "admin-1", "NONE", null);
+    }
+
+    @Test
+    void should_reject_handling_already_handled_report() {
+        when(currentUserProvider.requireUserId()).thenReturn("admin-1");
+        when(adminReportMapper.selectById("report-1")).thenReturn(report("ACCEPTED"));
+
+        assertThatThrownBy(() -> service.handleReport("report-1",
+                new AdminDtos.HandleReportRequest("RESOLVE", null, null)))
                 .isInstanceOf(AppException.class)
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
-                        .isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION));
+                        .isEqualTo(ErrorCode.REPORT_ALREADY_HANDLED));
     }
 
     @Test
@@ -120,26 +183,27 @@ class AdminServiceTest {
     }
 
     @Test
-    void should_ban_user_and_update_status() {
+    void should_ban_user_through_penalty_record() {
         AdminUserRow row = new AdminUserRow();
         row.setId("user-9");
         row.setUsername("spam");
         row.setStatus("ACTIVE");
         row.setPlatformRole("USER");
         row.setCreatedAt(LocalDateTime.now());
+        when(currentUserProvider.requireUserId()).thenReturn("admin-1");
         when(adminUserMapper.selectRowById("user-9")).thenReturn(row);
-        when(adminUserMapper.updateStatus("user-9", "BANNED")).thenReturn(1);
+        when(penaltyService.findActive("user-9", "BAN")).thenReturn(null);
 
         AdminDtos.AdminUserResponse response = service.banUser("user-9");
 
         assertThat(response.status()).isEqualTo("BANNED");
-        verify(adminUserMapper).updateStatus("user-9", "BANNED");
+        verify(penaltyService).create(eq("user-9"), any(PenaltyDtos.CreatePenaltyRequest.class), eq("admin-1"));
     }
 
     @Test
     void should_page_users_with_keyword() {
         when(adminUserMapper.selectPage(anyString(), any(), any(Integer.class), any(Integer.class)))
-                .thenReturn(java.util.List.of());
+                .thenReturn(List.of());
         when(adminUserMapper.countPage(anyString(), any())).thenReturn(0L);
 
         AdminDtos.AdminUserPage page = service.listUsers("  spam  ", null, 1, 20);
@@ -147,5 +211,18 @@ class AdminServiceTest {
         assertThat(page.items()).isEmpty();
         assertThat(page.page()).isEqualTo(1);
         assertThat(page.size()).isEqualTo(20);
+    }
+
+    private Report report(String status) {
+        Report report = new Report();
+        report.setId("report-1");
+        report.setReporterId("reporter-1");
+        report.setChannelId("ch-1");
+        report.setTargetType("POST");
+        report.setTargetId("post-1");
+        report.setReason("SPAM");
+        report.setStatus(status);
+        report.setCreatedAt(LocalDateTime.now());
+        return report;
     }
 }

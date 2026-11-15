@@ -5,6 +5,7 @@ import com.isles.channel.entity.ChannelMember;
 import com.isles.channel.entity.Role;
 import com.isles.channel.audit.AuditLogService;
 import com.isles.channel.service.ChannelAccessService;
+import com.isles.channel.service.MentionService;
 import com.isles.channel.service.ChannelPermissions;
 import com.isles.comment.dto.CommentResponse;
 import com.isles.comment.dto.CreateCommentRequest;
@@ -61,7 +62,8 @@ class CommentServiceTest {
         notificationService = mock(NotificationService.class);
         auditLogService = mock(AuditLogService.class);
         commentService = new CommentService(commentMapper, postMapper, userMapper, accessService,
-                interactionService, notificationService, new JsonSupport(), auditLogService, mock(ApplicationEventPublisher.class));
+                interactionService, notificationService, new JsonSupport(), auditLogService, mock(ApplicationEventPublisher.class), mock(MentionService.class),
+                mock(com.isles.platform.wordfilter.SensitiveWordService.class));
     }
 
     @Test

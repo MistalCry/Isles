@@ -9,6 +9,7 @@ import com.isles.analytics.service.ChannelViewService;
 import com.isles.channel.mapper.BoardMapper;
 import com.isles.channel.mapper.ChannelMapper;
 import com.isles.channel.service.ChannelAccessService;
+import com.isles.channel.service.MentionService;
 import com.isles.channel.service.ChannelPermissions;
 import com.isles.common.dto.MediaItem;
 import com.isles.common.error.AppException;
@@ -68,7 +69,8 @@ class PostServiceTest {
         channelViewService = mock(ChannelViewService.class);
         auditLogService = mock(AuditLogService.class);
         postService = new PostService(postMapper, postMediaMapper, channelMapper, boardMapper, userMapper,
-                accessService, interactionService, channelViewService, auditLogService);
+                accessService, interactionService, channelViewService, auditLogService, mock(MentionService.class),
+                mock(com.isles.platform.wordfilter.SensitiveWordService.class));
     }
 
     @Test

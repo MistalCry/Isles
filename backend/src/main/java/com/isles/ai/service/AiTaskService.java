@@ -170,7 +170,11 @@ public class AiTaskService {
                                      AiModelConfig model) {
         LocalDateTime now = ClockTimes.nowUtc();
         String channelId = setting.getChannelId();
-        String frequencyKey = frequencyKey(setting, type, now);
+        // 手动试运行不占用周期幂等键：否则一旦某次因条件不满足被跳过，当天再点永远返回那条「已跳过」记录。
+        // 自动任务仍按周期幂等；手动运行依旧受每日频率上限约束（overDailyLimit 按 SUCCESS 计数）。
+        String frequencyKey = manual
+                ? frequencyKey(setting, type, now) + "#m" + System.currentTimeMillis()
+                : frequencyKey(setting, type, now);
         AiTaskLog existing = taskLogMapper.selectByKey(channelId, type.name(), frequencyKey);
         if (existing != null) {
             return existing;

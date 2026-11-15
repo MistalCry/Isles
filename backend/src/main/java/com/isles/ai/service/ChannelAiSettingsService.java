@@ -124,8 +124,14 @@ public class ChannelAiSettingsService {
             created = true;
         }
         setting.setNickname(normalizeNickname(request.nickname()));
-        setting.setAvatarUrl(blankToNull(request.avatarUrl()));
-        setting.setCoverUrl(blankToNull(request.coverUrl()));
+        // avatarUrl 为 null 表示「本次未修改头像」，空串才是「清除」；
+        // 否则每次保存其他设置都会把助手头像写成 null（表现为头像莫名其妙消失）。
+        if (request.avatarUrl() != null) {
+            setting.setAvatarUrl(blankToNull(request.avatarUrl()));
+        }
+        if (request.coverUrl() != null) {
+            setting.setCoverUrl(blankToNull(request.coverUrl()));
+        }
         setting.setBio(blankToNull(request.bio()));
         setting.setPersona(blankToNull(request.persona()));
         setting.setEnabled(request.enabled());
@@ -343,7 +349,10 @@ public class ChannelAiSettingsService {
             return;
         }
         assistant.setNickname(normalizeNickname(setting.getNickname()));
-        assistant.setAvatarUrl(setting.getAvatarUrl());
+        // 仅在有值时才覆盖虚拟账号头像，避免把已上传的头像抹掉
+        if (setting.getAvatarUrl() != null && !setting.getAvatarUrl().isBlank()) {
+            assistant.setAvatarUrl(setting.getAvatarUrl());
+        }
         assistant.setSignature(truncate(setting.getBio(), 200));
         assistant.setUpdatedAt(ClockTimes.nowUtc());
         userMapper.updateById(assistant);

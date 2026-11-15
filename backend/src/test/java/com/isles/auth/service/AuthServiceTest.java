@@ -7,6 +7,8 @@ import com.isles.auth.mapper.RefreshTokenMapper;
 import com.isles.common.error.AppException;
 import com.isles.common.error.ErrorCode;
 import com.isles.common.security.CurrentUserProvider;
+import com.isles.platform.penalty.PenaltyService;
+import com.isles.platform.setting.PlatformSettingService;
 import com.isles.user.dto.UserResponse;
 import com.isles.user.entity.User;
 import com.isles.user.service.UserService;
@@ -38,6 +40,8 @@ class AuthServiceTest {
     private RefreshTokenMapper refreshTokenMapper;
     private JwtService jwtService;
     private PasswordEncoder passwordEncoder;
+    private PlatformSettingService platformSettingService;
+    private PenaltyService penaltyService;
     private AuthService authService;
 
     @BeforeEach
@@ -46,8 +50,23 @@ class AuthServiceTest {
         refreshTokenMapper = mock(RefreshTokenMapper.class);
         jwtService = mock(JwtService.class);
         passwordEncoder = mock(PasswordEncoder.class);
+        platformSettingService = mock(PlatformSettingService.class);
+        penaltyService = mock(PenaltyService.class);
+        // 默认开放注册：单个用例按需覆盖
+        when(platformSettingService.getBoolean("auth.register.enabled")).thenReturn(true);
         authService = new AuthService(userService, refreshTokenMapper, jwtService, passwordEncoder,
-                mock(CurrentUserProvider.class));
+                mock(CurrentUserProvider.class), platformSettingService, penaltyService);
+    }
+
+    @Test
+    void should_reject_register_when_platform_closed() {
+        when(platformSettingService.getBoolean("auth.register.enabled")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.register(new RegisterRequest("newbie", "S3cure-pass", null)))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.BUSINESS_RULE_VIOLATION));
+        verify(userService, never()).createUser(anyString(), anyString(), any());
     }
 
     @Test
@@ -88,6 +107,25 @@ class AuthServiceTest {
                 .isInstanceOf(AppException.class)
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
                         .isEqualTo(ErrorCode.INVALID_CREDENTIALS));
+
+        verify(refreshTokenMapper, never()).insert(any(RefreshToken.class));
+    }
+
+    @Test
+    void should_reject_login_when_account_banned() {
+        User user = new User();
+        user.setId("user-1");
+        user.setUsername("vrfan");
+        user.setPasswordHash("bcrypt-hash");
+        user.setStatus(User.Status.BANNED.name());
+        when(userService.findByUsername("vrfan")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("S3cure-pass", "bcrypt-hash")).thenReturn(true);
+        when(penaltyService.isBanned("user-1")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("vrfan", "S3cure-pass"), "junit", "127.0.0.1"))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.USER_BANNED));
 
         verify(refreshTokenMapper, never()).insert(any(RefreshToken.class));
     }

@@ -15,7 +15,11 @@ public final class AdminDtos {
     private AdminDtos() {
     }
 
-    public record AdminIdentityResponse(boolean admin, String userId, String username, String platformRole) {
+    /**
+     * 平台身份：{@code permissions} 供前端按权限点显示/隐藏菜单（docs/11 §7.1）。
+     */
+    public record AdminIdentityResponse(boolean admin, String userId, String username, String platformRole,
+                                        List<String> permissions) {
     }
 
     public record AdminUserResponse(
@@ -67,7 +71,7 @@ public final class AdminDtos {
     }
 
     /**
-     * 举报条目：字段从 reports 表按常见命名做兼容映射（表结构由 V2 迁移定义，未就绪时 available=false）。
+     * 举报条目（docs/11 §1.3：状态与频道侧统一为 PENDING/ACCEPTED/REJECTED）。
      */
     public record ReportResponse(
             String id,
@@ -77,7 +81,12 @@ public final class AdminDtos {
             String reason,
             String detail,
             String status,
-            Instant createdAt) {
+            Instant createdAt,
+            String channelId,
+            String handlerId,
+            String handleAction,
+            String handleNote,
+            Instant handledAt) {
     }
 
     public record ReportPage(List<ReportResponse> items, long total, boolean available, String dependency,
@@ -85,7 +94,10 @@ public final class AdminDtos {
     }
 
     /**
-     * 举报处置：action=DISMISS（驳回）/ RESOLVE（处置完成）。
+     * 举报处置：action=DISMISS（驳回，写 REJECTED）/ RESOLVE（通过，写 ACCEPTED）。
+     *
+     * <p>沿用既有契约的动作名（docs/05 §2.12），只修正落库状态值；{@code handleAction} 可选，
+     * 用于在通过时同时下架内容或处罚作者。
      */
     public record HandleReportRequest(
             @NotBlank(message = "处置动作不能为空")
@@ -93,7 +105,10 @@ public final class AdminDtos {
             String action,
 
             @Size(max = 500, message = "备注最长 500 个字符")
-            String note) {
+            String note,
+
+            @Pattern(regexp = "NONE|DELETE_CONTENT|MUTE_AUTHOR|WARN", message = "处置方式取值非法")
+            String handleAction) {
     }
 
     public record HandleReportResponse(String id, String status, String action, String note) {
