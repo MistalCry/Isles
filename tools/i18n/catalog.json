@@ -1248,8 +1248,8 @@
     "Media friendly: lightbox images and muted autoplay video"
   ],
   "channel.create.avatarHint": [
-    "选填，JPG / PNG / WebP，≤ 10MB",
-    "Optional, JPG / PNG / WebP, ≤ 10MB"
+    "选填，JPG / PNG / GIF / WebP / AVIF / BMP / HEIC，≤ 10MB",
+    "Optional; JPG / PNG / GIF / WebP / AVIF / BMP / HEIC, ≤ 10MB"
   ],
   "channel.create.hint": [
     "创建后会自动生成默认板块；成员、身份组等复杂设置请前往频道管理中心。",
@@ -2916,8 +2916,8 @@
     "Recommended for you"
   ],
   "media.uploadTypeInvalid": [
-    "仅支持图片（JPG/PNG/WebP/GIF）或视频（MP4/WebM）文件",
-    "Only images (JPG/PNG/WebP/GIF) or videos (MP4/WebM)"
+    "仅支持图片（JPG/PNG/GIF/WebP/AVIF/BMP/HEIC）或视频（MP4/WebM/MOV/M4V）",
+    "Only images (JPG/PNG/GIF/WebP/AVIF/BMP/HEIC) or videos (MP4/WebM/MOV/M4V)"
   ],
   "ai.sessionExpired": [
     "登录状态已失效，请刷新页面后重试",
@@ -4742,5 +4742,1137 @@
   "auth.register.closedHint": [
     "请联系平台管理员开通账号，或稍后再来。",
     "Contact a platform admin to get an account, or check back later."
+  ],
+  "admin.layout.settings": [
+    "平台设置",
+    "Platform settings"
+  ],
+  "admin.layout.announcements": [
+    "公告管理",
+    "Announcements"
+  ],
+  "admin.layout.words": [
+    "敏感词库",
+    "Sensitive words"
+  ],
+  "admin.layout.content": [
+    "内容治理",
+    "Content moderation"
+  ],
+  "admin.layout.admins": [
+    "管理员授权",
+    "Admins"
+  ],
+  "admin.layout.audit": [
+    "审计日志",
+    "Audit log"
+  ],
+  "admin.layout.enter": [
+    "进入后台",
+    "Open admin"
+  ],
+  "admin.role.superAdmin": [
+    "超级管理员",
+    "Super admin"
+  ],
+  "admin.role.operator": [
+    "运营",
+    "Operator"
+  ],
+  "admin.role.moderator": [
+    "审核",
+    "Moderator"
+  ],
+  "admin.role.viewer": [
+    "只读",
+    "Viewer"
+  ],
+  "admin.permission.configRead": [
+    "查看平台配置",
+    "View settings"
+  ],
+  "admin.permission.configWrite": [
+    "修改平台配置",
+    "Edit settings"
+  ],
+  "admin.permission.adminManage": [
+    "管理平台管理员",
+    "Manage admins"
+  ],
+  "admin.permission.auditRead": [
+    "查看审计日志",
+    "View audit log"
+  ],
+  "admin.permission.userRead": [
+    "查看用户",
+    "View users"
+  ],
+  "admin.permission.contentRead": [
+    "查看全站内容",
+    "View content"
+  ],
+  "admin.permission.reportRead": [
+    "查看举报",
+    "View reports"
+  ],
+  "admin.permission.userBan": [
+    "封禁用户",
+    "Ban users"
+  ],
+  "admin.permission.userPenalty": [
+    "处罚用户",
+    "Penalize users"
+  ],
+  "admin.permission.contentTakedown": [
+    "下架内容",
+    "Take down content"
+  ],
+  "admin.permission.reportHandle": [
+    "处置举报",
+    "Handle reports"
+  ],
+  "admin.permission.aiManage": [
+    "管理 AI 配置",
+    "Manage AI"
+  ],
+  "admin.permission.announcementManage": [
+    "管理平台公告",
+    "Manage announcements"
+  ],
+  "admin.permission.wordManage": [
+    "管理敏感词库",
+    "Manage sensitive words"
+  ],
+  "admin.permission.statsRead": [
+    "查看平台数据",
+    "View analytics"
+  ],
+  "admin.reportStatus.pending": [
+    "待处理",
+    "Pending"
+  ],
+  "admin.reportStatus.accepted": [
+    "已通过",
+    "Accepted"
+  ],
+  "admin.reportStatus.rejected": [
+    "已驳回",
+    "Rejected"
+  ],
+  "admin.reports.handler": [
+    "处置结果",
+    "Resolution"
+  ],
+  "admin.reports.handleAction": [
+    "处置动作",
+    "Resolution action"
+  ],
+  "admin.reports.handleNone": [
+    "仅记录",
+    "Record only"
+  ],
+  "admin.reports.handleDelete": [
+    "删除内容",
+    "Delete content"
+  ],
+  "admin.reports.handleMute": [
+    "禁言作者",
+    "Mute author"
+  ],
+  "admin.reports.handleWarn": [
+    "警告作者",
+    "Warn author"
+  ],
+  "admin.reports.keywordPlaceholder": [
+    "搜索原因 / 说明",
+    "Search reason or detail"
+  ],
+  "admin.reports.targetType": [
+    "目标类型",
+    "Target type"
+  ],
+  "admin.reports.targetPost": [
+    "帖子",
+    "Post"
+  ],
+  "admin.reports.targetComment": [
+    "评论",
+    "Comment"
+  ],
+  "admin.settings.subtitle": [
+    "配置项由后端元数据驱动：类型、可选值与范围均以后端为准",
+    "Settings are metadata-driven: type, allowed values and ranges come from the server"
+  ],
+  "admin.settings.loadFailed": [
+    "配置加载失败",
+    "Failed to load settings"
+  ],
+  "admin.settings.saved": [
+    "配置已保存",
+    "Setting saved"
+  ],
+  "admin.settings.saveFailed": [
+    "保存失败",
+    "Failed to save"
+  ],
+  "admin.settings.savedCount": [
+    "已保存 {n} 项配置",
+    "Saved {n} settings"
+  ],
+  "admin.settings.saveAll": [
+    "保存全部更改",
+    "Save all changes"
+  ],
+  "admin.settings.reset": [
+    "恢复默认",
+    "Reset to default"
+  ],
+  "admin.settings.resetConfirm": [
+    "确定把「{label}」恢复为默认值「{value}」？",
+    "Reset “{label}” to the default “{value}”?"
+  ],
+  "admin.settings.resetDone": [
+    "已恢复默认值",
+    "Reset to default"
+  ],
+  "admin.settings.resetFailed": [
+    "恢复默认失败",
+    "Failed to reset"
+  ],
+  "admin.settings.history": [
+    "变更历史",
+    "History"
+  ],
+  "admin.settings.historyShort": [
+    "历史",
+    "History"
+  ],
+  "admin.settings.historyTitle": [
+    "配置变更历史",
+    "Setting change history"
+  ],
+  "admin.settings.historyAll": [
+    "全部配置项",
+    "All settings"
+  ],
+  "admin.settings.historyEmpty": [
+    "暂无变更记录",
+    "No changes yet"
+  ],
+  "admin.settings.historyActor": [
+    "操作人：{name}",
+    "By {name}"
+  ],
+  "admin.settings.historyLoadFailed": [
+    "变更历史加载失败",
+    "Failed to load history"
+  ],
+  "admin.settings.readonly": [
+    "当前角色只能查看配置，修改需要「修改平台配置」权限。",
+    "Your role can only view settings; editing requires the config-write permission."
+  ],
+  "admin.settings.empty": [
+    "暂无配置项",
+    "No settings"
+  ],
+  "admin.settings.itemCount": [
+    "{n} 项",
+    "{n} items"
+  ],
+  "admin.settings.overridden": [
+    "已覆盖",
+    "Overridden"
+  ],
+  "admin.settings.default": [
+    "默认值",
+    "Default"
+  ],
+  "admin.settings.public": [
+    "前台可见",
+    "Public"
+  ],
+  "admin.settings.defaultValue": [
+    "默认：{value}",
+    "Default: {value}"
+  ],
+  "admin.admins.subtitle": [
+    "授权平台管理员并分配角色；角色决定可见菜单与可执行操作",
+    "Grant admin access and assign roles; roles decide menus and actions"
+  ],
+  "admin.admins.grant": [
+    "授权管理员",
+    "Grant admin"
+  ],
+  "admin.admins.changeRole": [
+    "修改角色",
+    "Change role"
+  ],
+  "admin.admins.role": [
+    "角色",
+    "Role"
+  ],
+  "admin.admins.userId": [
+    "用户 ID",
+    "User ID"
+  ],
+  "admin.admins.userIdHint": [
+    "填写要授权的用户 ID（ULID）",
+    "User ID (ULID) to grant"
+  ],
+  "admin.admins.userIdRequired": [
+    "请填写用户 ID",
+    "User ID is required"
+  ],
+  "admin.admins.expiresAt": [
+    "有效期至",
+    "Expires at"
+  ],
+  "admin.admins.expiresHint": [
+    "留空表示长期有效",
+    "Leave empty for no expiry"
+  ],
+  "admin.admins.never": [
+    "长期有效",
+    "Never expires"
+  ],
+  "admin.admins.grantedAt": [
+    "授权时间",
+    "Granted at"
+  ],
+  "admin.admins.bootstrap": [
+    "内置管理员",
+    "Built-in"
+  ],
+  "admin.admins.roleHint": [
+    "超级管理员拥有全部权限；运营偏配置与内容；审核偏处置；只读仅可查看。",
+    "Super admin has all permissions; operator focuses on config/content; moderator on enforcement; viewer is read-only."
+  ],
+  "admin.admins.empty": [
+    "还没有授权任何管理员",
+    "No admins granted yet"
+  ],
+  "admin.admins.emptyHint": [
+    "在右上角点击「授权管理员」开始。",
+    "Click “Grant admin” to start."
+  ],
+  "admin.admins.loadFailed": [
+    "管理员列表加载失败",
+    "Failed to load admins"
+  ],
+  "admin.admins.granted": [
+    "已授权管理员",
+    "Admin granted"
+  ],
+  "admin.admins.updated": [
+    "角色已更新",
+    "Role updated"
+  ],
+  "admin.admins.revoked": [
+    "已撤销管理员",
+    "Admin revoked"
+  ],
+  "admin.admins.failed": [
+    "操作失败",
+    "Action failed"
+  ],
+  "admin.admins.revoke": [
+    "撤销授权",
+    "Revoke"
+  ],
+  "admin.admins.revokeConfirm": [
+    "撤销后「{name}」将立即失去后台权限，确定撤销？",
+    "“{name}” loses admin access immediately. Revoke?"
+  ],
+  "admin.audit.subtitle": [
+    "平台侧写操作与权限变更审计（时间倒序）",
+    "Audit of platform writes and permission changes"
+  ],
+  "admin.audit.actionPlaceholder": [
+    "操作类型，如 CONFIG_UPDATE",
+    "Action, e.g. CONFIG_UPDATE"
+  ],
+  "admin.audit.actorPlaceholder": [
+    "操作人用户 ID",
+    "Actor user ID"
+  ],
+  "admin.audit.actor": [
+    "操作人",
+    "Actor"
+  ],
+  "admin.audit.action": [
+    "操作",
+    "Action"
+  ],
+  "admin.audit.target": [
+    "对象",
+    "Target"
+  ],
+  "admin.audit.detail": [
+    "详情",
+    "Detail"
+  ],
+  "admin.audit.ip": [
+    "IP",
+    "IP"
+  ],
+  "admin.audit.empty": [
+    "暂无审计记录",
+    "No audit entries"
+  ],
+  "admin.audit.emptyHint": [
+    "后台的写操作会记录在这里。",
+    "Platform write actions appear here."
+  ],
+  "admin.audit.loadFailed": [
+    "审计日志加载失败",
+    "Failed to load audit log"
+  ],
+  "admin.content.subtitle": [
+    "全站帖子与评论的检索、下架与恢复（软处理，可随时恢复）",
+    "Search, take down and restore posts and comments site-wide"
+  ],
+  "admin.content.tabPosts": [
+    "帖子",
+    "Posts"
+  ],
+  "admin.content.tabComments": [
+    "评论",
+    "Comments"
+  ],
+  "admin.content.keywordPlaceholder": [
+    "搜索标题 / 正文",
+    "Search title or body"
+  ],
+  "admin.content.statusPublished": [
+    "正常",
+    "Published"
+  ],
+  "admin.content.statusHidden": [
+    "已下架",
+    "Taken down"
+  ],
+  "admin.content.title": [
+    "内容",
+    "Content"
+  ],
+  "admin.content.untitled": [
+    "（无标题）",
+    "(untitled)"
+  ],
+  "admin.content.author": [
+    "作者",
+    "Author"
+  ],
+  "admin.content.takedown": [
+    "下架",
+    "Take down"
+  ],
+  "admin.content.takedownTitle": [
+    "下架内容",
+    "Take down content"
+  ],
+  "admin.content.takedownReason": [
+    "下架原因",
+    "Reason"
+  ],
+  "admin.content.takedownReasonPlaceholder": [
+    "填写原因，作者会收到系统通知",
+    "The author will be notified with this reason"
+  ],
+  "admin.content.reasonRequired": [
+    "请填写下架原因",
+    "Reason is required"
+  ],
+  "admin.content.takedownDone": [
+    "内容已下架",
+    "Content taken down"
+  ],
+  "admin.content.restore": [
+    "恢复",
+    "Restore"
+  ],
+  "admin.content.restoreConfirm": [
+    "恢复后内容会重新对外可见，确定恢复？",
+    "The content becomes visible again. Restore?"
+  ],
+  "admin.content.restored": [
+    "内容已恢复",
+    "Content restored"
+  ],
+  "admin.content.empty": [
+    "没有匹配的内容",
+    "No matching content"
+  ],
+  "admin.content.emptyHint": [
+    "换个关键词或状态再试。",
+    "Try another keyword or status."
+  ],
+  "admin.content.loadFailed": [
+    "内容列表加载失败",
+    "Failed to load content"
+  ],
+  "admin.content.failed": [
+    "操作失败",
+    "Action failed"
+  ],
+  "admin.words.subtitle": [
+    "词库 CRUD、批量导入、试算与命中记录",
+    "Manage words, bulk import, test scans and hits"
+  ],
+  "admin.words.tabWords": [
+    "词库",
+    "Words"
+  ],
+  "admin.words.tabHits": [
+    "命中记录",
+    "Hits"
+  ],
+  "admin.words.add": [
+    "新增敏感词",
+    "Add word"
+  ],
+  "admin.words.edit": [
+    "编辑敏感词",
+    "Edit word"
+  ],
+  "admin.words.import": [
+    "批量导入",
+    "Bulk import"
+  ],
+  "admin.words.scan": [
+    "试算",
+    "Test scan"
+  ],
+  "admin.words.word": [
+    "敏感词",
+    "Word"
+  ],
+  "admin.words.wordPlaceholder": [
+    "要拦截或审查的词",
+    "Word to block or review"
+  ],
+  "admin.words.category": [
+    "分类",
+    "Category"
+  ],
+  "admin.words.action": [
+    "处置方式",
+    "Action"
+  ],
+  "admin.words.enabled": [
+    "启用",
+    "Enabled"
+  ],
+  "admin.words.enabledOn": [
+    "已启用",
+    "Enabled"
+  ],
+  "admin.words.enabledOff": [
+    "已停用",
+    "Disabled"
+  ],
+  "admin.words.keywordPlaceholder": [
+    "搜索敏感词",
+    "Search words"
+  ],
+  "admin.words.categoryPolitics": [
+    "政治敏感",
+    "Politics"
+  ],
+  "admin.words.categoryPorn": [
+    "色情低俗",
+    "Adult"
+  ],
+  "admin.words.categoryAd": [
+    "广告",
+    "Spam"
+  ],
+  "admin.words.categoryAbuse": [
+    "辱骂攻击",
+    "Abuse"
+  ],
+  "admin.words.categoryCustom": [
+    "自定义",
+    "Custom"
+  ],
+  "admin.words.actionBlock": [
+    "直接拦截",
+    "Block"
+  ],
+  "admin.words.actionReview": [
+    "转人工审核",
+    "Review"
+  ],
+  "admin.words.actionMask": [
+    "打码处理",
+    "Mask"
+  ],
+  "admin.words.empty": [
+    "词库为空",
+    "No words yet"
+  ],
+  "admin.words.emptyHint": [
+    "新增或批量导入敏感词后生效。",
+    "Add or import words to enable filtering."
+  ],
+  "admin.words.wordRequired": [
+    "请填写敏感词",
+    "Word is required"
+  ],
+  "admin.words.saved": [
+    "已保存",
+    "Saved"
+  ],
+  "admin.words.deleted": [
+    "已删除",
+    "Deleted"
+  ],
+  "admin.words.deleteConfirm": [
+    "确定删除敏感词「{word}」？",
+    "Delete “{word}”?"
+  ],
+  "admin.words.failed": [
+    "操作失败",
+    "Action failed"
+  ],
+  "admin.words.loadFailed": [
+    "词库加载失败",
+    "Failed to load words"
+  ],
+  "admin.words.importTitle": [
+    "批量导入敏感词",
+    "Bulk import words"
+  ],
+  "admin.words.importWords": [
+    "敏感词列表",
+    "Words"
+  ],
+  "admin.words.importPlaceholder": [
+    "每行一个，或用逗号分隔",
+    "One per line, or comma separated"
+  ],
+  "admin.words.importHint": [
+    "已存在的词会被跳过，不会覆盖原有分类与处置方式。",
+    "Existing words are skipped; their category and action stay unchanged."
+  ],
+  "admin.words.importResult": [
+    "导入完成：新增 {created} 个，跳过 {skipped} 个",
+    "Imported {created}, skipped {skipped}"
+  ],
+  "admin.words.importRequired": [
+    "请填写要导入的敏感词",
+    "Enter words to import"
+  ],
+  "admin.words.scanTitle": [
+    "敏感词试算",
+    "Test scan"
+  ],
+  "admin.words.scanText": [
+    "待检测文本",
+    "Text to scan"
+  ],
+  "admin.words.scanPlaceholder": [
+    "粘贴一段文本，检查会命中哪些词",
+    "Paste text to see which words hit"
+  ],
+  "admin.words.scanRun": [
+    "开始检测",
+    "Scan"
+  ],
+  "admin.words.scanRequired": [
+    "请填写待检测文本",
+    "Enter text to scan"
+  ],
+  "admin.words.scanNoHit": [
+    "没有命中任何敏感词",
+    "No words matched"
+  ],
+  "admin.words.hitWordPlaceholder": [
+    "按敏感词筛选",
+    "Filter by word"
+  ],
+  "admin.words.hitScenePlaceholder": [
+    "按场景筛选，如 POST / COMMENT",
+    "Filter by scene"
+  ],
+  "admin.words.hitScene": [
+    "场景",
+    "Scene"
+  ],
+  "admin.words.targetId": [
+    "目标 ID",
+    "Target ID"
+  ],
+  "admin.words.userId": [
+    "用户 ID",
+    "User ID"
+  ],
+  "admin.words.hitsEmpty": [
+    "暂无命中记录",
+    "No hits"
+  ],
+  "admin.words.hitsEmptyHint": [
+    "触发敏感词的请求会记录在这里。",
+    "Requests that hit sensitive words appear here."
+  ],
+  "admin.words.hitsLoadFailed": [
+    "命中记录加载失败",
+    "Failed to load hits"
+  ],
+  "admin.announcements.subtitle": [
+    "草稿 → 发布 → 归档；发布后前台顶部横幅与用户菜单「公告」可见",
+    "Draft → publish → archive; published items show in the banner and the user menu"
+  ],
+  "admin.announcements.create": [
+    "新建公告",
+    "New announcement"
+  ],
+  "admin.announcements.createTitle": [
+    "新建公告",
+    "New announcement"
+  ],
+  "admin.announcements.editTitle": [
+    "编辑公告",
+    "Edit announcement"
+  ],
+  "admin.announcements.titleField": [
+    "标题",
+    "Title"
+  ],
+  "admin.announcements.content": [
+    "内容",
+    "Content"
+  ],
+  "admin.announcements.level": [
+    "级别",
+    "Level"
+  ],
+  "admin.announcements.placement": [
+    "展示位置",
+    "Placement"
+  ],
+  "admin.announcements.statusDraft": [
+    "草稿",
+    "Draft"
+  ],
+  "admin.announcements.statusPublished": [
+    "已发布",
+    "Published"
+  ],
+  "admin.announcements.statusArchived": [
+    "已归档",
+    "Archived"
+  ],
+  "admin.announcements.placementBanner": [
+    "顶部横幅",
+    "Top banner"
+  ],
+  "admin.announcements.placementModal": [
+    "弹窗",
+    "Modal"
+  ],
+  "admin.announcements.placementInbox": [
+    "站内信",
+    "Inbox"
+  ],
+  "admin.announcements.timeRange": [
+    "生效时间",
+    "Active from"
+  ],
+  "admin.announcements.endAt": [
+    "结束时间",
+    "Ends at"
+  ],
+  "admin.announcements.immediate": [
+    "立即生效",
+    "Immediately"
+  ],
+  "admin.announcements.forever": [
+    "长期有效",
+    "No end"
+  ],
+  "admin.announcements.titleRequired": [
+    "请填写公告标题",
+    "Title is required"
+  ],
+  "admin.announcements.contentRequired": [
+    "请填写公告内容",
+    "Content is required"
+  ],
+  "admin.announcements.saved": [
+    "公告已保存",
+    "Announcement saved"
+  ],
+  "admin.announcements.publish": [
+    "发布",
+    "Publish"
+  ],
+  "admin.announcements.publishConfirm": [
+    "发布后「{title}」会立即出现在前台，确定发布？",
+    "“{title}” goes live immediately. Publish?"
+  ],
+  "admin.announcements.published": [
+    "公告已发布",
+    "Announcement published"
+  ],
+  "admin.announcements.archive": [
+    "归档",
+    "Archive"
+  ],
+  "admin.announcements.archived": [
+    "公告已归档",
+    "Announcement archived"
+  ],
+  "admin.announcements.deleteConfirm": [
+    "确定删除公告「{title}」？",
+    "Delete “{title}”?"
+  ],
+  "admin.announcements.deleted": [
+    "公告已删除",
+    "Announcement deleted"
+  ],
+  "admin.announcements.empty": [
+    "还没有公告",
+    "No announcements"
+  ],
+  "admin.announcements.emptyHint": [
+    "新建公告后可发布到前台。",
+    "Create one and publish it to the frontend."
+  ],
+  "admin.announcements.loadFailed": [
+    "公告加载失败",
+    "Failed to load announcements"
+  ],
+  "admin.announcements.failed": [
+    "操作失败",
+    "Action failed"
+  ],
+  "admin.trend.title": [
+    "活跃趋势",
+    "Activity trend"
+  ],
+  "admin.trend.subtitle": [
+    "按天统计新增与活跃，缺失日期补零",
+    "Daily new and active counts; missing days filled with zero"
+  ],
+  "admin.trend.activeUsers": [
+    "活跃用户",
+    "Active users"
+  ],
+  "admin.trend.newUsers": [
+    "新增用户",
+    "New users"
+  ],
+  "admin.trend.newPosts": [
+    "新增帖子",
+    "New posts"
+  ],
+  "admin.trend.newComments": [
+    "新增评论",
+    "New comments"
+  ],
+  "admin.trend.aria": [
+    "平台活跃趋势折线图",
+    "Platform activity trend chart"
+  ],
+  "admin.trend.loadFailed": [
+    "趋势数据加载失败",
+    "Failed to load trend"
+  ],
+  "admin.trend.empty": [
+    "暂无趋势数据",
+    "No trend data"
+  ],
+  "admin.trend.days7": [
+    "近 7 天",
+    "7 days"
+  ],
+  "admin.trend.days30": [
+    "近 30 天",
+    "30 days"
+  ],
+  "admin.trend.days90": [
+    "近 90 天",
+    "90 days"
+  ],
+  "admin.trend.hotKeywords": [
+    "搜索热词",
+    "Hot keywords"
+  ],
+  "admin.trend.hotKeywordsHint": [
+    "按搜索次数排序，可删除异常词",
+    "Sorted by search count; remove noisy keywords"
+  ],
+  "admin.trend.hotKeywordsEmpty": [
+    "暂无热词",
+    "No keywords"
+  ],
+  "admin.trend.searchCount": [
+    "{n} 次搜索",
+    "{n} searches"
+  ],
+  "admin.trend.keywordDeleted": [
+    "已删除该热词",
+    "Keyword removed"
+  ],
+  "admin.trend.keywordDeleteFailed": [
+    "删除失败",
+    "Failed to delete"
+  ],
+  "admin.penalty.title": [
+    "处罚",
+    "Penalties"
+  ],
+  "admin.penalty.type": [
+    "处罚类型",
+    "Type"
+  ],
+  "admin.penalty.typeBan": [
+    "封禁",
+    "Ban"
+  ],
+  "admin.penalty.typeMute": [
+    "禁言",
+    "Mute"
+  ],
+  "admin.penalty.typeWarn": [
+    "警告",
+    "Warn"
+  ],
+  "admin.penalty.duration": [
+    "时长",
+    "Duration"
+  ],
+  "admin.penalty.duration24h": [
+    "1 天",
+    "1 day"
+  ],
+  "admin.penalty.duration3d": [
+    "3 天",
+    "3 days"
+  ],
+  "admin.penalty.duration7d": [
+    "7 天",
+    "7 days"
+  ],
+  "admin.penalty.duration30d": [
+    "30 天",
+    "30 days"
+  ],
+  "admin.penalty.durationPermanent": [
+    "永久",
+    "Permanent"
+  ],
+  "admin.penalty.permanent": [
+    "永久",
+    "Permanent"
+  ],
+  "admin.penalty.reason": [
+    "原因",
+    "Reason"
+  ],
+  "admin.penalty.reasonPlaceholder": [
+    "处罚原因（会通知用户）",
+    "Reason (shown to the user)"
+  ],
+  "admin.penalty.reasonRequired": [
+    "请填写处罚原因",
+    "Reason is required"
+  ],
+  "admin.penalty.create": [
+    "创建处罚",
+    "Create penalty"
+  ],
+  "admin.penalty.created": [
+    "处罚已创建",
+    "Penalty created"
+  ],
+  "admin.penalty.failed": [
+    "操作失败",
+    "Action failed"
+  ],
+  "admin.penalty.history": [
+    "处罚历史",
+    "Penalty history"
+  ],
+  "admin.penalty.historyEmpty": [
+    "暂无处罚记录",
+    "No penalties"
+  ],
+  "admin.penalty.loadFailed": [
+    "处罚历史加载失败",
+    "Failed to load penalties"
+  ],
+  "admin.penalty.statusActive": [
+    "生效中",
+    "Active"
+  ],
+  "admin.penalty.statusRevoked": [
+    "已撤销",
+    "Revoked"
+  ],
+  "admin.penalty.statusExpired": [
+    "已过期",
+    "Expired"
+  ],
+  "admin.penalty.revoke": [
+    "撤销",
+    "Revoke"
+  ],
+  "admin.penalty.revokeConfirm": [
+    "撤销后处罚立即失效，确定撤销？",
+    "The penalty stops immediately. Revoke?"
+  ],
+  "admin.penalty.revoked": [
+    "处罚已撤销",
+    "Penalty revoked"
+  ],
+  "announcement.menu": [
+    "公告",
+    "Announcements"
+  ],
+  "announcement.banner.detail": [
+    "详情",
+    "Details"
+  ],
+  "announcement.banner.prev": [
+    "上一条公告",
+    "Previous announcement"
+  ],
+  "announcement.banner.next": [
+    "下一条公告",
+    "Next announcement"
+  ],
+  "announcement.banner.close": [
+    "关闭该公告",
+    "Dismiss this announcement"
+  ],
+  "announcement.dialog.title": [
+    "平台公告",
+    "Platform announcements"
+  ],
+  "announcement.dialog.hint": [
+    "这里汇总当前生效中的公告；关闭横幅后仍可在此重新查看。",
+    "All active announcements; dismissed banners are still listed here."
+  ],
+  "announcement.dialog.empty": [
+    "当前没有生效中的公告",
+    "No active announcements"
+  ],
+  "announcement.dialog.dismissed": [
+    "已关闭横幅",
+    "Banner dismissed"
+  ],
+  "announcement.dialog.restore": [
+    "恢复已关闭的横幅",
+    "Restore dismissed banners"
+  ],
+  "announcement.dialog.range": [
+    "{start} 至 {end}",
+    "{start} – {end}"
+  ],
+  "announcement.dialog.immediate": [
+    "立即生效",
+    "Immediately"
+  ],
+  "announcement.dialog.forever": [
+    "长期有效",
+    "No end"
+  ],
+  "announcement.level.info": [
+    "通知",
+    "Info"
+  ],
+  "announcement.level.warning": [
+    "注意",
+    "Warning"
+  ],
+  "announcement.level.critical": [
+    "重要",
+    "Critical"
+  ],
+  "media.heicNoPreview": [
+    "该格式不支持预览，将按原图上传",
+    "Preview isn't supported for this format; it will be uploaded as-is"
+  ],
+  "media.formatsHint": [
+    "支持 JPG / PNG / GIF / WebP / AVIF / BMP / HEIC 与 MP4 / WebM / MOV / M4V",
+    "JPG / PNG / GIF / WebP / AVIF / BMP / HEIC and MP4 / WebM / MOV / M4V"
+  ],
+  "post.edit.cover": [
+    "封面",
+    "Cover"
+  ],
+  "post.edit.coverHint": [
+    "显示在卡片顶部与详情页，建议 16:9",
+    "Shown on the card and post page; 16:9 recommended"
+  ],
+  "post.edit.removeCover": [
+    "移除封面",
+    "Remove cover"
+  ],
+  "post.edit.media": [
+    "媒体",
+    "Media"
+  ],
+  "post.edit.mediaHint": [
+    "最多 {n} 个，顺序即展示顺序",
+    "Up to {n}; the order is the display order"
+  ],
+  "post.edit.addMedia": [
+    "添加媒体",
+    "Add media"
+  ],
+  "post.edit.moveLeft": [
+    "左移",
+    "Move left"
+  ],
+  "post.edit.moveRight": [
+    "右移",
+    "Move right"
+  ],
+  "post.edit.uploading": [
+    "上传中…",
+    "Uploading…"
+  ],
+  "admin.admins.userSearchPlaceholder": [
+    "搜索昵称 / 用户名 / ID",
+    "Search by nickname, username or ID"
+  ],
+  "admin.admins.userSearchEmpty": [
+    "没有匹配的用户",
+    "No matching users"
+  ],
+  "admin.admins.userSearchHint": [
+    "已是管理员的账号不会出现在候选里",
+    "Existing admins are excluded"
+  ],
+  "assistant.page.model": [
+    "使用模型",
+    "Model"
+  ],
+  "assistant.page.modelDefault": [
+    "跟随平台默认",
+    "Use platform default"
+  ],
+  "assistant.page.modelHint": [
+    "助手生成内容时使用的模型；「跟随平台默认」使用后台配置的默认模型。",
+    "Model used for generated content; “platform default” uses the default configured in admin."
+  ],
+  "assistant.page.modelEmpty": [
+    "暂无可用模型",
+    "No models available"
+  ],
+  "admin.models.toolCall": [
+    "支持工具调用",
+    "Tool calling"
+  ],
+  "admin.models.toolCallHint": [
+    "开启后模型可自行调用检索工具；本地小模型可能不稳定，建议 8B 以上。",
+    "When enabled the model can call retrieval tools on its own; small local models may be unstable, 8B+ recommended."
+  ],
+  "ai.chat.toolCallTag": [
+    "工具调用",
+    "Tools"
   ]
 }
