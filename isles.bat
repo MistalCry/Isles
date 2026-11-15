@@ -7,14 +7,17 @@ rem    isles.bat start           启动后端 + 前端（默认 8080 / 5173）
 rem    isles.bat start 8082 5174 指定端口启动
 rem    isles.bat stop            停止（默认端口）
 rem    isles.bat stop 8082 5174 停止指定端口
+rem    isles.bat lan             以局域网模式启动（手机连热点/同一 WiFi 时用）
 rem    isles.bat restart         重启
 rem    isles.bat status          查看状态
+rem    isles.bat admin <用户名>  将账号设为平台管理员（平台后台入口 /admin）
 rem  说明：
 rem    - 自动读取项目根目录 .env.local（DB/JWT 等），无需手动设环境变量
 rem    - 日志写入 .run\backend.log、.run\frontend.log
 rem    - 进程 PID 写入 .run\*.pid，停止时按 PID + 端口双重清理
 rem    - 设 ISLES_NO_BROWSER=1 可禁止启动后自动打开浏览器
 rem    - 注意：stop 会结束占用指定端口的进程（默认 8080/5173），请确认端口归属
+rem    - 平台后台入口：http://127.0.0.1:5173/admin（需平台管理员账号）
 rem ============================================================================
 chcp 936 >nul
 setlocal EnableExtensions
@@ -39,13 +42,21 @@ if exist "%ROOT%\.env.local" (
 
 setlocal EnableDelayedExpansion
 
+if /i "%ACTION%"=="lan" goto run_lan
 if /i "%ACTION%"=="start" goto run_start
 if /i "%ACTION%"=="stop" goto run_stop
 if /i "%ACTION%"=="restart" goto run_restart
 if /i "%ACTION%"=="status" goto run_status
+if /i "%ACTION%"=="admin" goto run_admin
 if "%ACTION%"=="" goto menu
 echo [错误] 未知参数：%ACTION%
 goto usage
+
+rem 局域网模式：手机/平板连同一 WiFi 或电脑热点时访问 http://<本机IP>:%FRONTEND_PORT%
+:run_lan
+set "ISLES_LAN=1"
+echo [提示] 局域网模式：请用本机 IP 访问（ipconfig 查看），手机不要用 localhost
+goto run_start
 
 rem ============================================================================
 rem  菜单
@@ -59,6 +70,7 @@ echo   1. 启动（后端 %BACKEND_PORT% / 前端 %FRONTEND_PORT%）
 echo   2. 停止
 echo   3. 重启
 echo   4. 查看状态
+echo   5. 设为平台管理员（后台 /admin）
 echo   0. 退出
 echo.
 set "CHOICE="
@@ -67,6 +79,7 @@ if "%CHOICE%"=="1" goto run_start
 if "%CHOICE%"=="2" goto run_stop
 if "%CHOICE%"=="3" goto run_restart
 if "%CHOICE%"=="4" goto run_status
+if "%CHOICE%"=="5" goto admin_prompt
 if "%CHOICE%"=="0" goto done
 echo 无效选择，请重试。
 goto menu
@@ -113,7 +126,7 @@ echo [1/3] 启动后端（端口 %BACKEND_PORT%）...
 set "SERVER__PORT=%BACKEND_PORT%"
 set "VITE_API_TARGET=http://127.0.0.1:%BACKEND_PORT%"
 rem 浏览器用 localhost 或 127.0.0.1 访问属不同 Origin，必须同时放行，否则后端 CORS 返回 403
-set "CORS_ALLOWED_ORIGINS=http://localhost:%FRONTEND_PORT%,http://127.0.0.1:%FRONTEND_PORT%,http://localhost:*,http://127.0.0.1:*"
+set "CORS_ALLOWED_ORIGINS=http://localhost:%FRONTEND_PORT%,http://127.0.0.1:%FRONTEND_PORT%,http://localhost:*,http://127.0.0.1:*,http://192.168.*:*,http://10.*:*,http://172.*:*"
 start "isles-backend" /min "%ROOT%\tools\dev\run-backend.cmd"
 echo       等待健康检查 http://127.0.0.1:%BACKEND_PORT%/actuator/health ...
 call :wait_http "http://127.0.0.1:%BACKEND_PORT%/actuator/health" 150
@@ -152,6 +165,8 @@ echo ==========================================
 echo   启动完成
 echo   前端：http://127.0.0.1:%FRONTEND_PORT%
 echo   后端：http://127.0.0.1:%BACKEND_PORT%/actuator/health
+echo   后台：http://127.0.0.1:%FRONTEND_PORT%/admin
+if not defined PLATFORM_ADMIN_USERNAMES echo   提示：未配置平台管理员，执行 isles.bat admin 你的用户名
 echo   日志：.run\backend.log / .run\frontend.log
 echo   停止：isles.bat stop %BACKEND_PORT% %FRONTEND_PORT%
 echo ==========================================
@@ -184,6 +199,30 @@ if errorlevel 1 (echo       前端已停止。) else (echo [警告] 端口 %FRONTEND_PORT%
 exit /b 0
 
 rem ============================================================================
+rem  设为平台管理员（后台 /admin 的准入）
+rem ============================================================================
+:run_admin
+set "ADMIN_USER=%~2"
+if "%ADMIN_USER%"=="" goto admin_help
+call :promote_admin "%ADMIN_USER%"
+goto pause_end
+
+:admin_prompt
+set "ADMIN_INPUT="
+set /p "ADMIN_INPUT=请输入要设为平台管理员的用户名: "
+if not "%ADMIN_INPUT%"=="" call :promote_admin "%ADMIN_INPUT%"
+goto menu
+
+:admin_help
+echo.
+echo 用法：isles.bat admin ^<用户名^>
+echo   将指定账号设为平台管理员（等价于 UPDATE users SET platform_role='ADMIN'）
+echo   也可在 .env.local 设置 PLATFORM_ADMIN_USERNAMES=用户名1,用户名2 后重启
+echo   设置后进入后台：http://127.0.0.1:%FRONTEND_PORT%/admin
+goto pause_end
+
+
+rem ============================================================================
 rem  重启 / 状态
 rem ============================================================================
 :run_restart
@@ -207,6 +246,8 @@ curl -s -f -m 3 "http://127.0.0.1:%BACKEND_PORT%/actuator/health" >nul 2>&1
 if errorlevel 1 (echo   后端健康    : 不可用) else (echo   后端健康    : UP)
 call :port_listening %FRONTEND_PORT%
 if errorlevel 1 (echo   前端        : 未启动 %FRONTEND_PORT%) else (echo   前端        : 监听中 %FRONTEND_PORT%)
+echo   后台入口    : http://127.0.0.1:%FRONTEND_PORT%/admin
+if defined PLATFORM_ADMIN_USERNAMES (echo   管理员白名单: %PLATFORM_ADMIN_USERNAMES%) else (echo   管理员白名单: 未配置（isles.bat admin 用户名）)
 echo ------------------
 goto pause_end
 
@@ -241,6 +282,43 @@ if not exist "%ROOT%\tools\dev\run-backend.cmd" (
   exit /b 1
 )
 exit /b 0
+
+rem 查找 mysql 客户端（PATH 或默认安装目录），结果写入 MYSQL_EXE
+:find_mysql
+set "MYSQL_EXE="
+for /f "delims=" %%M in ('where mysql 2^>nul') do if not defined MYSQL_EXE set "MYSQL_EXE=%%M"
+if not defined MYSQL_EXE (
+  for /d %%D in ("C://Program Files//MySQL//MySQL Server *") do (
+    if not defined MYSQL_EXE if exist "%%~fD\bin\mysql.exe" set "MYSQL_EXE=%%~fD\bin\mysql.exe"
+  )
+)
+exit /b 0
+
+rem 将账号设为平台管理员：%1=用户名
+:promote_admin
+set "PA_USER=%~1"
+call :find_mysql
+if not defined MYSQL_EXE (
+  echo [提示] 未找到 mysql 客户端，请手动在数据库中执行：
+  echo        UPDATE users SET platform_role='ADMIN' WHERE username='%PA_USER%';
+  exit /b 1
+)
+if not defined ISLES_DB_HOST set "ISLES_DB_HOST=127.0.0.1"
+if not defined ISLES_DB_PORT set "ISLES_DB_PORT=3306"
+if not defined ISLES_DB_NAME set "ISLES_DB_NAME=my_social_channel"
+echo.
+echo [执行] 将 %PA_USER% 设为平台管理员（%ISLES_DB_HOST%:%ISLES_DB_PORT%/%ISLES_DB_NAME%）...
+set "MYSQL_PWD=%DB_PASSWORD%"
+"%MYSQL_EXE%" -h%ISLES_DB_HOST% -P%ISLES_DB_PORT% -u%DB_USERNAME% %ISLES_DB_NAME% -e "UPDATE users SET platform_role='ADMIN' WHERE username='%PA_USER%'; SELECT username, platform_role FROM users WHERE username='%PA_USER%';"
+set "MYSQL_ERR=%ERRORLEVEL%"
+set "MYSQL_PWD="
+if not "%MYSQL_ERR%"=="0" (
+  echo [失败] 执行失败：请检查 .env.local 的 DB_USERNAME / DB_PASSWORD，或用 ISLES_DB_NAME 指定库名。
+  exit /b 1
+)
+echo [完成] 已设置；回到浏览器重新登录后台即可（角色缓存最多 60 秒）。
+exit /b 0
+
 
 rem 判断端口是否被监听：监听返回 0，否则 1
 :port_listening
@@ -287,7 +365,9 @@ exit /b 0
 rem ============================================================================
 :usage
 echo.
-echo 用法：isles.bat [start^|stop^|restart^|status] [后端端口] [前端端口]
+echo 用法：isles.bat [start^|stop^|restart^|status^|lan^|admin] [参数]
+echo   start/stop/restart/status 可带 [后端端口] [前端端口]
+echo   admin ^<用户名^>  将账号设为平台管理员（后台入口 /admin）
 goto pause_end
 
 :pause_end

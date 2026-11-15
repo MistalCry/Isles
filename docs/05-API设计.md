@@ -109,6 +109,7 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 | DELETE | `/posts/{id}` | 删除帖子（作者或管理员） | 作者 / `post.delete` |
 | POST / DELETE | `/posts/{id}/like` | 点赞 / 取消 | 登录 |
 | POST | `/posts/{id}/share` | 分享计数 | 登录 |
+| GET | `/channels/{id}/mention-candidates` | @提及候选（频道活跃成员，含助手） | 登录 |
 | GET | `/posts/{postId}/comments` | 评论列表：`sort=latest\|likes` | 🔓 |
 | POST | `/posts/{postId}/comments` | 评论 / 楼中楼回复（30 次/分钟/用户） | 成员 |
 | POST / DELETE | `/comments/{id}/like` | 评论点赞 / 取消 | 登录 |
@@ -138,7 +139,7 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 
 | 方法 | 路径 | 说明 | 权限 |
 | --- | --- | --- | --- |
-| POST | `/media/upload` | 上传图片/视频（`file`、`type=image\|video`，30 次/小时） | 登录 |
+| POST | `/media/upload` | 上传图片/视频（`file`、`type=image\|video`，30 次/小时）；响应 `{ id, url, thumbUrl, mediaType: IMAGE\|VIDEO, width, height, durationMs }` | 登录 |
 
 ### 2.7 通知
 
@@ -230,23 +231,96 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 
 ### 2.12 平台管理后台
 
+权限列使用平台权限点（`docs/11 §7.1`）：`CONFIG_READ` / `CONFIG_WRITE` / `ADMIN_MANAGE` / `AUDIT_READ` /
+`USER_READ` / `USER_BAN` / `USER_PENALTY` / `CONTENT_READ` / `CONTENT_TAKEDOWN` / `REPORT_READ` /
+`REPORT_HANDLE` / `AI_MANAGE` / `ANNOUNCEMENT_MANAGE` / `WORD_MANAGE` / `STATS_READ`。
+权限由 `PlatformPermissionInterceptor` 按接口注解统一校验；未标注的后台接口至少要求任意平台角色。
+
+**公开配置**
+
 | 方法 | 路径 | 说明 | 权限 |
 | --- | --- | --- | --- |
-| GET | `/admin/me` | 管理员身份校验 | 登录 |
-| GET | `/admin/overview` | 平台数据概览 | 平台管理员 |
-| GET | `/admin/users` | 用户列表（page/size） | 平台管理员 |
-| POST | `/admin/users/{id}/ban` / `unban` | 禁用 / 恢复用户（不能禁用自己） | 平台管理员 |
-| GET | `/admin/channels` | 频道列表（page/size） | 平台管理员 |
-| POST | `/admin/channels/{id}/ban` / `unban` | 封禁 / 解封频道 | 平台管理员 |
-| GET | `/admin/reports` | 全站举报（`available=false` 表示表未就绪） | 平台管理员 |
-| POST | `/admin/reports/{id}/handle` | 处置（`DISMISS`/`RESOLVE`） | 平台管理员 |
-| GET | `/admin/ai/models` | 模型配置列表 | 平台管理员 |
-| POST | `/admin/ai/models` | 新建模型配置（API Key 加密落库） | 平台管理员 |
-| PUT / DELETE | `/admin/ai/models/{id}` | 更新 / 删除 | 平台管理员 |
-| POST | `/admin/ai/models/{id}/test` | 连通性测试（已保存配置） | 平台管理员 |
-| POST | `/admin/ai/test-connection` | 连通性测试（未保存配置） | 平台管理员 |
-| GET | `/admin/ai/models/{id}/remote-models` | 拉取远端模型列表 | 平台管理员 |
-| GET | `/admin/ai/status` | AI 配置状态 | 平台管理员 |
+| GET | `/platform/config` | 公开配置子集（站点信息、注册开关等），仅 `publicVisible` 项 | 游客 |
+
+**配置中心**
+
+| 方法 | 路径 | 说明 | 权限 |
+| --- | --- | --- | --- |
+| GET | `/admin/config` | 配置项列表（分组 + 元数据 + 当前值 + 是否覆盖） | `CONFIG_READ` |
+| PUT | `/admin/config/{key}` | 单键更新（写历史 + 审计） | `CONFIG_WRITE` |
+| PUT | `/admin/config` | 批量更新（先整体校验，单事务） | `CONFIG_WRITE` |
+| POST | `/admin/config/{key}/reset` | 恢复默认（删除覆盖行，保留历史） | `CONFIG_WRITE` |
+| GET | `/admin/config/history` | 变更历史（`key`/`page`/`size`） | `CONFIG_READ` |
+
+**管理员与审计**
+
+| 方法 | 路径 | 说明 | 权限 |
+| --- | --- | --- | --- |
+| GET | `/admin/admins` | 管理员列表（授权 + 引导超管） | `ADMIN_MANAGE` |
+| POST | `/admin/admins` | 授权（`userId`/`role`/`expiresAt`） | `ADMIN_MANAGE` |
+| PUT | `/admin/admins/{userId}` | 修改角色 | `ADMIN_MANAGE` |
+| DELETE | `/admin/admins/{userId}` | 撤销（不能撤销自己/最后一个超管） | `ADMIN_MANAGE` |
+| GET | `/admin/audit-logs` | 平台审计（只读，`actorId`/`action`/`targetType`/`targetId`/`from`/`to`） | `AUDIT_READ` |
+
+**数据与治理**
+
+| 方法 | 路径 | 说明 | 权限 |
+| --- | --- | --- | --- |
+| GET | `/admin/me` | 平台身份 + 权限点列表（任意登录用户，前端据此显示菜单） | 登录 |
+| GET | `/admin/overview` | 平台数据概览 | `STATS_READ` |
+| GET | `/admin/users` | 用户列表（page/size） | `USER_READ` |
+| POST | `/admin/users/{id}/ban` / `unban` | 禁用 / 恢复用户（走处罚记录，不能禁用自己） | `USER_BAN` |
+| GET | `/admin/channels` | 频道列表（page/size） | `CONTENT_READ` |
+| POST | `/admin/channels/{id}/ban` / `unban` | 封禁 / 解封频道 | `CONTENT_TAKEDOWN` |
+| GET | `/admin/posts` | 全站帖子检索（`keyword`/`channelId`/`authorId`/`status`） | `CONTENT_READ` |
+| POST | `/admin/posts/{id}/takedown` | 下架（body 必填 `reason`） | `CONTENT_TAKEDOWN` |
+| POST | `/admin/posts/{id}/restore` | 恢复展示 | `CONTENT_TAKEDOWN` |
+| GET | `/admin/comments` | 全站评论检索 | `CONTENT_READ` |
+| POST | `/admin/comments/{id}/takedown` / `restore` | 评论下架 / 恢复 | `CONTENT_TAKEDOWN` |
+| GET | `/admin/reports` | 举报列表（`status`/`targetType`/`keyword`） | `REPORT_READ` |
+| POST | `/admin/reports/{id}/handle` | 处置：`action=DISMISS|RESOLVE`，可选 `handleAction=NONE|DELETE_CONTENT|MUTE_AUTHOR|WARN` | `REPORT_HANDLE` |
+| GET | `/admin/users/{id}/penalties` | 用户处罚历史 | `USER_READ` |
+| POST | `/admin/users/{id}/penalties` | 处罚（`BAN`/`MUTE`/`WARN`，`durationHours` 空=永久） | `USER_PENALTY` |
+| POST | `/admin/penalties/{id}/revoke` | 撤销处罚 | `USER_PENALTY` |
+
+**运营与数据**
+
+| 方法 | 路径 | 说明 | 权限 |
+| --- | --- | --- | --- |
+| GET | `/platform/announcements` | 生效中的公告（公开，最多 5 条） | 游客 |
+| GET | `/admin/announcements` | 公告列表（`status`/`page`/`size`） | `CONFIG_READ` |
+| POST | `/admin/announcements` | 新建公告（草稿） | `ANNOUNCEMENT_MANAGE` |
+| PUT | `/admin/announcements/{id}` | 编辑公告 | `ANNOUNCEMENT_MANAGE` |
+| POST | `/admin/announcements/{id}/publish` | 发布（未排期则立即生效） | `ANNOUNCEMENT_MANAGE` |
+| POST | `/admin/announcements/{id}/archive` | 归档（已发布需先归档才能删除） | `ANNOUNCEMENT_MANAGE` |
+| DELETE | `/admin/announcements/{id}` | 删除（仅草稿/归档） | `ANNOUNCEMENT_MANAGE` |
+| GET | `/admin/sensitive-words` | 词库列表（`keyword`/`page`/`size`） | `CONFIG_READ` |
+| POST | `/admin/sensitive-words` | 新建词条（重复返回 409） | `WORD_MANAGE` |
+| PUT / DELETE | `/admin/sensitive-words/{id}` | 编辑 / 删除词条 | `WORD_MANAGE` |
+| POST | `/admin/sensitive-words/import` | 批量导入（一行一词，单次 ≤ 500） | `WORD_MANAGE` |
+| POST | `/admin/sensitive-words/scan` | 试算命中词（不落库） | `WORD_MANAGE` |
+| GET | `/admin/sensitive-words/hits` | 命中记录（`scene`/`word`/`page`/`size`） | `CONFIG_READ` |
+| GET | `/admin/stats/trend` | 近 N 天趋势（默认 30，上限 90，缺失日期补零） | `STATS_READ` |
+| GET | `/admin/hot-keywords` | 热词列表（按搜索次数倒序） | `STATS_READ` |
+| DELETE | `/admin/hot-keywords/{id}` | 下线热词（清理刷量词） | `CONFIG_WRITE` |
+
+> 敏感词当前为 **REVIEW 模式**：发帖/评论命中后只记录到 `sensitive_word_hits`，不阻断发布；
+> 词条的 `action` 已预留 `BLOCK`/`MASK`，待运营确认后再启用。
+
+**AI 配置**
+
+| 方法 | 路径 | 说明 | 权限 |
+| --- | --- | --- | --- |
+| GET | `/admin/ai/models` | 模型配置列表 | `AI_MANAGE` |
+| POST | `/admin/ai/models` | 新建模型配置（API Key 加密落库） | `AI_MANAGE` |
+| PUT / DELETE | `/admin/ai/models/{id}` | 更新 / 删除 | `AI_MANAGE` |
+| POST | `/admin/ai/models/{id}/test` | 连通性测试（已保存配置） | `AI_MANAGE` |
+| POST | `/admin/ai/test-connection` | 连通性测试（未保存配置） | `AI_MANAGE` |
+| GET | `/admin/ai/models/{id}/remote-models` | 拉取远端模型列表 | `AI_MANAGE` |
+| GET | `/admin/ai/status` | AI 配置状态 | `AI_MANAGE` |
+
+> 举报状态已统一为 `PENDING` / `ACCEPTED` / `REJECTED`（与频道侧一致）；`available`/`dependency`
+> 字段保留为兼容字段，恒为 `true`/`null`。
 
 ### 2.13 健康检查
 

@@ -25,7 +25,7 @@
 | 社交 | 双向好友、拉黑、私信（文本 / 图片 / 帖子分享）、未读、实时推送 |
 | 发现 | 动态流、全站热门、频道推荐（可「换一批」）、搜索（热词 / 联想 / 筛选）、频道内搜索 |
 | AI | 频道问问（流式 / 深度思考 / 图片 / 重新生成 / 编辑重发 / 来源引用）、频道助手（日报 / 周报 / 榜单 / 自动发帖评论点赞 / **被动接话**） |
-| 平台后台 | AI 模型配置（含**思考参数模式**）、举报处置、用户 / 频道治理、平台数据 |
+| 平台后台 | **运行时平台配置**（22 项，保存即生效）、平台角色与权限点（超管/运营/审核/只读，读写分离）、操作审计、举报处置、内容下架与恢复、用户处罚（封禁/禁言/警告）、**公告发布**、**敏感词库与命中记录**、平台趋势与热词维护、用户 / 频道治理、平台数据、AI 模型配置（含**思考参数模式**） |
 
 ---
 
@@ -129,16 +129,20 @@ VITE_API_TARGET=http://127.0.0.1:8082 pnpm dev
 | `isles.bat start 8082 5174` | 指定端口启动 |
 | `isles.bat stop` | 停止前后端（按 PID + 端口清理进程树） |
 | `isles.bat restart` | 重启 |
-| `isles.bat status` | 查看 MySQL / LM Studio / 前后端状态 |
+| `isles.bat status` | 查看 MySQL / LM Studio / 前后端状态、后台入口与管理员白名单 |
+| `isles.bat admin 你的用户名` | 将账号设为平台管理员（后台入口 `/admin`） |
 
 脚本会读取根目录 `.env.local`，按本次前端端口注入 `CORS_ALLOWED_ORIGINS`（同时放行 `localhost` 与 `127.0.0.1`）。
 
 ### 7. 首个平台管理员
 
-平台后台（`/admin`）需要管理员身份，二选一：
+平台后台（`/admin`）需要管理员身份，二选一（两者都视为**超级管理员**）：
 
 - 在 `.env.local` 设置 `PLATFORM_ADMIN_USERNAMES=你的用户名`（逗号分隔可多个），重启后端；
 - 或直接改库：`UPDATE users SET platform_role='ADMIN' WHERE username='你的用户名';`
+
+进入后台后可在「管理员」页把其他账号授权为 `OPERATOR`（运营）/ `MODERATOR`（审核）/ `VIEWER`（只读），
+无需再改库。平台配置、审计与治理接口见 [平台管理后台设计](docs/11-平台管理后台设计.md)。
 
 ### 8. 配置 AI 模型（可选）
 
@@ -183,6 +187,9 @@ VITE_API_TARGET=http://127.0.0.1:8082 pnpm dev
 # 后端单元测试（含迁移校验、Mapper SQL 冒烟、权限/状态机/限流/AI Provider）
 cd backend && mvn -B test
 
+# 前端测试（单元 + 组件 + 文案守卫，共 50 个用例）
+cd frontend && pnpm test
+
 # 前端类型检查 + 构建
 cd frontend && pnpm build
 ```
@@ -199,9 +206,34 @@ node tools/e2e/realtime-check.mjs     # STOMP 实时推送
 浏览器级冒烟（真实 Chrome + CDP，位于 `tools/dev/`）：注册流程、发帖、频道设置、非成员评论提示等。
 详见 [测试策略](docs/08-测试策略.md) 与 [tools/e2e/README.md](tools/e2e/README.md)。
 
+### 多语言与文案维护
+
+界面支持简体中文 / English，登录后可在左下角用户菜单切换。文案统一走 i18n key：
+
+```bash
+# 1) 在 tools/i18n/catalog.json 里新增 key（[中文, English]）
+# 2) 生成语言包（会同时转义 @ / | 等 vue-i18n 语法字符）
+python tools/i18n/i18n_tool.py gen
+# 3) 跑文案守卫测试：key 对齐、t() 引用存在、无硬编码中文
+cd frontend && pnpm test
+```
+
+> 不要直接改 `src/i18n/zh-CN.ts` / `en-US.ts`，它们由 catalog 生成、会被覆盖。
+
 ---
 
 ## 常见问题
+
+**手机/平板（同一局域网或电脑热点）访问**
+
+1. 用**局域网模式**启动前端：`isles.bat lan`（或 `ISLES_LAN=1 pnpm dev`）。
+   默认只监听 `127.0.0.1`（更安全），不加这个开关时手机连不上是正常的。
+2. 手机访问**本机局域网 IP**，例如 `http://192.168.18.21:5173`；连电脑热点时通常是
+   `http://192.168.137.1:5173`（`ipconfig` 里「本地连接* N」的 IPv4）。
+3. 不要用 `localhost`——手机上那是手机自己。
+4. 若注册/登录提示「无权限」：是后端 CORS 拦截了非 localhost 来源。开发默认已放行
+   `192.168.*` / `10.*` / `172.*` 私有网段；自定义域名请设置 `CORS_ALLOWED_ORIGINS`。
+5. 页面打不开：检查 Windows 防火墙是否允许 Node.js / Java 在「专用网络」通信。
 
 **页面提示「无法连接服务器」**
 
@@ -211,7 +243,7 @@ node tools/e2e/realtime-check.mjs     # STOMP 实时推送
    `CORS_ALLOWED_ORIGINS` 内。开发默认已放行 `localhost:*` 与 `127.0.0.1:*`，自定义域名需显式配置。
 
 **注册/发帖提示「操作过于频繁」**：限流生效中。注册 5 次/小时/IP、登录失败 10 次/小时/IP；
-本地联调可临时设 `RATE_LIMIT_ENABLED=false`。
+本地联调可临时设 `RATE_LIMIT_ENABLED=false`。图片/视频上传**不再限流**（只受单文件大小与单次 ≤9 个限制）。
 
 **深度思考开关没反应**：到平台后台检查该模型的「思考参数下发方式」。
 Qwen3 在 LM Studio 下只有 `reasoning_effort=none` 能真正关闭思考，建议选「两者都发」。

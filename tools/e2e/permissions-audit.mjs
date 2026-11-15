@@ -195,6 +195,21 @@ async function main() {
     assert(visible.joined === true, '审批通过后应可访问且 joined=true')
   })
 
+  await step('AI：非成员不能对「仅成员可见」频道发起问答（防 AI 越权读私密内容）', async () => {
+    const secret = await createChannel(owner, { type: 'PRIVATE', visibility: 'MEMBERS_ONLY' })
+    await api('POST', '/ai/conversations', {
+      token: outsider.token,
+      expect: [403, 404],
+      body: { scope: 'CHANNEL', channelId: secret.id, title: '越权探测' },
+    })
+    // 频道成员（频道主）可以正常发起
+    await api('POST', '/ai/conversations', {
+      token: owner.token,
+      expect: [200, 201],
+      body: { scope: 'CHANNEL', channelId: secret.id, title: '成员问答' },
+    })
+  })
+
   await step('拉黑：被拉黑方无法私信；解除后恢复', async () => {
     await api('POST', `/users/${member.id}/block`, { token: owner.token, expect: [204] })
     await api('POST', '/dm/conversations', {
@@ -297,6 +312,59 @@ async function main() {
       body: form,
     })
     assert([400, 415].includes(response.status), `非法文件应被拒绝，实际 ${response.status}`)
+  })
+
+  await step('媒体：上传成功 → 带媒体与封面发帖 → 回读一致（防 P0-2 复发）', async () => {
+    // 1×1 PNG
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    )
+    const form = new FormData()
+    form.append('file', new Blob([png], { type: 'image/png' }), 'tiny.png')
+    form.append('type', 'image')
+    const response = await fetch(`${BASE_URL}/media/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${owner.token}` },
+      body: form,
+    })
+    assert([200, 201].includes(response.status), `上传应成功，实际 ${response.status}`)
+    const uploaded = await response.json()
+    assert(uploaded.mediaType === 'IMAGE', `上传响应字段应为 mediaType，实际 ${JSON.stringify(uploaded).slice(0, 120)}`)
+    assert(String(uploaded.url).startsWith('/uploads/'), '上传应返回站内相对地址')
+
+    const post = await api('POST', `/channels/${channel.id}/posts`, {
+      token: owner.token,
+      expect: [201],
+      body: {
+        boardId: board.id,
+        title: '带媒体与封面',
+        content: '媒体回归用例',
+        contentFormat: 'PLAIN',
+        coverUrl: uploaded.url,
+        media: [{ type: 'IMAGE', url: uploaded.url, thumbUrl: uploaded.thumbUrl }],
+      },
+    })
+    assert(Array.isArray(post.media) && post.media.length === 1, '发帖响应应包含 1 个媒体')
+    assert(post.media[0].type === 'IMAGE', '媒体类型应为 IMAGE')
+    assert(post.coverUrl === uploaded.url, '发帖响应应回填 coverUrl')
+
+    const readBack = await api('GET', `/posts/${post.id}`)
+    assert(readBack.media?.length === 1, '回读帖子应保留媒体')
+    assert(readBack.coverUrl === uploaded.url, '回读帖子应保留封面')
+  })
+
+  await step('富文本：站内相对地址的图片/视频不被净化器丢弃（防 P0-1 复发）', async () => {
+    const html = '<p>图</p><img src="/uploads/2026/11/a.jpg" alt="a"><video src="/uploads/2026/11/v.mp4" controls></video>'
+    const post = await api('POST', `/channels/${channel.id}/posts`, {
+      token: owner.token,
+      expect: [201],
+      body: { boardId: board.id, content: html, contentFormat: 'HTML' },
+    })
+    const readBack = await api('GET', `/posts/${post.id}`)
+    assert(readBack.content.includes('/uploads/2026/11/a.jpg'), '富文本图片相对地址应保留')
+    assert(readBack.content.includes('<video'), '富文本视频标签应保留')
+    assert(readBack.content.includes('/uploads/2026/11/v.mp4'), '富文本视频相对地址应保留')
   })
 
   await step('数据中心：手动聚合返回指标，趋势可读', async () => {

@@ -1,0 +1,4746 @@
+{
+  "common.cancel": [
+    "取消",
+    "Cancel"
+  ],
+  "common.confirm": [
+    "确定",
+    "Confirm"
+  ],
+  "common.save": [
+    "保存",
+    "Save"
+  ],
+  "common.delete": [
+    "删除",
+    "Delete"
+  ],
+  "common.edit": [
+    "编辑",
+    "Edit"
+  ],
+  "common.remove": [
+    "移除",
+    "Remove"
+  ],
+  "common.retry": [
+    "重试",
+    "Retry"
+  ],
+  "common.refresh": [
+    "刷新",
+    "Refresh"
+  ],
+  "common.search": [
+    "搜索",
+    "Search"
+  ],
+  "common.loading": [
+    "正在加载…",
+    "Loading…"
+  ],
+  "common.uploading": [
+    "上传中…",
+    "Uploading…"
+  ],
+  "common.publish": [
+    "发布",
+    "Publish"
+  ],
+  "common.reply": [
+    "回复",
+    "Reply"
+  ],
+  "common.like": [
+    "赞",
+    "Like"
+  ],
+  "common.share": [
+    "分享",
+    "Share"
+  ],
+  "common.back": [
+    "返回",
+    "Back"
+  ],
+  "common.more": [
+    "更多",
+    "More"
+  ],
+  "common.all": [
+    "全部",
+    "All"
+  ],
+  "common.image": [
+    "图片",
+    "Image"
+  ],
+  "common.video": [
+    "视频",
+    "Video"
+  ],
+  "common.insert": [
+    "插入",
+    "Insert"
+  ],
+  "common.islander": [
+    "岛民",
+    "Islander"
+  ],
+  "common.login": [
+    "登录",
+    "Sign in"
+  ],
+  "common.register": [
+    "注册",
+    "Sign up"
+  ],
+  "common.logout": [
+    "退出登录",
+    "Sign out"
+  ],
+  "common.loggedOut": [
+    "已退出登录",
+    "Signed out"
+  ],
+  "common.channel": [
+    "频道",
+    "Channel"
+  ],
+  "common.member": [
+    "成员",
+    "Members"
+  ],
+  "common.time": [
+    "时间",
+    "Time"
+  ],
+  "common.status": [
+    "状态",
+    "Status"
+  ],
+  "common.actions": [
+    "操作",
+    "Actions"
+  ],
+  "common.other": [
+    "其他",
+    "Other"
+  ],
+  "common.none": [
+    "无",
+    "None"
+  ],
+  "common.yes": [
+    "是",
+    "Yes"
+  ],
+  "common.no": [
+    "否",
+    "No"
+  ],
+  "nav.feed": [
+    "频道动态",
+    "Feed"
+  ],
+  "nav.hot": [
+    "热门讨论",
+    "Hot"
+  ],
+  "nav.ai": [
+    "频道问问",
+    "Ask"
+  ],
+  "nav.notifications": [
+    "通知",
+    "Notifications"
+  ],
+  "nav.messages": [
+    "我的私信",
+    "Messages"
+  ],
+  "nav.myChannels": [
+    "我的频道",
+    "My channels"
+  ],
+  "nav.friends": [
+    "我的好友",
+    "Friends"
+  ],
+  "nav.notificationCenter": [
+    "通知中心",
+    "Notification center"
+  ],
+  "nav.profile": [
+    "个人资料",
+    "Profile"
+  ],
+  "nav.languageZh": [
+    "语言：简体中文",
+    "Language: 简体中文"
+  ],
+  "nav.languageEn": [
+    "Language: English",
+    "Language: English"
+  ],
+  "nav.loginHint": [
+    "登录后加入频道、发帖互动",
+    "Sign in to join channels and post"
+  ],
+  "nav.loginToCreateChannel": [
+    "登录后可创建频道",
+    "Sign in to create a channel"
+  ],
+  "nav.channelLoadHint": [
+    "登录后展示已加入的频道",
+    "Sign in to see the channels you joined"
+  ],
+  "nav.dmLoadHint": [
+    "登录后查看私信会话",
+    "Sign in to see your messages"
+  ],
+  "nav.channelEmpty": [
+    "还没有加入频道，去发现感兴趣的岛吧。",
+    "You haven't joined any channel yet."
+  ],
+  "nav.viewAllChannels": [
+    "查看全部频道",
+    "View all channels"
+  ],
+  "nav.dmLoading": [
+    "正在加载私信…",
+    "Loading messages…"
+  ],
+  "nav.dmEmpty": [
+    "还没有私信，去用户卡片打个招呼吧。",
+    "No messages yet — say hi from a user card."
+  ],
+  "nav.viewAllDm": [
+    "查看全部私信",
+    "View all messages"
+  ],
+  "nav.noSignature": [
+    "这个人很神秘，还没有留下签名",
+    "This islander keeps a low profile."
+  ],
+  "nav.switchedZh": [
+    "已切换为简体中文",
+    "Switched to 简体中文"
+  ],
+  "comment.sort.hot": [
+    "最热",
+    "Top"
+  ],
+  "comment.sort.latest": [
+    "最新",
+    "Latest"
+  ],
+  "comment.joinRequired": [
+    "加入该频道后才能评论与回复。",
+    "Join this channel to comment."
+  ],
+  "comment.shortcutHint": [
+    "Ctrl + Enter 快捷发表",
+    "Ctrl + Enter to post"
+  ],
+  "comment.placeholder": [
+    "友善发言，理性讨论…",
+    "Be kind and stay on topic…"
+  ],
+  "comment.placeholderGuest": [
+    "登录后参与评论",
+    "Sign in to comment"
+  ],
+  "comment.submit": [
+    "发表评论",
+    "Post comment"
+  ],
+  "comment.submitGuest": [
+    "登录后评论",
+    "Sign in to comment"
+  ],
+  "comment.loginRequired": [
+    "登录后可发表评论",
+    "Sign in to comment"
+  ],
+  "comment.replyLoginRequired": [
+    "登录后可回复评论",
+    "Sign in to reply"
+  ],
+  "comment.likeLoginRequired": [
+    "登录后可点赞评论",
+    "Sign in to like comments"
+  ],
+  "comment.uploadLoginRequired": [
+    "登录后可上传图片或视频",
+    "Sign in to upload media"
+  ],
+  "comment.joinBeforePost": [
+    "加入频道后才能评论",
+    "Join the channel to comment"
+  ],
+  "comment.mediaUploadFailed": [
+    "媒体上传失败，请稍后重试",
+    "Media upload failed, please retry"
+  ],
+  "comment.emojiLimit": [
+    "表情最多 20 个",
+    "Up to 20 emojis"
+  ],
+  "comment.deleteConfirm": [
+    "删除后不可恢复，确定删除这条评论吗？",
+    "This cannot be undone. Delete this comment?"
+  ],
+  "comment.deleteTitle": [
+    "删除评论",
+    "Delete comment"
+  ],
+  "comment.deleted": [
+    "评论已删除",
+    "Comment deleted"
+  ],
+  "comment.deleteFailed": [
+    "删除失败，请稍后重试",
+    "Delete failed, please retry"
+  ],
+  "comment.posted": [
+    "评论已发布",
+    "Comment posted"
+  ],
+  "comment.authorBadge": [
+    "作者",
+    "Author"
+  ],
+  "post.pinned": [
+    "置顶",
+    "Pinned"
+  ],
+  "post.essence": [
+    "精华",
+    "Featured"
+  ],
+  "post.feature": [
+    "加精",
+    "Feature"
+  ],
+  "post.cover": [
+    "帖子封面",
+    "Post cover"
+  ],
+  "post.likeLoginRequired": [
+    "登录后可点赞",
+    "Sign in to like"
+  ],
+  "post.publishLoginRequired": [
+    "登录后可发帖",
+    "Sign in to post"
+  ],
+  "post.emptyContent": [
+    "写点什么再发布吧",
+    "Write something first"
+  ],
+  "post.boardRequired": [
+    "请先选择要发布到的板块",
+    "Choose a board first"
+  ],
+  "post.channelMissing": [
+    "缺少频道信息，暂时无法发帖",
+    "Channel info missing, cannot post"
+  ],
+  "post.published": [
+    "发布成功",
+    "Published"
+  ],
+  "post.publishFailed": [
+    "发布失败，请稍后重试",
+    "Publish failed, please retry"
+  ],
+  "post.mediaLabel": [
+    "图片/视频",
+    "Image / video"
+  ],
+  "post.coverHint": [
+    "封面（选填，展示在卡片顶部）",
+    "Cover (optional, shown on the card)"
+  ],
+  "post.editorHint": [
+    "支持标题、加粗、列表、引用、链接、图片与视频；封面显示在卡片顶部",
+    "Supports headings, bold, lists, quotes, links, images and video. The cover shows on the card."
+  ],
+  "post.noBoards": [
+    "该频道暂无板块信息",
+    "This channel has no boards yet"
+  ],
+  "post.defaultBoard": [
+    "默认板块",
+    "Default board"
+  ],
+  "editor.placeholder": [
+    "写下你想分享的内容…",
+    "Write what you want to share…"
+  ],
+  "editor.hint": [
+    "支持加粗、标题、列表、引用、链接与图片",
+    "Bold, headings, lists, quotes, links and images"
+  ],
+  "editor.body": [
+    "正文",
+    "Body"
+  ],
+  "editor.quote": [
+    "引用",
+    "Quote"
+  ],
+  "editor.bold": [
+    "加粗",
+    "Bold"
+  ],
+  "editor.italic": [
+    "斜体",
+    "Italic"
+  ],
+  "editor.underline": [
+    "下划线",
+    "Underline"
+  ],
+  "editor.strike": [
+    "删除线",
+    "Strikethrough"
+  ],
+  "editor.insertImage": [
+    "插入图片",
+    "Insert image"
+  ],
+  "editor.linkPrompt": [
+    "输入链接地址（https:// 开头）",
+    "Enter a URL (https://…)"
+  ],
+  "editor.linkTitle": [
+    "插入链接",
+    "Insert link"
+  ],
+  "editor.linkInvalid": [
+    "请输入 http(s) 开头的完整地址",
+    "Enter a full http(s) URL"
+  ],
+  "editor.insertFailed": [
+    "插入失败，请把光标放到正文里再试一次",
+    "Insert failed — place the cursor in the body and retry"
+  ],
+  "editor.videoUploadFailed": [
+    "视频上传失败",
+    "Video upload failed"
+  ],
+  "editor.imageUploadFailed": [
+    "图片上传失败",
+    "Image upload failed"
+  ],
+  "media.crop.title": [
+    "裁剪图片",
+    "Crop image"
+  ],
+  "media.crop.zoom": [
+    "缩放",
+    "Zoom"
+  ],
+  "media.crop.useOriginal": [
+    "使用原图（不裁剪）",
+    "Use original (no crop)"
+  ],
+  "media.crop.confirm": [
+    "裁剪并上传",
+    "Crop & upload"
+  ],
+  "media.crop.exportSize": [
+    "导出尺寸",
+    "Export size"
+  ],
+  "media.crop.sourceSize": [
+    "原裁剪区域",
+    "Source area"
+  ],
+  "media.crop.gifHint": [
+    "· GIF 裁剪后为静态图，动图请用「使用原图」",
+    "· Cropping a GIF makes it static — use “Use original” to keep animation"
+  ],
+  "media.crop.gifWarning": [
+    "GIF 裁剪后会变成静态图；需要保留动图请用「使用原图」",
+    "Cropped GIF becomes static. Use “Use original” to keep the animation."
+  ],
+  "media.crop.pickImage": [
+    "请选择图片文件",
+    "Please choose an image file"
+  ],
+  "media.crop.readFailed": [
+    "图片读取失败，请换一张试试",
+    "Could not read the image, try another one"
+  ],
+  "media.crop.uploaded": [
+    "图片已上传",
+    "Image uploaded"
+  ],
+  "media.crop.uploadFailed": [
+    "上传失败，请稍后重试",
+    "Upload failed, please retry"
+  ],
+  "media.crop.failed": [
+    "裁剪失败，请重试",
+    "Cropping failed, please retry"
+  ],
+  "media.crop.originalUploaded": [
+    "已上传原图",
+    "Original uploaded"
+  ],
+  "media.crop.empty": [
+    "暂无图片",
+    "No image"
+  ],
+  "media.crop.change": [
+    "更换图片",
+    "Change image"
+  ],
+  "media.uploadLabel": [
+    "上传图片",
+    "Upload image"
+  ],
+  "mention.hint": [
+    "选择后会在光标处插入「@昵称」",
+    "Inserts “@name” at the cursor"
+  ],
+  "mention.empty": [
+    "没有匹配的成员",
+    "No matching member"
+  ],
+  "mention.loadFailed": [
+    "成员列表加载失败",
+    "Failed to load members"
+  ],
+  "profile.usernameHint": [
+    "用户名用于登录，暂不支持修改。",
+    "Your username is used to sign in and cannot be changed."
+  ],
+  "profile.private": [
+    "不公开",
+    "Private"
+  ],
+  "profile.male": [
+    "男",
+    "Male"
+  ],
+  "profile.female": [
+    "女",
+    "Female"
+  ],
+  "profile.nicknameRequired": [
+    "昵称不能为空",
+    "Nickname is required"
+  ],
+  "profile.saved": [
+    "资料已保存",
+    "Profile saved"
+  ],
+  "profile.saveFailed": [
+    "保存失败",
+    "Save failed"
+  ],
+  "channel.role.owner": [
+    "频道主",
+    "Owner"
+  ],
+  "channel.role.admin": [
+    "管理员",
+    "Admin"
+  ],
+  "channel.private": [
+    "私密",
+    "Private"
+  ],
+  "channel.joined": [
+    "已加入",
+    "Joined"
+  ],
+  "channel.noChannelNo": [
+    "未分配频道号",
+    "No channel number"
+  ],
+  "channel.card.join": [
+    "加入",
+    "Join"
+  ],
+  "duration.min10": [
+    "10 分钟",
+    "10 minutes"
+  ],
+  "duration.hour1": [
+    "1 小时",
+    "1 hour"
+  ],
+  "duration.hour6": [
+    "6 小时",
+    "6 hours"
+  ],
+  "duration.day1": [
+    "1 天",
+    "1 day"
+  ],
+  "duration.day7": [
+    "7 天",
+    "7 days"
+  ],
+  "duration.day30": [
+    "30 天",
+    "30 days"
+  ],
+  "duration.forever": [
+    "长期有效",
+    "Never expires"
+  ],
+  "duration.unlimited": [
+    "不限次数",
+    "Unlimited"
+  ],
+  "channel.invite.generate": [
+    "生成邀请链接",
+    "Create invite link"
+  ],
+  "channel.invite.directJoin": [
+    "直接加入",
+    "Join directly"
+  ],
+  "channel.invite.needApproval": [
+    "需要审批",
+    "Needs approval"
+  ],
+  "channel.invite.create": [
+    "生成链接",
+    "Create link"
+  ],
+  "channel.invite.newLink": [
+    "新链接（仅本次可见完整 token）",
+    "New link (token shown only once)"
+  ],
+  "channel.invite.copy": [
+    "复制",
+    "Copy"
+  ],
+  "channel.invite.existing": [
+    "已有邀请链接",
+    "Existing invite links"
+  ],
+  "channel.invite.approval": [
+    "加入审批",
+    "Join requests"
+  ],
+  "channel.invite.reject": [
+    "拒绝",
+    "Reject"
+  ],
+  "channel.invite.approve": [
+    "通过",
+    "Approve"
+  ],
+  "channel.invite.count1": [
+    "1 次",
+    "1 use"
+  ],
+  "channel.invite.count5": [
+    "5 次",
+    "5 uses"
+  ],
+  "channel.invite.count10": [
+    "10 次",
+    "10 uses"
+  ],
+  "channel.invite.count50": [
+    "50 次",
+    "50 uses"
+  ],
+  "channel.invite.loadFailed": [
+    "邀请链接加载失败",
+    "Failed to load invite links"
+  ],
+  "channel.invite.requestsFailed": [
+    "加入申请加载失败",
+    "Failed to load join requests"
+  ],
+  "channel.invite.created": [
+    "邀请链接已生成",
+    "Invite link created"
+  ],
+  "channel.invite.statusRevoked": [
+    "已撤销",
+    "Revoked"
+  ],
+  "channel.invite.statusExpired": [
+    "已过期",
+    "Expired"
+  ],
+  "channel.invite.statusExhausted": [
+    "次数用尽",
+    "Used up"
+  ],
+  "channel.invite.noToken": [
+    "该邀请链接不包含可复制的 token，请重新生成",
+    "This link has no copyable token, please recreate it"
+  ],
+  "channel.invite.copied": [
+    "邀请链接已复制",
+    "Invite link copied"
+  ],
+  "channel.invite.copyFailed": [
+    "复制失败，请手动复制",
+    "Copy failed, please copy manually"
+  ],
+  "channel.invite.revokeConfirm": [
+    "撤销后该邀请链接将立即失效，确认撤销？",
+    "This link will stop working immediately. Revoke it?"
+  ],
+  "channel.invite.revokeTitle": [
+    "撤销邀请链接",
+    "Revoke invite link"
+  ],
+  "channel.invite.revoke": [
+    "撤销",
+    "Revoke"
+  ],
+  "channel.invite.revoked": [
+    "邀请链接已撤销",
+    "Invite link revoked"
+  ],
+  "channel.invite.approved": [
+    "已通过加入申请",
+    "Join request approved"
+  ],
+  "channel.invite.rejected": [
+    "已拒绝加入申请",
+    "Join request rejected"
+  ],
+  "channel.invite.approvalTag": [
+    "需审批",
+    "Approval required"
+  ],
+  "channel.member.muted": [
+    "禁言中",
+    "Muted"
+  ],
+  "channel.member.role": [
+    "身份组",
+    "Role"
+  ],
+  "channel.member.mute": [
+    "禁言",
+    "Mute"
+  ],
+  "channel.member.unmute": [
+    "解除禁言",
+    "Unmute"
+  ],
+  "channel.member.loadMore": [
+    "加载更多成员",
+    "Load more members"
+  ],
+  "channel.member.roleUpdated": [
+    "身份组已更新",
+    "Role updated"
+  ],
+  "channel.member.unmuted": [
+    "已解除禁言",
+    "Unmuted"
+  ],
+  "channel.member.remove": [
+    "移除成员",
+    "Remove member"
+  ],
+  "channel.member.removed": [
+    "成员已移除",
+    "Member removed"
+  ],
+  "channel.profile.avatar": [
+    "频道头像",
+    "Channel avatar"
+  ],
+  "channel.profile.cover": [
+    "频道背景",
+    "Channel cover"
+  ],
+  "channel.profile.public": [
+    "公开频道（自由加入）",
+    "Public channel (anyone can join)"
+  ],
+  "channel.profile.private": [
+    "私密频道（邀请加入）",
+    "Private channel (invite only)"
+  ],
+  "channel.profile.noVisibilityPermission": [
+    "你没有修改可见性的权限。",
+    "You don't have permission to change visibility."
+  ],
+  "channel.profile.save": [
+    "保存资料",
+    "Save profile"
+  ],
+  "channel.profile.nameRequired": [
+    "频道名称不能为空",
+    "Channel name is required"
+  ],
+  "channel.profile.saved": [
+    "频道资料已保存",
+    "Channel profile saved"
+  ],
+  "channel.profile.saveFailed": [
+    "保存失败，请稍后重试",
+    "Save failed, please retry"
+  ],
+  "channel.profile.unassigned": [
+    "未分配",
+    "Not assigned"
+  ],
+  "channel.settings.manageCenter": [
+    "进入频道管理中心",
+    "Open channel console"
+  ],
+  "channel.settings.roleLoading": [
+    "正在加载身份组…",
+    "Loading roles…"
+  ],
+  "channel.settings.muteAllHint": [
+    "开启后仅频道主与超级管理员可发言，普通成员与子板块管理员将被限制发帖/评论。",
+    "When enabled, only the owner and super admins can post or comment."
+  ],
+  "channel.settings.muteAll": [
+    "开启全员禁言",
+    "Mute everyone"
+  ],
+  "channel.settings.unmuteAll": [
+    "解除禁言",
+    "Unmute everyone"
+  ],
+  "channel.settings.leave": [
+    "退出频道",
+    "Leave channel"
+  ],
+  "channel.settings.leaveHint": [
+    "退出后将不再收到该频道的动态，可随时重新加入公开频道。",
+    "You'll stop receiving updates. You can rejoin public channels anytime."
+  ],
+  "channel.settings.dissolve": [
+    "解散频道",
+    "Dissolve channel"
+  ],
+  "channel.settings.dissolveHint": [
+    "仅频道主可解散频道。解散后频道与全部内容将不可访问，操作不可恢复。",
+    "Only the owner can dissolve. The channel and all content become inaccessible permanently."
+  ],
+  "channel.settings.close": [
+    "关闭",
+    "Close"
+  ],
+  "channel.settings.tabProfile": [
+    "频道资料",
+    "Profile"
+  ],
+  "channel.settings.tabInvite": [
+    "邀请与审批",
+    "Invites & approvals"
+  ],
+  "channel.settings.tabMuteAll": [
+    "全员禁言",
+    "Mute all"
+  ],
+  "channel.settings.tabDanger": [
+    "退出 / 解散",
+    "Leave / dissolve"
+  ],
+  "channel.settings.muteInvalid": [
+    "请输入有效的禁言时长",
+    "Enter a valid mute duration"
+  ],
+  "channel.settings.muteAllOn": [
+    "已开启全员禁言",
+    "Everyone muted"
+  ],
+  "channel.settings.muteAllOff": [
+    "已解除全员禁言",
+    "Unmuted everyone"
+  ],
+  "channel.settings.leaveConfirm": [
+    "退出后你将不再是该频道成员，确认退出？",
+    "You'll no longer be a member. Leave?"
+  ],
+  "channel.settings.leaveAction": [
+    "退出",
+    "Leave"
+  ],
+  "channel.settings.left": [
+    "已退出频道",
+    "Left the channel"
+  ],
+  "channel.settings.dissolveNameRequired": [
+    "请输入完整频道名称以确认解散",
+    "Type the full channel name to confirm"
+  ],
+  "channel.settings.dissolveConfirm": [
+    "解散后频道与内容将无法访问，该操作不可恢复。确认解散？",
+    "This permanently removes the channel and its content. Continue?"
+  ],
+  "channel.settings.dissolveAction": [
+    "确认解散",
+    "Dissolve"
+  ],
+  "channel.settings.dissolved": [
+    "频道已解散",
+    "Channel dissolved"
+  ],
+  "channel.settings.you": [
+    "你",
+    "You"
+  ],
+  "ai.chat.login": [
+    "去登录",
+    "Sign in"
+  ],
+  "ai.chat.loadEarlier": [
+    "加载更早消息",
+    "Load earlier messages"
+  ],
+  "ai.chat.visionTag": [
+    "视觉",
+    "Vision"
+  ],
+  "ai.chat.thinkingTag": [
+    "思考",
+    "Thinking"
+  ],
+  "ai.chat.deepThinking": [
+    "深度思考",
+    "Deep thinking"
+  ],
+  "ai.chat.noThinking": [
+    "当前模型不支持深度思考",
+    "This model doesn't support deep thinking"
+  ],
+  "ai.chat.assistant": [
+    "频道助手",
+    "Channel assistant"
+  ],
+  "ai.chat.ask": [
+    "岛问",
+    "Ask"
+  ],
+  "ai.chat.suggestChannel1": [
+    "这个频道最近有什么值得关注的内容？",
+    "What's worth reading in this channel lately?"
+  ],
+  "ai.chat.suggestChannel2": [
+    "帮我总结一下频道近期的热门讨论",
+    "Summarize the recent hot discussions"
+  ],
+  "ai.chat.suggestChannel3": [
+    "新成员加入频道后可以做什么？",
+    "What can new members do here?"
+  ],
+  "ai.chat.suggestGlobal1": [
+    "群岛最近大家都在讨论什么？",
+    "What is everyone discussing lately?"
+  ],
+  "ai.chat.suggestGlobal2": [
+    "帮我总结一下最近的热门话题",
+    "Summarize the recent hot topics"
+  ],
+  "ai.chat.suggestGlobal3": [
+    "新手应该从哪些频道开始逛？",
+    "Which channels should a newcomer start with?"
+  ],
+  "ai.chat.placeholder": [
+    "输入你的问题，岛问会检索全站公开帖子后回答…",
+    "Ask anything — I'll search public posts and cite sources…"
+  ],
+  "ai.chat.sessionsFailed": [
+    "历史会话加载失败",
+    "Failed to load conversations"
+  ],
+  "ai.chat.messagesFailed": [
+    "会话消息加载失败",
+    "Failed to load messages"
+  ],
+  "ai.chat.createFailed": [
+    "新建会话失败",
+    "Failed to create conversation"
+  ],
+  "ai.chat.renameFailed": [
+    "重命名失败",
+    "Rename failed"
+  ],
+  "ai.chat.deleteFailed": [
+    "删除会话失败",
+    "Failed to delete conversation"
+  ],
+  "ai.chat.earlierFailed": [
+    "更早消息加载失败",
+    "Failed to load earlier messages"
+  ],
+  "ai.chat.noModel": [
+    "尚未配置 AI 模型",
+    "No AI model configured"
+  ],
+  "ai.chat.conversationFailed": [
+    "创建会话失败",
+    "Failed to create conversation"
+  ],
+  "ai.chat.failed": [
+    "AI 对话失败，请稍后重试",
+    "AI request failed, please retry"
+  ],
+  "ai.chat.visionUnsupported": [
+    "当前模型不支持图片，请在模型选择中切换支持视觉的模型",
+    "This model doesn't support images — switch to a vision model"
+  ],
+  "ai.chat.imageLimit": [
+    "最多添加 4 张图片",
+    "Up to 4 images"
+  ],
+  "ai.chat.imageOnly": [
+    "仅支持上传图片",
+    "Images only"
+  ],
+  "ai.chat.configureHint": [
+    "请联系平台管理员在「平台管理后台 → AI 配置」中配置 LMStudio / OpenAI 兼容模型。",
+    "Ask a platform admin to configure an OpenAI-compatible model in Admin → AI."
+  ],
+  "ai.chat.channelScopeHint": [
+    "我会检索本频道的内容来回答。",
+    "I'll answer using this channel's content."
+  ],
+  "ai.chat.globalScopeHint": [
+    "我会检索全站公开帖子，回答时附上来源引用。",
+    "I'll search public posts and cite sources."
+  ],
+  "ai.message.stopped": [
+    "已停止",
+    "Stopped"
+  ],
+  "ai.message.failed": [
+    "生成失败",
+    "Generation failed"
+  ],
+  "ai.message.saveAndRetry": [
+    "保存并重新提问",
+    "Save & retry"
+  ],
+  "ai.message.failedHint": [
+    "本次回答生成失败，可点击「重新生成」再试。",
+    "Generation failed — try “Regenerate”."
+  ],
+  "ai.message.stoppedHint": [
+    "已停止生成。",
+    "Generation stopped."
+  ],
+  "ai.message.empty": [
+    "无内容",
+    "No content"
+  ],
+  "ai.message.me": [
+    "我",
+    "Me"
+  ],
+  "ai.session.title": [
+    "历史会话",
+    "Conversations"
+  ],
+  "ai.session.new": [
+    "新会话",
+    "New chat"
+  ],
+  "ai.session.renamePrompt": [
+    "请输入新的会话名称",
+    "Enter a new title"
+  ],
+  "ai.session.rename": [
+    "重命名会话",
+    "Rename conversation"
+  ],
+  "ai.session.nameRequired": [
+    "名称不能为空",
+    "Title is required"
+  ],
+  "ai.session.nameTooLong": [
+    "名称最长 120 个字符",
+    "Title must be at most 120 characters"
+  ],
+  "ai.session.delete": [
+    "删除会话",
+    "Delete conversation"
+  ],
+  "ai.assistant.online": [
+    "在线",
+    "Online"
+  ],
+  "ai.assistant.infoFailed": [
+    "频道助手信息加载失败",
+    "Failed to load assistant info"
+  ],
+  "ai.assistant.scopeHint": [
+    "基于本频道内容回答",
+    "Answers from this channel's content"
+  ],
+  "ai.assistant.disabled": [
+    "频道助手已创建但处于关闭状态，频道主可在管理中心的「频道助手」中开启。",
+    "The assistant exists but is disabled. The owner can enable it in the console."
+  ],
+  "ai.assistant.notConfigured": [
+    "频道主可在管理中心的「频道助手」中配置助手身份与自动任务。",
+    "The owner can configure the assistant in the channel console."
+  ],
+  "dm.chat.loading": [
+    "正在加载消息…",
+    "Loading messages…"
+  ],
+  "dm.chat.sharePost": [
+    "分享帖子",
+    "Share post"
+  ],
+  "dm.chat.me": [
+    "我",
+    "Me"
+  ],
+  "dm.chat.viewPost": [
+    "查看帖子",
+    "View post"
+  ],
+  "dm.chat.read": [
+    "已读",
+    "Read"
+  ],
+  "dm.chat.unread": [
+    "未读",
+    "Unread"
+  ],
+  "dm.share.copyLink": [
+    "复制链接",
+    "Copy link"
+  ],
+  "dm.share.recent": [
+    "最近会话",
+    "Recent chats"
+  ],
+  "dm.share.selected": [
+    "已选择",
+    "Selected"
+  ],
+  "dm.share.friends": [
+    "好友",
+    "Friends"
+  ],
+  "dm.share.loadFailed": [
+    "私信会话加载失败",
+    "Failed to load chats"
+  ],
+  "dm.share.copied": [
+    "帖子链接已复制",
+    "Post link copied"
+  ],
+  "dm.share.copyFailed": [
+    "复制失败，请手动复制地址栏链接",
+    "Copy failed, copy the address bar link manually"
+  ],
+  "dm.share.pickTarget": [
+    "请选择要分享的好友或会话",
+    "Pick a friend or chat"
+  ],
+  "dm.share.loginRequired": [
+    "请先登录",
+    "Please sign in"
+  ],
+  "dm.share.createFailed": [
+    "无法创建私信会话",
+    "Could not create a chat"
+  ],
+  "dm.share.failed": [
+    "分享失败，请稍后重试",
+    "Share failed, please retry"
+  ],
+  "manage.nav.createChannel": [
+    "创建频道",
+    "Create channel"
+  ],
+  "manage.nav.overview": [
+    "首页概览",
+    "Overview"
+  ],
+  "manage.nav.profile": [
+    "频道资料",
+    "Profile"
+  ],
+  "manage.nav.content": [
+    "内容管理",
+    "Content"
+  ],
+  "manage.nav.members": [
+    "成员与身份组",
+    "Members & roles"
+  ],
+  "manage.nav.boards": [
+    "板块管理",
+    "Boards"
+  ],
+  "manage.nav.data": [
+    "数据中心",
+    "Analytics"
+  ],
+  "manage.nav.logs": [
+    "管理日志",
+    "Audit log"
+  ],
+  "manage.nav.reports": [
+    "举报处理",
+    "Reports"
+  ],
+  "manage.nav.assistant": [
+    "频道助手设置",
+    "Assistant"
+  ],
+  "manage.title": [
+    "频道管理中心",
+    "Channel console"
+  ],
+  "manage.role.nameRequired": [
+    "请输入身份组名称",
+    "Enter a role name"
+  ],
+  "manage.role.updated": [
+    "身份组已更新",
+    "Role updated"
+  ],
+  "manage.role.created": [
+    "身份组已创建",
+    "Role created"
+  ],
+  "manage.role.saveFailed": [
+    "保存身份组失败",
+    "Failed to save role"
+  ],
+  "manage.role.edit": [
+    "编辑身份组",
+    "Edit role"
+  ],
+  "manage.role.create": [
+    "新建身份组",
+    "New role"
+  ],
+  "manage.stats.empty": [
+    "暂无趋势数据",
+    "No trend data"
+  ],
+  "manage.stats.trend": [
+    "趋势",
+    "Trend"
+  ],
+  "auth.layout.tagline1": [
+    "频道即圈子：帖子、评论与互动沉淀在属于你们的岛上",
+    "Channels are circles: posts, comments and interactions stay on your island"
+  ],
+  "auth.layout.tagline2": [
+    "发现同频的人：频道动态、热门讨论与搜索",
+    "Find your people: feed, hot topics and search"
+  ],
+  "auth.layout.tagline3": [
+    "媒体友好：图片灯箱与静音自动播放的视频",
+    "Media friendly: lightbox images and muted autoplay video"
+  ],
+  "channel.create.avatarHint": [
+    "选填，JPG / PNG / WebP，≤ 10MB",
+    "Optional, JPG / PNG / WebP, ≤ 10MB"
+  ],
+  "channel.create.hint": [
+    "创建后会自动生成默认板块；成员、身份组等复杂设置请前往频道管理中心。",
+    "A default board is created automatically. Manage members and roles in the console."
+  ],
+  "channel.create.title": [
+    "创建频道",
+    "Create channel"
+  ],
+  "channel.create.avatarUploaded": [
+    "头像上传成功",
+    "Avatar uploaded"
+  ],
+  "channel.create.avatarFailed": [
+    "头像上传失败",
+    "Avatar upload failed"
+  ],
+  "channel.create.success": [
+    "频道创建成功，复杂设置请前往管理中心",
+    "Channel created — finish setup in the console"
+  ],
+  "channel.create.failed": [
+    "创建频道失败，请稍后重试",
+    "Failed to create channel, please retry"
+  ],
+  "channel.create.island": [
+    "岛",
+    "Island"
+  ],
+  "empty.defaultTitle": [
+    "这里还没有内容",
+    "Nothing here yet"
+  ],
+  "error.title": [
+    "加载失败",
+    "Failed to load"
+  ],
+  "error.hint": [
+    "内容加载失败，请稍后再试",
+    "Failed to load, please try again later"
+  ],
+  "error.reload": [
+    "重新加载",
+    "Reload"
+  ],
+  "report.hint": [
+    "请选择举报原因，平台会在核实后处理。恶意举报可能影响账号信用。",
+    "Pick a reason. False reports may affect your account."
+  ],
+  "report.submit": [
+    "提交举报",
+    "Submit report"
+  ],
+  "report.reasonRequired": [
+    "请选择举报原因",
+    "Choose a reason"
+  ],
+  "report.submitted": [
+    "举报已提交，平台会尽快核实处理",
+    "Report submitted, we'll review it soon"
+  ],
+  "report.failed": [
+    "举报提交失败，请稍后重试",
+    "Report failed, please retry"
+  ],
+  "search.suggesting": [
+    "正在联想…",
+    "Suggesting…"
+  ],
+  "search.hot": [
+    "热门搜索",
+    "Trending"
+  ],
+  "search.history": [
+    "搜索历史",
+    "Recent searches"
+  ],
+  "search.clear": [
+    "清空",
+    "Clear"
+  ],
+  "search.historyEmpty": [
+    "暂无搜索历史，试试搜索感兴趣的频道或帖子。",
+    "No recent searches yet."
+  ],
+  "search.keywordRequired": [
+    "请输入搜索关键词",
+    "Enter a keyword"
+  ],
+  "avatar.island": [
+    "岛",
+    "I"
+  ],
+  "avatar.user": [
+    "用户",
+    "User"
+  ],
+  "userCard.gender": [
+    "性别",
+    "Gender"
+  ],
+  "userCard.region": [
+    "地区",
+    "Region"
+  ],
+  "userCard.joinChannel": [
+    "加入频道",
+    "Join channel"
+  ],
+  "userCard.self": [
+    "这是你自己",
+    "This is you"
+  ],
+  "userCard.loadFailed": [
+    "用户卡片加载失败",
+    "Failed to load user card"
+  ],
+  "userCard.dmLoginRequired": [
+    "登录后可发送私信",
+    "Sign in to send a message"
+  ],
+  "userCard.dmFailed": [
+    "无法发起私信，请稍后重试",
+    "Could not start a chat, please retry"
+  ],
+  "userCard.friendLoginRequired": [
+    "登录后可添加好友",
+    "Sign in to add friends"
+  ],
+  "userCard.friendSent": [
+    "好友申请已发送，等待对方同意",
+    "Friend request sent"
+  ],
+  "userCard.friendFailed": [
+    "好友申请发送失败",
+    "Failed to send friend request"
+  ],
+  "userCard.friendRequested": [
+    "已申请",
+    "Requested"
+  ],
+  "userCard.addFriend": [
+    "加好友",
+    "Add friend"
+  ],
+  "quickComment.more": [
+    "在完整页面查看更多讨论",
+    "See more on the post page"
+  ],
+  "ai.page.subtitle": [
+    "让 AI 帮你梳理群岛上的公开内容，回答附来源引用",
+    "Let AI make sense of public content, with citations"
+  ],
+  "channel.page.backToFeed": [
+    "回到频道动态",
+    "Back to feed"
+  ],
+  "channel.page.endOfPosts": [
+    "已浏览完该频道的全部帖子",
+    "You've reached the end of this channel"
+  ],
+  "channel.page.mutedAll": [
+    "频道正在全员禁言",
+    "This channel is muted for everyone"
+  ],
+  "channel.page.mutedAllHint": [
+    "禁言期间仅频道主与超级管理员可发帖，解除后可继续参与讨论。",
+    "Only the owner and super admins can post while muted."
+  ],
+  "channel.page.intro": [
+    "频道简介",
+    "About"
+  ],
+  "channel.page.posts": [
+    "帖子",
+    "Posts"
+  ],
+  "channel.page.boards": [
+    "板块",
+    "Boards"
+  ],
+  "channel.page.hot": [
+    "热门",
+    "Hot"
+  ],
+  "channel.page.superAdmin": [
+    "超级管理员",
+    "Super admin"
+  ],
+  "channel.page.notFound": [
+    "频道不存在或不可见",
+    "Channel not found or not visible"
+  ],
+  "channel.page.loadFailed": [
+    "频道加载失败，请稍后重试",
+    "Failed to load the channel, please retry"
+  ],
+  "channel.page.joinLoginRequired": [
+    "登录后可加入频道",
+    "Sign in to join"
+  ],
+  "channel.page.settingsLoginRequired": [
+    "登录后可打开频道设置",
+    "Sign in to open settings"
+  ],
+  "channel.page.settingsJoinRequired": [
+    "加入频道后即可打开频道设置",
+    "Join the channel to open settings"
+  ],
+  "channel.page.collapse": [
+    "收起",
+    "Collapse"
+  ],
+  "channel.page.expand": [
+    "展开全部",
+    "Show more"
+  ],
+  "channel.page.firstPost": [
+    "成为第一个在频道里发帖的人吧。",
+    "Be the first to post here."
+  ],
+  "channel.page.joinToPost": [
+    "加入频道后即可发帖",
+    "Join to post"
+  ],
+  "channel.page.joinToDiscuss": [
+    "登录后加入频道参与讨论",
+    "Sign in and join to discuss"
+  ],
+  "channel.page.joinHint": [
+    "加入后你就能在这里发帖、评论和点赞。",
+    "Once you join you can post, comment and like."
+  ],
+  "channel.page.guestHint": [
+    "游客可浏览公开内容，互动需要登录。",
+    "Guests can browse; sign in to interact."
+  ],
+  "channel.page.loginRegister": [
+    "登录 / 注册",
+    "Sign in / Sign up"
+  ],
+  "channel.page.noIntro": [
+    "这个频道还没有填写简介。",
+    "This channel has no description yet."
+  ],
+  "channel.page.channelNoPending": [
+    "频道号分配中",
+    "Channel number pending"
+  ],
+  "feed.subtitle": [
+    "来自你已加入频道的最新内容",
+    "Latest from channels you joined"
+  ],
+  "feed.empty": [
+    "已经到底啦，去频道里逛逛吧",
+    "You're all caught up — explore more channels"
+  ],
+  "feed.explore": [
+    "去发现频道",
+    "Explore channels"
+  ],
+  "feed.sessionExpired": [
+    "登录状态已失效，请重新登录后查看频道动态",
+    "Session expired, please sign in again"
+  ],
+  "friends.subtitle": [
+    "双向好友、申请与黑名单管理",
+    "Friends, requests and blocks"
+  ],
+  "friends.dm": [
+    "私信",
+    "Message"
+  ],
+  "friends.remove": [
+    "删除好友",
+    "Remove friend"
+  ],
+  "friends.block": [
+    "拉黑",
+    "Block"
+  ],
+  "friends.unblock": [
+    "解除拉黑",
+    "Unblock"
+  ],
+  "friends.waiting": [
+    "等待对方处理",
+    "Waiting for response"
+  ],
+  "friends.tabIncoming": [
+    "收到的申请",
+    "Requests"
+  ],
+  "friends.tabOutgoing": [
+    "发出的申请",
+    "Sent"
+  ],
+  "friends.tabBlocked": [
+    "黑名单",
+    "Blocked"
+  ],
+  "friends.loadFailed": [
+    "好友数据加载失败",
+    "Failed to load friends"
+  ],
+  "friends.removed": [
+    "好友已删除",
+    "Friend removed"
+  ],
+  "friends.blockTitle": [
+    "拉黑用户",
+    "Block user"
+  ],
+  "friends.blocked": [
+    "已拉黑该用户",
+    "User blocked"
+  ],
+  "friends.unblocked": [
+    "已解除拉黑",
+    "User unblocked"
+  ],
+  "friends.accepted": [
+    "已同意好友申请",
+    "Friend request accepted"
+  ],
+  "friends.rejected": [
+    "已拒绝好友申请",
+    "Friend request rejected"
+  ],
+  "friends.emptyFriends": [
+    "还没有好友",
+    "No friends yet"
+  ],
+  "friends.emptyBlocked": [
+    "黑名单为空",
+    "Block list is empty"
+  ],
+  "friends.emptyRequests": [
+    "没有相关申请",
+    "No requests"
+  ],
+  "hot.subtitle": [
+    "全站正在被讨论的内容（浏览 / 点赞 / 评论 + 时间衰减）",
+    "What the whole site is discussing (views, likes, comments with time decay)"
+  ],
+  "hot.end": [
+    "已经到底啦",
+    "You've reached the end"
+  ],
+  "hot.recommend": [
+    "频道推荐",
+    "Recommended channels"
+  ],
+  "hot.recommendFailed": [
+    "频道推荐加载失败",
+    "Failed to load recommendations"
+  ],
+  "hot.joinLoginRequired": [
+    "登录后可加入频道",
+    "Sign in to join"
+  ],
+  "invite.backToFeed": [
+    "回到频道动态",
+    "Back to feed"
+  ],
+  "invite.enterChannel": [
+    "进入频道",
+    "Open channel"
+  ],
+  "invite.viewNotifications": [
+    "查看通知",
+    "View notifications"
+  ],
+  "invite.joined": [
+    "已加入频道",
+    "Joined the channel"
+  ],
+  "invite.pending": [
+    "加入申请已提交，等待管理员审批",
+    "Request submitted, waiting for approval"
+  ],
+  "invite.invalid": [
+    "邀请链接无效或已过期",
+    "This invite link is invalid or expired"
+  ],
+  "invite.joinedSuccess": [
+    "已成功加入频道",
+    "Successfully joined"
+  ],
+  "invite.pendingSuccess": [
+    "加入申请已提交",
+    "Join request submitted"
+  ],
+  "invite.joinedHint": [
+    "现在可以在频道内发帖、评论和互动了。",
+    "You can now post, comment and interact."
+  ],
+  "invite.pendingHint": [
+    "需要频道管理员审批，通过后会收到通知。",
+    "An admin must approve; you'll be notified."
+  ],
+  "auth.login.subtitle": [
+    "回到你的岛屿，看看岛民们的新动态。",
+    "Back to your island — see what islanders are up to."
+  ],
+  "auth.login.registerNow": [
+    "立即注册",
+    "Sign up now"
+  ],
+  "auth.login.browse": [
+    "先随便逛逛 →",
+    "Just browsing →"
+  ],
+  "auth.login.usernameRequired": [
+    "请输入用户名",
+    "Enter your username"
+  ],
+  "auth.login.passwordRequired": [
+    "请输入密码",
+    "Enter your password"
+  ],
+  "auth.login.welcome": [
+    "欢迎回来",
+    "Welcome back"
+  ],
+  "auth.login.failed": [
+    "登录失败，请检查用户名和密码",
+    "Sign-in failed, check your username and password"
+  ],
+  "manage.page.back": [
+    "返回频道页",
+    "Back to channel"
+  ],
+  "manage.page.notFound": [
+    "频道不存在或不可访问",
+    "Channel not found or inaccessible"
+  ],
+  "manage.page.loadFailed": [
+    "频道信息加载失败",
+    "Failed to load channel info"
+  ],
+  "dm.page.subtitle": [
+    "和岛民一对一聊天，支持图片与帖子分享",
+    "One-on-one chats with images and shared posts"
+  ],
+  "dm.page.friends": [
+    "好友管理",
+    "Manage friends"
+  ],
+  "dm.page.viewFriends": [
+    "查看好友",
+    "View friends"
+  ],
+  "dm.page.empty": [
+    "还没有消息",
+    "No messages yet"
+  ],
+  "dm.page.image": [
+    "[图片]",
+    "[Image]"
+  ],
+  "dm.page.system": [
+    "[系统消息]",
+    "[System]"
+  ],
+  "myChannels.subtitle": [
+    "你加入的所有岛屿",
+    "All islands you joined"
+  ],
+  "myChannels.discover": [
+    "发现频道",
+    "Explore"
+  ],
+  "myChannels.create": [
+    "创建我的频道",
+    "Create my channel"
+  ],
+  "notifications.subtitle": [
+    "频道互动与系统消息",
+    "Interactions and system messages"
+  ],
+  "notifications.markAll": [
+    "全部已读",
+    "Mark all read"
+  ],
+  "notifications.end": [
+    "已经到底啦",
+    "You've reached the end"
+  ],
+  "notifications.allTypes": [
+    "全部类型",
+    "All types"
+  ],
+  "notifications.like": [
+    "点赞",
+    "Likes"
+  ],
+  "notifications.postComment": [
+    "帖子评论",
+    "Comments"
+  ],
+  "notifications.reply": [
+    "评论回复",
+    "Replies"
+  ],
+  "notifications.system": [
+    "系统消息",
+    "System"
+  ],
+  "notifications.friendRequest": [
+    "好友申请",
+    "Friend requests"
+  ],
+  "notifications.allRead": [
+    "已全部标记为已读",
+    "All marked as read"
+  ],
+  "notifications.likeTitle": [
+    "你的帖子收到了点赞",
+    "Someone liked your post"
+  ],
+  "notifications.commentTitle": [
+    "你的帖子有新评论",
+    "New comment on your post"
+  ],
+  "notifications.replyTitle": [
+    "你的评论收到回复",
+    "Someone replied to your comment"
+  ],
+  "notifications.systemTitle": [
+    "系统通知",
+    "System notification"
+  ],
+  "post.detail.backToFeed": [
+    "回到频道动态",
+    "Back to feed"
+  ],
+  "post.detail.report": [
+    "举报",
+    "Report"
+  ],
+  "post.detail.emptyContent": [
+    "正文不能为空",
+    "Body cannot be empty"
+  ],
+  "post.detail.updated": [
+    "帖子已更新",
+    "Post updated"
+  ],
+  "post.detail.notFound": [
+    "帖子不存在或已被删除",
+    "Post not found or deleted"
+  ],
+  "post.detail.loadFailed": [
+    "帖子加载失败，请稍后重试",
+    "Failed to load the post, please retry"
+  ],
+  "post.detail.reportLoginRequired": [
+    "登录后可举报",
+    "Sign in to report"
+  ],
+  "auth.register.subtitle": [
+    "创建账号，开始探索属于你的岛屿。",
+    "Create an account and start exploring your island."
+  ],
+  "auth.register.terms": [
+    "《用户协议》与《隐私政策》",
+    "the Terms of Service and Privacy Policy"
+  ],
+  "auth.register.toLogin": [
+    "直接登录",
+    "Sign in instead"
+  ],
+  "auth.register.browse": [
+    "先随便逛逛 →",
+    "Just browsing →"
+  ],
+  "auth.register.usernameRequired": [
+    "请输入用户名",
+    "Enter your username"
+  ],
+  "auth.register.passwordRequired": [
+    "请设置密码",
+    "Set a password"
+  ],
+  "auth.register.confirmRequired": [
+    "请再次输入密码",
+    "Enter the password again"
+  ],
+  "auth.register.passwordMismatch": [
+    "两次输入的密码不一致",
+    "Passwords don't match"
+  ],
+  "auth.register.termsRequired": [
+    "请先阅读并同意用户协议与隐私政策",
+    "Please accept the terms and privacy policy"
+  ],
+  "auth.register.success": [
+    "注册成功，欢迎来到群岛",
+    "Welcome to Isles"
+  ],
+  "auth.register.failed": [
+    "注册失败，请稍后重试",
+    "Sign-up failed, please retry"
+  ],
+  "auth.register.termsHint": [
+    "用户协议与隐私政策将在上线前完成法务确认",
+    "Terms and privacy policy will be finalized before launch"
+  ],
+  "search.subtitle": [
+    "搜索频道与帖子，发现同频的岛民",
+    "Search channels and posts"
+  ],
+  "search.channels": [
+    "相关频道",
+    "Channels"
+  ],
+  "search.posts": [
+    "相关帖子",
+    "Posts"
+  ],
+  "search.sort": [
+    "排序：",
+    "Sort:"
+  ],
+  "search.sortRelevance": [
+    "相关度",
+    "Relevance"
+  ],
+  "search.sortMembers": [
+    "按人数",
+    "Members"
+  ],
+  "search.sortActive": [
+    "按活跃度",
+    "Activity"
+  ],
+  "search.sortTime": [
+    "按发布时间",
+    "Newest"
+  ],
+  "search.sortAll": [
+    "综合",
+    "Overall"
+  ],
+  "search.postsTab": [
+    "帖子",
+    "Posts"
+  ],
+  "search.failed": [
+    "搜索失败，请稍后重试",
+    "Search failed, please retry"
+  ],
+  "common.hot": [
+    "热门",
+    "Hot"
+  ],
+  "common.posts": [
+    "帖子",
+    "Posts"
+  ],
+  "common.friends": [
+    "好友",
+    "Friends"
+  ],
+  "common.query": [
+    "查询",
+    "Search"
+  ],
+  "common.reset": [
+    "重置",
+    "Reset"
+  ],
+  "common.noDescription": [
+    "暂无描述",
+    "No description"
+  ],
+  "common.unknown": [
+    "未知",
+    "Unknown"
+  ],
+  "common.anonymous": [
+    "匿名",
+    "Anonymous"
+  ],
+  "common.memberCount": [
+    "成员数",
+    "Members"
+  ],
+  "common.postCount": [
+    "帖子数",
+    "Posts"
+  ],
+  "common.activeRate": [
+    "活跃率",
+    "Active rate"
+  ],
+  "common.yesterdayVisitors": [
+    "昨日访问人数",
+    "Visitors yesterday"
+  ],
+  "common.system": [
+    "系统",
+    "System"
+  ],
+  "manage.boards.subtitle": [
+    "创建、重命名、排序与删除板块（FR-BOARD-02）",
+    "Create, rename, reorder and delete boards"
+  ],
+  "manage.boards.create": [
+    "新建板块",
+    "New board"
+  ],
+  "manage.boards.loadFailed": [
+    "板块加载失败",
+    "Failed to load boards"
+  ],
+  "manage.boards.nameRequired": [
+    "请输入板块名称",
+    "Enter a board name"
+  ],
+  "manage.boards.updated": [
+    "板块已更新",
+    "Board updated"
+  ],
+  "manage.boards.created": [
+    "板块已创建",
+    "Board created"
+  ],
+  "manage.boards.saveFailed": [
+    "保存板块失败",
+    "Failed to save board"
+  ],
+  "manage.boards.deleteTitle": [
+    "删除板块",
+    "Delete board"
+  ],
+  "manage.boards.deleted": [
+    "板块已删除",
+    "Board deleted"
+  ],
+  "manage.boards.edit": [
+    "编辑板块",
+    "Edit board"
+  ],
+  "manage.content.subtitle": [
+    "筛选、置顶、精华、删除与批量操作（FR-MGR-05）",
+    "Filter, pin, feature, delete and bulk actions"
+  ],
+  "manage.content.bulkPin": [
+    "批量置顶",
+    "Pin selected"
+  ],
+  "manage.content.unpin": [
+    "取消置顶",
+    "Unpin"
+  ],
+  "manage.content.bulkFeature": [
+    "批量加精",
+    "Feature selected"
+  ],
+  "manage.content.unfeature": [
+    "取消精华",
+    "Unfeature"
+  ],
+  "manage.content.bulkDelete": [
+    "批量删除",
+    "Delete selected"
+  ],
+  "manage.content.loadFailed": [
+    "内容列表加载失败",
+    "Failed to load content"
+  ],
+  "manage.content.pinned": [
+    "已置顶",
+    "Pinned"
+  ],
+  "manage.content.unpinned": [
+    "已取消置顶",
+    "Unpinned"
+  ],
+  "manage.content.featured": [
+    "已加精",
+    "Featured"
+  ],
+  "manage.content.unfeatured": [
+    "已取消精华",
+    "Unfeatured"
+  ],
+  "manage.content.deleteConfirm": [
+    "删除后帖子将进入系统消息通知作者，确认删除？",
+    "The author will be notified. Delete this post?"
+  ],
+  "manage.content.deleteTitle": [
+    "删除帖子",
+    "Delete post"
+  ],
+  "manage.content.deleted": [
+    "帖子已删除",
+    "Post deleted"
+  ],
+  "manage.content.selectFirst": [
+    "请先选择要操作的帖子",
+    "Select posts first"
+  ],
+  "manage.content.bulkDone": [
+    "批量操作已完成",
+    "Bulk action completed"
+  ],
+  "manage.data.subtitle": [
+    "概览、趋势、内容与成员分析（指标口径见 docs/03 §8）",
+    "Overview, trends, content and member analytics"
+  ],
+  "manage.data.last7": [
+    "近 7 天",
+    "Last 7 days"
+  ],
+  "manage.data.last30": [
+    "近 30 天",
+    "Last 30 days"
+  ],
+  "manage.data.totalInteractions": [
+    "互动总量",
+    "Total interactions"
+  ],
+  "manage.data.boardDist": [
+    "板块分布",
+    "Posts by board"
+  ],
+  "manage.data.boardEmpty": [
+    "暂无板块分布数据",
+    "No board data yet"
+  ],
+  "manage.data.roleDist": [
+    "身份组分布",
+    "Members by role"
+  ],
+  "manage.data.roleEmpty": [
+    "暂无成员分布数据",
+    "No member data yet"
+  ],
+  "manage.data.topPosts": [
+    "热门帖子",
+    "Top posts"
+  ],
+  "manage.data.topPostsEmpty": [
+    "暂无热门帖子数据",
+    "No top posts yet"
+  ],
+  "manage.data.loadFailed": [
+    "数据中心加载失败",
+    "Failed to load analytics"
+  ],
+  "manage.home.subtitle": [
+    "频道整体运营数据与快捷入口",
+    "Channel health and shortcuts"
+  ],
+  "manage.home.refresh": [
+    "刷新数据",
+    "Refresh data"
+  ],
+  "manage.home.cardContent": [
+    "置顶 / 精华 / 删除与批量操作",
+    "Pin, feature, delete and bulk actions"
+  ],
+  "manage.home.cardMembers": [
+    "成员搜索、身份组与禁言管理",
+    "Members, roles and mutes"
+  ],
+  "manage.home.cardData": [
+    "趋势与内容/成员分析",
+    "Trends and analytics"
+  ],
+  "manage.home.cardLogs": [
+    "频道内操作审计记录",
+    "Audit log"
+  ],
+  "manage.home.newMembers": [
+    "昨日新增成员",
+    "New members yesterday"
+  ],
+  "manage.home.newPosts": [
+    "昨日新增帖子",
+    "New posts yesterday"
+  ],
+  "manage.home.loadFailed": [
+    "概览数据加载失败",
+    "Failed to load overview"
+  ],
+  "manage.logs.subtitle": [
+    "频道内全部写操作与管理操作审计（FR-MGR-07）",
+    "Audit of all write and admin actions"
+  ],
+  "manage.logs.actionPostCreate": [
+    "发帖",
+    "Post created"
+  ],
+  "manage.logs.actionPostDelete": [
+    "删除帖子",
+    "Post deleted"
+  ],
+  "manage.logs.actionUnpin": [
+    "取消置顶",
+    "Unpinned"
+  ],
+  "manage.logs.actionUnfeature": [
+    "取消精华",
+    "Unfeatured"
+  ],
+  "manage.logs.actionMemberJoin": [
+    "成员加入",
+    "Member joined"
+  ],
+  "manage.logs.actionMemberLeave": [
+    "成员退出",
+    "Member left"
+  ],
+  "manage.logs.actionMute": [
+    "禁言成员",
+    "Member muted"
+  ],
+  "manage.logs.actionRoleChange": [
+    "身份组变更",
+    "Role changed"
+  ],
+  "manage.logs.actionProfileUpdate": [
+    "频道资料修改",
+    "Profile updated"
+  ],
+  "manage.logs.actionJoinApprove": [
+    "通过加入申请",
+    "Join approved"
+  ],
+  "manage.logs.actionJoinReject": [
+    "拒绝加入申请",
+    "Join rejected"
+  ],
+  "manage.logs.loadFailed": [
+    "管理日志加载失败",
+    "Failed to load audit log"
+  ],
+  "manage.members.subtitle": [
+    "成员搜索、身份组创建与权限分配、禁言与移除（FR-MGR-09）",
+    "Search members, manage roles, mutes and removal"
+  ],
+  "manage.members.noPermissions": [
+    "无权限点",
+    "No permissions"
+  ],
+  "manage.members.rolesFailed": [
+    "身份组加载失败",
+    "Failed to load roles"
+  ],
+  "manage.members.deleteRole": [
+    "删除身份组",
+    "Delete role"
+  ],
+  "manage.members.roleDeleted": [
+    "身份组已删除",
+    "Role deleted"
+  ],
+  "manage.profile.subtitle": [
+    "名称、头像、封面、简介与可见性；修改后立即生效",
+    "Name, avatar, cover, description and visibility"
+  ],
+  "manage.reports.subtitle": [
+    "频道内帖子/评论举报的处置（FR-ITR-03）",
+    "Handle reports on posts and comments"
+  ],
+  "manage.reports.submit": [
+    "提交处理",
+    "Submit"
+  ],
+  "manage.reports.pending": [
+    "待处理",
+    "Pending"
+  ],
+  "manage.reports.approved": [
+    "已通过",
+    "Approved"
+  ],
+  "manage.reports.rejected": [
+    "已驳回",
+    "Rejected"
+  ],
+  "manage.reports.reject": [
+    "驳回举报",
+    "Reject"
+  ],
+  "manage.reports.approve": [
+    "通过举报",
+    "Approve"
+  ],
+  "manage.reports.deleteContent": [
+    "删除被举报内容",
+    "Delete reported content"
+  ],
+  "manage.reports.loadFailed": [
+    "举报列表加载失败",
+    "Failed to load reports"
+  ],
+  "manage.reports.handled": [
+    "举报已处理",
+    "Report handled"
+  ],
+  "manage.reports.noNote": [
+    "（无补充说明）",
+    "(no note)"
+  ],
+  "admin.aiModels.title": [
+    "AI 模型配置",
+    "AI models"
+  ],
+  "admin.aiModels.subtitle": [
+    "LMStudio / OpenAI 兼容协议；API Key 只写不读（仅返回掩码）",
+    "LM Studio / OpenAI compatible. API keys are write-only (masked on read)."
+  ],
+  "admin.aiModels.create": [
+    "新增配置",
+    "New model"
+  ],
+  "admin.aiModels.default": [
+    "默认",
+    "Default"
+  ],
+  "admin.aiModels.disabled": [
+    "已停用",
+    "Disabled"
+  ],
+  "admin.aiModels.test": [
+    "测试连接",
+    "Test connection"
+  ],
+  "admin.aiModels.listModels": [
+    "拉取模型列表",
+    "Fetch models"
+  ],
+  "admin.aiModels.loadFailed": [
+    "AI 模型配置加载失败",
+    "Failed to load AI models"
+  ],
+  "admin.aiModels.nameRequired": [
+    "请填写配置名称",
+    "Enter a name"
+  ],
+  "admin.aiModels.baseUrlRequired": [
+    "请填写 Base URL",
+    "Enter the Base URL"
+  ],
+  "admin.aiModels.modelRequired": [
+    "请填写模型 ID",
+    "Enter the model ID"
+  ],
+  "admin.aiModels.baseUrlInvalid": [
+    "Base URL 需以 http:// 或 https:// 开头",
+    "Base URL must start with http:// or https://"
+  ],
+  "admin.aiModels.updated": [
+    "模型配置已更新",
+    "Model updated"
+  ],
+  "admin.aiModels.created": [
+    "模型配置已创建",
+    "Model created"
+  ],
+  "admin.aiModels.testFirst": [
+    "请先填写 Base URL",
+    "Fill in the Base URL first"
+  ],
+  "admin.aiModels.testFailed": [
+    "测试连接失败",
+    "Connection test failed"
+  ],
+  "admin.aiModels.emptyUpstream": [
+    "上游未返回模型列表",
+    "Upstream returned no models"
+  ],
+  "admin.aiModels.listFailed": [
+    "模型列表获取失败",
+    "Failed to fetch models"
+  ],
+  "admin.aiModels.deleteTitle": [
+    "删除配置",
+    "Delete model"
+  ],
+  "admin.aiModels.deleted": [
+    "已删除",
+    "Deleted"
+  ],
+  "admin.aiModels.deleteFailed": [
+    "删除失败",
+    "Delete failed"
+  ],
+  "admin.aiModels.keyConfigured": [
+    "已配置密钥",
+    "Key configured"
+  ],
+  "admin.aiModels.keyNotNeeded": [
+    "无需密钥",
+    "No key needed"
+  ],
+  "admin.aiModels.edit": [
+    "编辑模型配置",
+    "Edit model"
+  ],
+  "admin.aiModels.new": [
+    "新增模型配置",
+    "New model"
+  ],
+  "admin.aiModels.connectFailed": [
+    "连接失败",
+    "Connection failed"
+  ],
+  "admin.aiModels.notReturned": [
+    "未返回",
+    "Not returned"
+  ],
+  "admin.channels.title": [
+    "频道管理",
+    "Channels"
+  ],
+  "admin.channels.subtitle": [
+    "封禁/解禁频道；封禁后频道对外不可见（status=BANNED）",
+    "Ban or unban channels. Banned channels become invisible."
+  ],
+  "admin.channels.loadFailed": [
+    "频道列表加载失败",
+    "Failed to load channels"
+  ],
+  "admin.channels.unbanTitle": [
+    "解禁频道",
+    "Unban channel"
+  ],
+  "admin.channels.banTitle": [
+    "封禁频道",
+    "Ban channel"
+  ],
+  "admin.channels.unbanned": [
+    "已解禁",
+    "Unbanned"
+  ],
+  "admin.channels.banned": [
+    "已封禁",
+    "Banned"
+  ],
+  "admin.channels.actionFailed": [
+    "操作失败",
+    "Action failed"
+  ],
+  "admin.channels.unban": [
+    "解禁",
+    "Unban"
+  ],
+  "admin.channels.ban": [
+    "封禁",
+    "Ban"
+  ],
+  "admin.layout.title": [
+    "平台管理后台",
+    "Platform admin"
+  ],
+  "admin.layout.subtitle": [
+    "平台运营与内容治理（仅平台管理员可见）",
+    "Operations and moderation (admins only)"
+  ],
+  "admin.layout.backHome": [
+    "返回首页",
+    "Back to home"
+  ],
+  "admin.layout.overview": [
+    "平台数据",
+    "Overview"
+  ],
+  "admin.layout.ai": [
+    "AI 配置",
+    "AI"
+  ],
+  "admin.layout.reports": [
+    "举报处置",
+    "Reports"
+  ],
+  "admin.layout.users": [
+    "用户管理",
+    "Users"
+  ],
+  "admin.layout.channels": [
+    "频道管理",
+    "Channels"
+  ],
+  "admin.layout.authFailed": [
+    "管理员身份校验失败",
+    "Admin verification failed"
+  ],
+  "admin.overview.title": [
+    "平台数据概览",
+    "Platform overview"
+  ],
+  "admin.overview.subtitle": [
+    "全站规模与今日活跃的近似统计（FR-PADM-03）",
+    "Site-wide scale and today's activity"
+  ],
+  "admin.overview.users": [
+    "用户总数",
+    "Users"
+  ],
+  "admin.overview.channels": [
+    "频道总数",
+    "Channels"
+  ],
+  "admin.overview.channelsHint": [
+    "仅统计运营中的频道",
+    "Active channels only"
+  ],
+  "admin.overview.posts": [
+    "帖子总数",
+    "Posts"
+  ],
+  "admin.overview.comments": [
+    "评论总数",
+    "Comments"
+  ],
+  "admin.overview.commentsHint": [
+    "已发布评论",
+    "Published comments"
+  ],
+  "admin.overview.activeUsers": [
+    "今日活跃用户",
+    "Active users today"
+  ],
+  "admin.overview.activeHint": [
+    "发帖/评论/点赞去重（UTC 自然日）",
+    "Unique users posting, commenting or liking (UTC day)"
+  ],
+  "admin.overview.aiSessions": [
+    "AI 会话",
+    "AI conversations"
+  ],
+  "admin.overview.pendingReports": [
+    "待处理举报",
+    "Pending reports"
+  ],
+  "admin.overview.pendingHint": [
+    "PENDING 状态",
+    "Status PENDING"
+  ],
+  "admin.overview.reportsNotReady": [
+    "举报表尚未就绪（等待 V2 迁移）",
+    "Reports table not ready yet (V2 migration)"
+  ],
+  "admin.overview.loadFailed": [
+    "平台数据加载失败",
+    "Failed to load platform stats"
+  ],
+  "admin.reports.title": [
+    "举报处置",
+    "Reports"
+  ],
+  "admin.reports.subtitle": [
+    "处理社区举报（驳回 / 处置完成）；数据来自 reports 表",
+    "Handle community reports"
+  ],
+  "admin.reports.handle": [
+    "处置",
+    "Handle"
+  ],
+  "admin.reports.done": [
+    "处置完成",
+    "Resolved"
+  ],
+  "admin.reports.submit": [
+    "提交",
+    "Submit"
+  ],
+  "admin.reports.submitted": [
+    "处置已提交",
+    "Report handled"
+  ],
+  "admin.reports.failed": [
+    "处置失败",
+    "Failed to handle report"
+  ],
+  "admin.reports.source": [
+    "reports（V2 迁移）",
+    "reports (V2)"
+  ],
+  "admin.users.title": [
+    "用户管理",
+    "Users"
+  ],
+  "admin.users.subtitle": [
+    "禁用/解禁用户账号；禁用后该用户无法登录（status=BANNED）",
+    "Disable or enable accounts. Disabled users cannot sign in."
+  ],
+  "admin.users.loadFailed": [
+    "用户列表加载失败",
+    "Failed to load users"
+  ],
+  "admin.users.enableTitle": [
+    "解禁用户",
+    "Enable user"
+  ],
+  "admin.users.disableTitle": [
+    "禁用用户",
+    "Disable user"
+  ],
+  "admin.users.enabled": [
+    "已解禁",
+    "Enabled"
+  ],
+  "admin.users.disabled": [
+    "已禁用",
+    "Disabled"
+  ],
+  "admin.users.actionFailed": [
+    "操作失败",
+    "Action failed"
+  ],
+  "admin.users.enable": [
+    "解禁",
+    "Enable"
+  ],
+  "admin.users.disable": [
+    "禁用",
+    "Disable"
+  ],
+  "assistant.page.save": [
+    "保存设置",
+    "Save settings"
+  ],
+  "assistant.page.identity": [
+    "助手身份",
+    "Assistant identity"
+  ],
+  "assistant.page.masterHint": [
+    "关闭后频道页面板与自动任务都会停用（已生成内容不受影响）。",
+    "Disabling stops the channel panel and all automated tasks (existing content stays)."
+  ],
+  "assistant.page.tasks": [
+    "自动运营任务",
+    "Automated tasks"
+  ],
+  "assistant.page.daily": [
+    "每日总结（日报）",
+    "Daily summary"
+  ],
+  "assistant.page.weekly": [
+    "每周总结（周报）",
+    "Weekly summary"
+  ],
+  "assistant.page.weeklyHint": [
+    "每周一生成频道周报帖子",
+    "Posts a weekly digest every Monday"
+  ],
+  "assistant.page.monthly": [
+    "月度贡献榜",
+    "Monthly leaderboard"
+  ],
+  "assistant.page.monthlyHint": [
+    "每月 1 日生成月度贡献者榜单帖子",
+    "Posts a contributor leaderboard on the 1st"
+  ],
+  "assistant.page.autoPost": [
+    "自动发帖",
+    "Auto post"
+  ],
+  "assistant.page.autoPostHint": [
+    "基于近期热门话题生成互动帖",
+    "Creates a post from recent hot topics"
+  ],
+  "assistant.page.autoComment": [
+    "自动评论",
+    "Auto comment"
+  ],
+  "assistant.page.autoCommentHint": [
+    "以助手身份参与近期帖子讨论（AI 生成标识）",
+    "Comments on recent posts as the assistant"
+  ],
+  "assistant.page.autoLike": [
+    "自动点赞",
+    "Auto like"
+  ],
+  "assistant.page.autoLikeHint": [
+    "为近期优质帖子点赞",
+    "Likes recent good posts"
+  ],
+  "assistant.page.autoReply": [
+    "被动接话",
+    "Reply to replies"
+  ],
+  "assistant.page.autoReplyHint": [
+    "有人回复助手的评论时，助手自动接着回复（计入每日评论限额）",
+    "Replies back when someone replies to the assistant (counts toward the daily limit)"
+  ],
+  "assistant.page.cond1": [
+    "「频道助手总开关」开启，且下方对应任务开关开启（手动「立即执行」不受开关限制）。",
+    "The master switch and the task switch are on (manual runs ignore switches)."
+  ],
+  "assistant.page.cond2": [
+    "平台已配置可用 AI 模型（未配置时所有任务跳过）。",
+    "A usable AI model is configured (otherwise everything is skipped)."
+  ],
+  "assistant.page.cond3": [
+    "日报 / 周报 / 榜单只在「日报执行小时（UTC）」那一小时触发；周报需周一、榜单需每月 1 日。",
+    "Digests only fire during the configured UTC hour; weekly needs Monday, monthly needs the 1st."
+  ],
+  "assistant.page.cond4": [
+    "频道内要有可用的内容素材（无帖子/无可评论对象时会跳过）。",
+    "The channel needs content to work with."
+  ],
+  "assistant.page.cond5": [
+    "未超过「频率与限额」里的每日上限；同一周期只执行一次（手动执行不占用周期名额）。",
+    "Within the daily limits; once per period (manual runs don't consume the slot)."
+  ],
+  "assistant.page.limits": [
+    "频率与限额",
+    "Frequency & limits"
+  ],
+  "assistant.page.limitsHint": [
+    "限额按 UTC 自然日统计；调度每小时检查一次，达到上限当天不再执行。",
+    "Limits reset per UTC day; the scheduler checks hourly."
+  ],
+  "assistant.page.logs": [
+    "手动试运行与执行日志",
+    "Manual runs & logs"
+  ],
+  "assistant.page.logsHint": [
+    "任务执行结果落库（ai_task_logs）；同一周期任务幂等，未配置模型时会明确跳过。",
+    "Results are stored in ai_task_logs; runs are idempotent per period."
+  ],
+  "assistant.page.dailyShort": [
+    "日报",
+    "Daily"
+  ],
+  "assistant.page.weeklyShort": [
+    "周报",
+    "Weekly"
+  ],
+  "assistant.page.loadFailed": [
+    "频道助手设置加载失败（需要频道主/超级管理员权限）",
+    "Failed to load assistant settings (owner or super admin required)"
+  ],
+  "assistant.page.saved": [
+    "频道助手设置已保存",
+    "Assistant settings saved"
+  ],
+  "assistant.page.accountReady": [
+    "助手账号已就绪，可以开始自动运营",
+    "Assistant account ready"
+  ],
+  "assistant.page.accountFailed": [
+    "助手账号创建失败",
+    "Failed to create assistant account"
+  ],
+  "assistant.page.runTask": [
+    "执行任务",
+    "Run task"
+  ],
+  "assistant.page.runSuccess": [
+    "任务执行成功",
+    "Task completed"
+  ],
+  "assistant.page.runSkipped": [
+    "任务已跳过",
+    "Task skipped"
+  ],
+  "assistant.page.runFailed": [
+    "任务执行失败",
+    "Task failed"
+  ],
+  "assistant.page.runTriggerFailed": [
+    "任务触发失败",
+    "Failed to trigger the task"
+  ],
+  "assistant.page.logsFailed": [
+    "执行日志加载失败",
+    "Failed to load logs"
+  ],
+  "assistant.page.running": [
+    "执行中",
+    "Running"
+  ],
+  "assistant.page.success": [
+    "成功",
+    "Success"
+  ],
+  "assistant.page.skipped": [
+    "已跳过",
+    "Skipped"
+  ],
+  "assistant.page.failed": [
+    "失败",
+    "Failed"
+  ],
+  "assistant.page.replyMention": [
+    "响应@提及",
+    "Reply to mention"
+  ],
+  "assistant.page.noBio": [
+    "还没有填写简介",
+    "No bio yet"
+  ],
+  "assistant.page.fixAccount": [
+    "修复助手账号",
+    "Repair assistant account"
+  ],
+  "assistant.page.createAccount": [
+    "创建助手账号",
+    "Create assistant account"
+  ],
+  "assistant.page.generating": [
+    "AI 生成中（约 1–2 分钟）…",
+    "Generating (1–2 min)…"
+  ],
+  "validation.usernamePattern": [
+    "用户名需为 3–20 位字母、数字、下划线或连字符",
+    "Username must be 3–20 letters, digits, underscores or hyphens"
+  ],
+  "validation.passwordMin": [
+    "密码至少 8 位",
+    "Password must be at least 8 characters"
+  ],
+  "validation.passwordMax": [
+    "密码不能超过 64 位",
+    "Password must be at most 64 characters"
+  ],
+  "validation.passwordPattern": [
+    "密码需同时包含字母和数字",
+    "Password must contain both letters and digits"
+  ],
+  "validation.nicknameMax": [
+    "昵称不能超过 20 个字符",
+    "Nickname must be at most 20 characters"
+  ],
+  "validation.channelNameRequired": [
+    "请输入频道名称",
+    "Enter a channel name"
+  ],
+  "validation.channelNameMin": [
+    "频道名称至少 2 个字符",
+    "Channel name must be at least 2 characters"
+  ],
+  "validation.channelNameMax": [
+    "频道名称最多 30 个字符",
+    "Channel name must be at most 30 characters"
+  ],
+  "validation.channelDescMax": [
+    "简介不能超过 200 个字符",
+    "Description must be at most 200 characters"
+  ],
+  "permission.content": [
+    "内容",
+    "Content"
+  ],
+  "permission.comment": [
+    "评论与回复",
+    "Comments"
+  ],
+  "permission.pinPost": [
+    "置顶帖子",
+    "Pin posts"
+  ],
+  "permission.featurePost": [
+    "设置精华",
+    "Feature posts"
+  ],
+  "permission.editProfile": [
+    "修改频道资料",
+    "Edit channel profile"
+  ],
+  "permission.editVisibility": [
+    "修改可见性",
+    "Edit visibility"
+  ],
+  "permission.inviteMember": [
+    "邀请成员",
+    "Invite members"
+  ],
+  "permission.createInvite": [
+    "创建邀请链接",
+    "Create invite links"
+  ],
+  "permission.approveJoin": [
+    "审批加入申请",
+    "Approve join requests"
+  ],
+  "permission.manageRole": [
+    "身份组管理",
+    "Manage roles"
+  ],
+  "permission.viewLogs": [
+    "查看管理日志",
+    "View audit log"
+  ],
+  "permission.operations": [
+    "运营",
+    "Operations"
+  ],
+  "permission.viewStats": [
+    "查看数据中心",
+    "View analytics"
+  ],
+  "permission.boardAdmin": [
+    "子板块管理员",
+    "Board admin"
+  ],
+  "permission.member": [
+    "普通成员",
+    "Member"
+  ],
+  "time.justNow": [
+    "刚刚",
+    "just now"
+  ],
+  "gender.private": [
+    "保密",
+    "Private"
+  ],
+  "error.network": [
+    "无法连接服务器，请确认后端服务已启动后重试",
+    "Cannot reach the server. Make sure the backend is running."
+  ],
+  "error.badRequest": [
+    "请求参数有误，请检查后重试",
+    "Invalid request, please check and retry"
+  ],
+  "error.unauthorized": [
+    "登录状态已失效，请重新登录",
+    "Session expired, please sign in again"
+  ],
+  "error.forbidden": [
+    "没有权限执行该操作",
+    "You don't have permission to do that"
+  ],
+  "error.notFound": [
+    "内容不存在或不可见",
+    "Content not found or not visible"
+  ],
+  "error.conflict": [
+    "数据冲突，请刷新后重试",
+    "Conflict, please refresh and retry"
+  ],
+  "error.businessRule": [
+    "操作不满足业务规则",
+    "Action not allowed"
+  ],
+  "error.tooManyRequests": [
+    "操作过于频繁，请稍后再试",
+    "Too many requests, please slow down"
+  ],
+  "error.server": [
+    "服务器开小差了，请稍后重试",
+    "Server error, please retry later"
+  ],
+  "error.unavailable": [
+    "服务暂时不可用，请稍后重试",
+    "Service unavailable, please retry later"
+  ],
+  "error.generic": [
+    "请求失败，请稍后重试",
+    "Request failed, please retry"
+  ],
+  "recommend.defaultReason": [
+    "根据你的兴趣推荐",
+    "Recommended for you"
+  ],
+  "media.uploadTypeInvalid": [
+    "仅支持图片（JPG/PNG/WebP/GIF）或视频（MP4/WebM）文件",
+    "Only images (JPG/PNG/WebP/GIF) or videos (MP4/WebM)"
+  ],
+  "ai.sessionExpired": [
+    "登录状态已失效，请刷新页面后重试",
+    "Session expired, please refresh"
+  ],
+  "ai.requestFailed": [
+    "AI 对话请求失败，请稍后重试",
+    "AI request failed, please retry"
+  ],
+  "auth.refreshFailed": [
+    "刷新登录态失败",
+    "Failed to refresh session"
+  ],
+  "auth.loginRequired": [
+    "请先登录后再操作",
+    "Please sign in first"
+  ],
+  "auth.guest": [
+    "游客",
+    "Guest"
+  ],
+  "ai.statusFailed": [
+    "AI 能力状态加载失败",
+    "Failed to load AI status"
+  ],
+  "channel.mineFailed": [
+    "我的频道加载失败",
+    "Failed to load my channels"
+  ],
+  "notification.loadFailed": [
+    "通知加载失败",
+    "Failed to load notifications"
+  ],
+  "dm.loadFailed": [
+    "私信消息加载失败",
+    "Failed to load messages"
+  ],
+  "realtime.connectFailed": [
+    "实时通道连接失败",
+    "Realtime connection failed"
+  ],
+  "realtime.connectRetrying": [
+    "实时通道连接失败，将自动重试",
+    "Realtime connection failed, retrying automatically"
+  ],
+  "layout.sidebarLabel": [
+    "侧边栏导航",
+    "Sidebar navigation"
+  ],
+  "layout.openMenu": [
+    "打开导航菜单",
+    "Open navigation"
+  ],
+  "common.username": [
+    "用户名",
+    "Username"
+  ],
+  "common.password": [
+    "密码",
+    "Password"
+  ],
+  "common.nickname": [
+    "昵称",
+    "Nickname"
+  ],
+  "common.signature": [
+    "签名",
+    "Bio"
+  ],
+  "common.description": [
+    "描述",
+    "Description"
+  ],
+  "common.comment": [
+    "评论",
+    "Comment"
+  ],
+  "common.allStatus": [
+    "全部状态",
+    "All statuses"
+  ],
+  "common.retryHint": [
+    "调整筛选条件后重试。",
+    "Adjust the filters and try again."
+  ],
+  "common.startDate": [
+    "开始日期",
+    "Start date"
+  ],
+  "common.endDate": [
+    "结束日期",
+    "End date"
+  ],
+  "common.optionalTitle": [
+    "标题（选填）",
+    "Title (optional)"
+  ],
+  "common.trendChart": [
+    "{label} 趋势图",
+    "{label} trend"
+  ],
+  "common.loadingPosts": [
+    "正在加载帖子…",
+    "Loading posts…"
+  ],
+  "media.crop.avatarLabel": [
+    "上传头像",
+    "Upload avatar"
+  ],
+  "media.crop.squareHint": [
+    "建议正方形，1:1",
+    "Square, 1:1 recommended"
+  ],
+  "media.crop.coverLabel": [
+    "上传封面",
+    "Upload cover"
+  ],
+  "media.crop.coverHint": [
+    "长条图，16:9",
+    "Wide image, 16:9"
+  ],
+  "media.crop.backgroundLabel": [
+    "上传背景",
+    "Upload cover"
+  ],
+  "media.crop.backgroundHint": [
+    "长条图，4:1",
+    "Wide image, 4:1"
+  ],
+  "media.crop.pending": [
+    "待裁剪图片",
+    "Image to crop"
+  ],
+  "media.crop.removeMedia": [
+    "移除该媒体",
+    "Remove media"
+  ],
+  "media.crop.insertEmoji": [
+    "插入 emoji",
+    "Insert emoji"
+  ],
+  "media.uploadMedia": [
+    "上传图片或视频",
+    "Upload image or video"
+  ],
+  "media.pickFile": [
+    "选择图片或视频文件",
+    "Choose an image or video"
+  ],
+  "media.viewer.preview": [
+    "图片预览",
+    "Image preview"
+  ],
+  "media.viewer.close": [
+    "关闭预览",
+    "Close preview"
+  ],
+  "media.viewer.prev": [
+    "上一张",
+    "Previous"
+  ],
+  "media.viewer.next": [
+    "下一张",
+    "Next"
+  ],
+  "media.viewer.unsupported": [
+    "您的浏览器不支持视频播放。",
+    "Your browser does not support video playback."
+  ],
+  "media.viewer.mutedPlaying": [
+    "静音播放中",
+    "Playing muted"
+  ],
+  "media.viewer.photo": [
+    "图片 {n}",
+    "Image {n}"
+  ],
+  "media.viewer.postPhoto": [
+    "帖子图片 {n}",
+    "Post image {n}"
+  ],
+  "media.viewer.postVideo": [
+    "帖子视频 {n}",
+    "Post video {n}"
+  ],
+  "media.viewer.viewNth": [
+    "查看第 {n} 张图片",
+    "View image {n}"
+  ],
+  "media.selectedImage": [
+    "已选择图片 {n}",
+    "Selected image {n}"
+  ],
+  "comment.section": [
+    "评论区",
+    "Comments"
+  ],
+  "comment.sortLabel": [
+    "评论排序",
+    "Sort comments"
+  ],
+  "comment.emptyTitle": [
+    "还没有评论",
+    "No comments yet"
+  ],
+  "comment.emptyHint": [
+    "成为第一个留下想法的人吧。",
+    "Be the first to share your thoughts."
+  ],
+  "comment.loadMore": [
+    "加载更多评论",
+    "Load more comments"
+  ],
+  "comment.allLoaded": [
+    "已加载全部评论",
+    "All comments loaded"
+  ],
+  "comment.guestHint": [
+    "游客可浏览评论，登录后即可参与讨论。",
+    "Guests can read; sign in to join the discussion."
+  ],
+  "comment.joinHintLink": [
+    "前往频道页加入 →",
+    "Go to the channel to join →"
+  ],
+  "comment.mediaLimit": [
+    "最多添加 {n} 个媒体文件",
+    "Up to {n} media files"
+  ],
+  "comment.replyTo": [
+    "回复 @{name}",
+    "Replying to @{name}"
+  ],
+  "post.placeholderQuick": [
+    "说点什么，和频道里的岛民聊聊…",
+    "Say something to the islanders…"
+  ],
+  "post.quickLabel": [
+    "快捷发帖内容",
+    "Quick post content"
+  ],
+  "post.mentionLabel": [
+    "@ 提及",
+    "@ Mention"
+  ],
+  "post.boardPick": [
+    "选择板块",
+    "Choose a board"
+  ],
+  "post.titlePlaceholder": [
+    "标题（选填）",
+    "Title (optional)"
+  ],
+  "post.longContentHint": [
+    "写下你想分享的内容…（支持标题、加粗、列表、引用、链接与图片）",
+    "Write your post… (headings, bold, lists, quotes, links and images)"
+  ],
+  "post.composerGuestHint": [
+    "登录后即可在本频道发帖、评论与点赞。",
+    "Sign in to post, comment and like here."
+  ],
+  "post.publishTo": [
+    "将发布到 {board}",
+    "Posting to {board}"
+  ],
+  "post.commentOpen": [
+    "打开评论",
+    "Open comments"
+  ],
+  "post.adminActions": [
+    "管理操作",
+    "Admin actions"
+  ],
+  "post.userCardOf": [
+    "查看 {name} 的用户卡片",
+    "Open {name}'s card"
+  ],
+  "post.adminHint": [
+    "{action}操作请在频道管理中心完成",
+    "Use the channel console to {action}"
+  ],
+  "editor.toolbar": [
+    "富文本工具栏",
+    "Formatting toolbar"
+  ],
+  "editor.bulletList": [
+    "无序列表",
+    "Bullet list"
+  ],
+  "editor.orderedList": [
+    "有序列表",
+    "Numbered list"
+  ],
+  "editor.code": [
+    "行内代码",
+    "Inline code"
+  ],
+  "editor.insertVideo": [
+    "插入视频",
+    "Insert video"
+  ],
+  "editor.redo": [
+    "重做",
+    "Redo"
+  ],
+  "editor.clearFormat": [
+    "清除格式",
+    "Clear formatting"
+  ],
+  "channel.nameLabel": [
+    "频道名称",
+    "Channel name"
+  ],
+  "channel.visibility": [
+    "可见性",
+    "Visibility"
+  ],
+  "channel.visibilityPublic": [
+    "公开可见（未加入可浏览）",
+    "Public (visible without joining)"
+  ],
+  "channel.visibilityMembers": [
+    "仅成员可见",
+    "Members only"
+  ],
+  "channel.joinMethod": [
+    "加入方式",
+    "Join method"
+  ],
+  "channel.type": [
+    "频道类型",
+    "Channel type"
+  ],
+  "channel.typePublic": [
+    "公开频道",
+    "Public"
+  ],
+  "channel.typePrivate": [
+    "私密频道",
+    "Private"
+  ],
+  "channel.namePlaceholder": [
+    "例如：VRChat 中文社区",
+    "e.g. VRChat Community"
+  ],
+  "channel.descPlaceholder": [
+    "介绍一下这个频道（选填）",
+    "Describe this channel (optional)"
+  ],
+  "channel.avatarPick": [
+    "选择频道头像文件",
+    "Choose a channel avatar"
+  ],
+  "channel.profileReadonly": [
+    "你当前没有修改频道资料的权限，仅可查看。",
+    "You can only view the channel profile."
+  ],
+  "channel.channelNo": [
+    "频道号",
+    "Channel number"
+  ],
+  "channel.loading": [
+    "正在加载频道…",
+    "Loading channel…"
+  ],
+  "channel.reload": [
+    "重新加载频道",
+    "Reload channel"
+  ],
+  "channel.content": [
+    "频道内容",
+    "Channel content"
+  ],
+  "channel.contentFilter": [
+    "频道内容筛选",
+    "Content filters"
+  ],
+  "channel.noPosts": [
+    "还没有帖子",
+    "No posts yet"
+  ],
+  "channel.info": [
+    "频道信息",
+    "Channel info"
+  ],
+  "channel.searchIn": [
+    "频道内搜索",
+    "Search in channel"
+  ],
+  "channel.publishLong": [
+    "发布长文",
+    "New post"
+  ],
+  "channel.openAssistant": [
+    "打开频道助手",
+    "Open assistant"
+  ],
+  "channel.feedSort": [
+    "动态排序",
+    "Sort feed"
+  ],
+  "channel.feedLoginRequired": [
+    "登录后查看频道动态",
+    "Sign in to view the feed"
+  ],
+  "channel.feedJoinHint": [
+    "加入频道后，就能在这里看到岛民们的最新帖子。",
+    "Join to see the latest posts here."
+  ],
+  "channel.feedLoading": [
+    "正在加载动态…",
+    "Loading feed…"
+  ],
+  "channel.feedEmpty": [
+    "还没有动态",
+    "No posts yet"
+  ],
+  "channel.feedEmptyHint": [
+    "加入感兴趣的频道，岛民的新帖子会出现在这里。",
+    "Join channels and new posts will show up here."
+  ],
+  "channel.muteAllBanner": [
+    "全员禁言中，结束时间：{time}，仅频道主与超级管理员可发言",
+    "Muted until {time}; only the owner and super admins can post"
+  ],
+  "channel.muteDuration": [
+    "禁言时长",
+    "Mute duration"
+  ],
+  "channel.customMinutes": [
+    "自定义（分钟）",
+    "Custom (minutes)"
+  ],
+  "channel.dissolveInputPlaceholder": [
+    "输入完整频道名称以确认",
+    "Type the full channel name"
+  ],
+  "channel.settingsTitle": [
+    "频道设置 · {name}",
+    "Channel settings · {name}"
+  ],
+  "channel.searchContent": [
+    "搜索频道内容",
+    "Search in channel"
+  ],
+  "channel.messages": [
+    "频道消息",
+    "Channel messages"
+  ],
+  "channel.ownerOnlyManage": [
+    "你没有访问该频道管理中心的权限。只有频道主、超级管理员或具备管理权限的身份组可以进入。",
+    "Only the owner, super admins or roles with manage permission can open the console."
+  ],
+  "channel.manageContent": [
+    "管理中心内容：{section}",
+    "Console section: {section}"
+  ],
+  "channel.infoUnavailable": [
+    "频道信息不可用",
+    "Channel info unavailable"
+  ],
+  "channel.manageNav": [
+    "频道管理导航",
+    "Console navigation"
+  ],
+  "channel.managePick": [
+    "选择管理的频道",
+    "Choose a channel"
+  ],
+  "channel.manageFeatures": [
+    "管理功能",
+    "Console features"
+  ],
+  "channel.boardsReadonly": [
+    "你没有板块管理权限，仅可查看。",
+    "You can only view boards."
+  ],
+  "channel.loadingBoards": [
+    "正在加载板块…",
+    "Loading boards…"
+  ],
+  "channel.noBoards": [
+    "暂无板块",
+    "No boards yet"
+  ],
+  "channel.noBoardsHint": [
+    "创建板块后，帖子可按板块归类。",
+    "Create boards to group posts."
+  ],
+  "channel.boardName": [
+    "板块名称",
+    "Board name"
+  ],
+  "channel.boardDesc": [
+    "板块描述",
+    "Board description"
+  ],
+  "channel.boardSort": [
+    "排序（越小越靠前）",
+    "Order (lower first)"
+  ],
+  "channel.publicVisible": [
+    "公开可见",
+    "Public"
+  ],
+  "channel.inviteExpiry": [
+    "有效期",
+    "Expires in"
+  ],
+  "channel.inviteUsage": [
+    "使用次数",
+    "Uses"
+  ],
+  "channel.inviteEmpty": [
+    "还没有邀请链接",
+    "No invite links yet"
+  ],
+  "channel.inviteEmptyHint": [
+    "生成链接后邀请岛民加入频道。",
+    "Create a link to invite islanders."
+  ],
+  "channel.inviteNoPending": [
+    "暂无待审批申请",
+    "No pending requests"
+  ],
+  "channel.memberSearch": [
+    "搜索成员用户名 / 昵称",
+    "Search members"
+  ],
+  "channel.memberNotFound": [
+    "没有找到成员",
+    "No members found"
+  ],
+  "channel.memberNotFoundHint": [
+    "试试其他关键词，或等待更多岛民加入。",
+    "Try another keyword or wait for more members."
+  ],
+  "channel.memberTotal": [
+    "共 {n} 名成员",
+    "{n} members"
+  ],
+  "channel.roleName": [
+    "身份组名称",
+    "Role name"
+  ],
+  "channel.roleNamePlaceholder": [
+    "例如：活动管理员",
+    "e.g. Event manager"
+  ],
+  "channel.roleDescPlaceholder": [
+    "这个身份组负责什么？",
+    "What does this role do?"
+  ],
+  "channel.roleBoards": [
+    "子板块范围（可选）",
+    "Board scope (optional)"
+  ],
+  "channel.roleAllBoards": [
+    "不限定板块",
+    "All boards"
+  ],
+  "channel.rolePermissions": [
+    "权限点",
+    "Permissions"
+  ],
+  "channel.roleEmpty": [
+    "暂无身份组",
+    "No roles yet"
+  ],
+  "channel.roleEmptyHint": [
+    "创建自定义身份组并分配权限点。",
+    "Create custom roles and assign permissions."
+  ],
+  "ai.guestTitle": [
+    "登录后使用 AI 问答",
+    "Sign in to use AI"
+  ],
+  "ai.guestHint": [
+    "频道问问会基于全站公开内容回答，频道助手只在当前频道内检索；都需要登录后使用。",
+    "Ask searches public content; the channel assistant only searches this channel. Sign in to use both."
+  ],
+  "ai.startFirst": [
+    "开始你的第一个问题",
+    "Ask your first question"
+  ],
+  "ai.addImage": [
+    "添加图片",
+    "Add image"
+  ],
+  "ai.removeImage": [
+    "移除图片",
+    "Remove image"
+  ],
+  "ai.pickModel": [
+    "选择模型",
+    "Choose a model"
+  ],
+  "ai.currentModel": [
+    "当前模型：{name}",
+    "Model: {name}"
+  ],
+  "ai.typing": [
+    "AI 正在输入",
+    "AI is typing"
+  ],
+  "ai.attachedImage": [
+    "附图 {n}",
+    "Image {n}"
+  ],
+  "ai.tokenUsage": [
+    "约 {n} tokens",
+    "~{n} tokens"
+  ],
+  "ai.noConversations": [
+    "还没有会话",
+    "No conversations yet"
+  ],
+  "ai.noConversationsHint": [
+    "点击「新会话」开始第一次提问",
+    "Click “New chat” to ask your first question"
+  ],
+  "ai.sources": [
+    "来源引用（{n}）",
+    "Sources ({n})"
+  ],
+  "ai.backToChannel": [
+    "返回频道",
+    "Back to channel"
+  ],
+  "ai.closeAssistant": [
+    "关闭频道助手",
+    "Close assistant"
+  ],
+  "ai.assistantGuest": [
+    "登录后使用频道助手",
+    "Sign in to use the assistant"
+  ],
+  "ai.assistantHint": [
+    "频道助手基于本频道内容回答问题。",
+    "The assistant answers from this channel's content."
+  ],
+  "ai.assistantUnavailable": [
+    "频道助手暂不可用",
+    "Assistant unavailable"
+  ],
+  "ai.assistantDisabledTitle": [
+    "频道主还没有开启频道助手",
+    "The owner hasn't enabled the assistant"
+  ],
+  "ai.mentionLabel": [
+    "提及频道成员 {label}",
+    "Mention a member {label}"
+  ],
+  "ai.searchNickname": [
+    "搜索昵称",
+    "Search nickname"
+  ],
+  "dm.list": [
+    "私信会话列表",
+    "Chats"
+  ],
+  "dm.searchChats": [
+    "搜索会话",
+    "Search chats"
+  ],
+  "dm.noChats": [
+    "暂无会话",
+    "No chats yet"
+  ],
+  "dm.noChatsHint": [
+    "到用户卡片点击「私信」即可发起会话。",
+    "Open a user card and tap “Message” to start."
+  ],
+  "dm.pickChat": [
+    "选择一个会话开始聊天",
+    "Pick a chat to start"
+  ],
+  "dm.pickChatHint": [
+    "或者到用户卡片中点击「私信」发起新会话。",
+    "Or start a new chat from a user card."
+  ],
+  "dm.inputPlaceholder": [
+    "输入消息，Enter 发送，Shift + Enter 换行",
+    "Type a message — Enter to send, Shift+Enter for a new line"
+  ],
+  "dm.pickImage": [
+    "选择图片发送",
+    "Send an image"
+  ],
+  "dm.searchFriend": [
+    "搜索好友或会话",
+    "Search friends or chats"
+  ],
+  "dm.noTargets": [
+    "没有可分享的对象",
+    "No one to share with"
+  ],
+  "dm.noTargetsHint": [
+    "添加好友或先发起私信，也可以直接复制帖子链接。",
+    "Add friends or start a chat, or just copy the post link."
+  ],
+  "notifications.loading": [
+    "正在加载通知…",
+    "Loading notifications…"
+  ],
+  "notifications.empty": [
+    "暂无通知",
+    "No notifications"
+  ],
+  "notifications.emptyHint": [
+    "频道互动、系统消息与好友申请会出现在这里。",
+    "Interactions, system messages and friend requests show up here."
+  ],
+  "friends.loading": [
+    "正在加载好友数据…",
+    "Loading friends…"
+  ],
+  "friends.emptyHint": [
+    "在用户卡片中点击「加好友」即可发送好友申请。",
+    "Tap “Add friend” on a user card to send a request."
+  ],
+  "hot.loading": [
+    "正在加载热门讨论…",
+    "Loading hot discussions…"
+  ],
+  "hot.empty": [
+    "暂时没有热门内容",
+    "No hot content yet"
+  ],
+  "hot.emptyHint": [
+    "等岛民们多发几篇帖子，这里就会热闹起来。",
+    "Once islanders post more, this will liven up."
+  ],
+  "hot.recommendEmpty": [
+    "暂无推荐",
+    "No recommendations"
+  ],
+  "hot.recommendEmptyHint": [
+    "继续浏览频道，推荐会越来越准。",
+    "Keep browsing — recommendations improve over time."
+  ],
+  "invite.processing": [
+    "正在处理邀请链接…",
+    "Processing invite link…"
+  ],
+  "manage.loading": [
+    "正在加载频道管理中心…",
+    "Loading channel console…"
+  ],
+  "myChannels.loading": [
+    "正在加载我的频道…",
+    "Loading my channels…"
+  ],
+  "myChannels.empty": [
+    "还没有加入频道",
+    "No channels yet"
+  ],
+  "myChannels.emptyHint": [
+    "去搜索或发现感兴趣的频道，加入后就会出现在这里。",
+    "Find and join channels — they'll appear here."
+  ],
+  "notFound.title": [
+    "404 · 这座岛不存在",
+    "404 · This island doesn't exist"
+  ],
+  "notFound.hint": [
+    "你访问的页面可能已经漂走，或者链接有误。",
+    "This page may have drifted away or the link is wrong."
+  ],
+  "post.detail.reload": [
+    "重新加载帖子",
+    "Reload post"
+  ],
+  "post.detail.edit": [
+    "编辑帖子",
+    "Edit post"
+  ],
+  "auth.usernameHint": [
+    "3–20 位字母、数字、下划线或连字符",
+    "3–20 letters, digits, underscores or hyphens"
+  ],
+  "auth.nicknameOptional": [
+    "昵称（选填）",
+    "Nickname (optional)"
+  ],
+  "auth.nicknameHint": [
+    "展示给其他岛民的名字",
+    "The name other islanders see"
+  ],
+  "auth.passwordHint": [
+    "至少 8 位，包含字母与数字",
+    "At least 8 characters with letters and digits"
+  ],
+  "auth.confirmPassword": [
+    "确认密码",
+    "Confirm password"
+  ],
+  "auth.confirmPasswordPlaceholder": [
+    "再次输入密码",
+    "Enter the password again"
+  ],
+  "search.resultType": [
+    "搜索结果类型",
+    "Result type"
+  ],
+  "search.searching": [
+    "正在搜索…",
+    "Searching…"
+  ],
+  "search.noResults": [
+    "没有找到相关内容",
+    "No results"
+  ],
+  "search.noResultsHint": [
+    "换个关键词试试，或前往频道动态浏览大家的新帖子。",
+    "Try another keyword or browse the feed."
+  ],
+  "search.searchingChannels": [
+    "正在搜索频道…",
+    "Searching channels…"
+  ],
+  "search.noChannels": [
+    "没有找到相关频道",
+    "No channels found"
+  ],
+  "search.searchingPosts": [
+    "正在搜索帖子…",
+    "Searching posts…"
+  ],
+  "search.noPosts": [
+    "没有找到相关帖子",
+    "No posts found"
+  ],
+  "search.pageTitle": [
+    "搜索群岛",
+    "Search Isles"
+  ],
+  "search.hint": [
+    "输入关键词，搜索频道与帖子。支持历史记录，单条删除或一键清空。",
+    "Search channels and posts. History supports per-item delete and clear all."
+  ],
+  "search.placeholder": [
+    "搜索频道、帖子",
+    "Search channels and posts"
+  ],
+  "search.keywordLabel": [
+    "搜索关键词",
+    "Keyword"
+  ],
+  "search.removeHistory": [
+    "删除搜索历史 {keyword}",
+    "Remove “{keyword}” from history"
+  ],
+  "search.mainNav": [
+    "主导航",
+    "Main navigation"
+  ],
+  "admin.models.loading": [
+    "正在加载模型配置…",
+    "Loading models…"
+  ],
+  "admin.models.empty": [
+    "还没有配置 AI 模型",
+    "No AI model configured"
+  ],
+  "admin.models.emptyHint": [
+    "配置 LMStudio（如 http://localhost:1234/v1）或任意 OpenAI 兼容服务后，频道问问与频道助手即可使用。",
+    "Configure LM Studio or any OpenAI-compatible service to enable Ask and the channel assistant."
+  ],
+  "admin.models.namePlaceholder": [
+    "配置名称",
+    "Config name"
+  ],
+  "admin.models.nameExample": [
+    "如：本地 LMStudio",
+    "e.g. Local LM Studio"
+  ],
+  "admin.models.modelId": [
+    "模型 ID",
+    "Model ID"
+  ],
+  "admin.models.modelExample": [
+    "如：qwen2.5-vl-7b",
+    "e.g. qwen2.5-vl-7b"
+  ],
+  "admin.models.apiKeyHint": [
+    "API Key（留空表示不修改/无需鉴权）",
+    "API key (leave blank to keep or skip)"
+  ],
+  "admin.models.apiKeyLocal": [
+    "本地 LMStudio 通常无需填写",
+    "Local LM Studio usually needs no key"
+  ],
+  "admin.models.timeout": [
+    "超时（秒）",
+    "Timeout (s)"
+  ],
+  "admin.models.maxTokens": [
+    "最大输出 token",
+    "Max output tokens"
+  ],
+  "admin.models.defaultModel": [
+    "默认模型",
+    "Default model"
+  ],
+  "admin.models.enabled": [
+    "启用",
+    "Enabled"
+  ],
+  "admin.models.vision": [
+    "支持图片（视觉）",
+    "Supports images"
+  ],
+  "admin.models.reasoning": [
+    "支持深度思考",
+    "Supports deep thinking"
+  ],
+  "admin.models.thinkingMode": [
+    "思考参数下发方式",
+    "Thinking parameter mode"
+  ],
+  "admin.models.thinkingEffort": [
+    "reasoning_effort（OpenAI / 云端推理模型）",
+    "reasoning_effort (OpenAI / cloud reasoning models)"
+  ],
+  "admin.models.thinkingBoth": [
+    "两者都发（兼容性最好）",
+    "Send both (most compatible)"
+  ],
+  "admin.models.thinkingNone": [
+    "不发送（模型自带开关，无法通过参数控制）",
+    "Send none (model controls it itself)"
+  ],
+  "admin.models.connectOk": [
+    "连接成功（{ms}ms）",
+    "Connected ({ms}ms)"
+  ],
+  "admin.models.availableModels": [
+    "可用模型：{models}",
+    "Available models: {models}"
+  ],
+  "admin.models.upstream": [
+    "上游模型：{models}",
+    "Upstream models: {models}"
+  ],
+  "admin.models.search": [
+    "搜索频道名称 / 频道号",
+    "Search by name / number"
+  ],
+  "admin.channels.active": [
+    "运营中",
+    "Active"
+  ],
+  "admin.channels.dissolved": [
+    "已解散",
+    "Dissolved"
+  ],
+  "admin.channels.noMatch": [
+    "没有匹配的频道",
+    "No matching channels"
+  ],
+  "admin.channels.membersPosts": [
+    "成员 / 帖子",
+    "Members / posts"
+  ],
+  "admin.channels.createdAt": [
+    "创建时间",
+    "Created"
+  ],
+  "admin.noPermission": [
+    "没有平台管理权限",
+    "No platform admin permission"
+  ],
+  "admin.noPermissionHint": [
+    "当前账号不是平台管理员。若需要权限，请联系平台管理员将你的账号 platform_role 设为 ADMIN，或加入配置白名单。",
+    "This account is not a platform admin. Ask an admin to set platform_role=ADMIN or add you to the allowlist."
+  ],
+  "admin.navLabel": [
+    "平台管理导航",
+    "Admin navigation"
+  ],
+  "admin.overview.loading": [
+    "正在统计平台数据…",
+    "Loading platform stats…"
+  ],
+  "admin.reports.notReady": [
+    "举报数据尚未就绪",
+    "Reports data not ready"
+  ],
+  "admin.reports.notReadyHint": [
+    "reports 表由 WP1（V2 迁移）创建，当前接口已按契约预留：表就绪后举报列表与处置会自动可用，无需改动前端。",
+    "The reports table comes from the V2 migration; the API is already wired and will work once it lands."
+  ],
+  "admin.reports.doneStatus": [
+    "已处置",
+    "Handled"
+  ],
+  "admin.reports.tableNotReady": [
+    "举报数据表尚未就绪",
+    "Reports table not ready"
+  ],
+  "admin.reports.reserved": [
+    "接口已按契约预留，等待依赖：{dep}",
+    "API reserved; waiting for {dep}"
+  ],
+  "admin.reports.empty": [
+    "暂无举报",
+    "No reports"
+  ],
+  "admin.reports.emptyHint": [
+    "当前筛选条件下没有待处理的举报。",
+    "No pending reports for these filters."
+  ],
+  "admin.reports.id": [
+    "举报 ID",
+    "Report ID"
+  ],
+  "admin.reports.target": [
+    "类型 / 目标",
+    "Type / target"
+  ],
+  "admin.reports.reason": [
+    "原因 / 说明",
+    "Reason / note"
+  ],
+  "admin.reports.action": [
+    "处置动作",
+    "Action"
+  ],
+  "admin.reports.note": [
+    "备注（选填）",
+    "Note (optional)"
+  ],
+  "admin.users.search": [
+    "搜索用户名 / 昵称",
+    "Search users"
+  ],
+  "admin.users.normal": [
+    "正常",
+    "Active"
+  ],
+  "admin.users.noMatch": [
+    "没有匹配的用户",
+    "No matching users"
+  ],
+  "admin.users.role": [
+    "平台角色",
+    "Platform role"
+  ],
+  "admin.users.registeredAt": [
+    "注册时间",
+    "Registered"
+  ],
+  "assistant.page.loading": [
+    "正在加载频道助手设置…",
+    "Loading assistant settings…"
+  ],
+  "assistant.page.noAccount": [
+    "尚未创建助手虚拟账号",
+    "No assistant account yet"
+  ],
+  "assistant.page.noAccountHint": [
+    "保存设置后点击「创建/修复助手账号」，助手将以普通成员身份加入频道，用于自动发帖、评论与点赞。",
+    "Save, then click “Create/repair assistant” — it joins as a regular member for auto posting, commenting and liking."
+  ],
+  "assistant.page.nickname": [
+    "助手昵称",
+    "Assistant nickname"
+  ],
+  "assistant.page.avatar": [
+    "助手头像",
+    "Assistant avatar"
+  ],
+  "assistant.page.bio": [
+    "助手简介",
+    "Assistant bio"
+  ],
+  "assistant.page.persona": [
+    "助手设定（persona，用于生成内容的语气与角色）",
+    "Persona (tone and role for generated content)"
+  ],
+  "assistant.page.master": [
+    "频道助手总开关",
+    "Assistant master switch"
+  ],
+  "assistant.page.conditions": [
+    "自动任务的运行条件",
+    "Task preconditions"
+  ],
+  "assistant.page.hour": [
+    "日报执行小时（UTC）",
+    "Digest hour (UTC)"
+  ],
+  "assistant.page.postPerDay": [
+    "自动发帖 / 天",
+    "Auto posts / day"
+  ],
+  "assistant.page.commentPerDay": [
+    "自动评论 / 天",
+    "Auto comments / day"
+  ],
+  "assistant.page.likePerDay": [
+    "自动点赞 / 天",
+    "Auto likes / day"
+  ],
+  "assistant.page.allTasks": [
+    "全部任务",
+    "All tasks"
+  ],
+  "assistant.page.noLogs": [
+    "还没有执行记录",
+    "No runs yet"
+  ],
+  "assistant.page.noLogsHint": [
+    "任务按设定时间自动执行，也可以点击上方按钮立即试运行。",
+    "Tasks run on schedule, or trigger one manually above."
+  ],
+  "assistant.page.task": [
+    "任务",
+    "Task"
+  ],
+  "assistant.page.result": [
+    "结果 / 错误",
+    "Result / error"
+  ],
+  "assistant.page.periodKey": [
+    "周期键",
+    "Period key"
+  ],
+  "manage.content.search": [
+    "搜索标题 / 正文关键词",
+    "Search title or body"
+  ],
+  "manage.content.published": [
+    "已发布",
+    "Published"
+  ],
+  "manage.content.hidden": [
+    "已隐藏",
+    "Hidden"
+  ],
+  "manage.content.loading": [
+    "正在加载内容…",
+    "Loading content…"
+  ],
+  "manage.content.noMatch": [
+    "没有匹配的内容",
+    "No matching content"
+  ],
+  "manage.content.interactions": [
+    "互动",
+    "Interactions"
+  ],
+  "manage.content.statusFlags": [
+    "状态标识",
+    "Status flags"
+  ],
+  "manage.data.loading": [
+    "正在加载统计数据…",
+    "Loading analytics…"
+  ],
+  "manage.data.visitorTrend": [
+    "访问人数趋势",
+    "Visitors trend"
+  ],
+  "manage.data.postTrend": [
+    "发帖趋势",
+    "Posts trend"
+  ],
+  "manage.home.loading": [
+    "正在加载概览数据…",
+    "Loading overview…"
+  ],
+  "manage.logs.operatorId": [
+    "操作人用户 ID",
+    "Operator user ID"
+  ],
+  "manage.logs.actionType": [
+    "操作类型",
+    "Action type"
+  ],
+  "manage.logs.loading": [
+    "正在加载管理日志…",
+    "Loading audit log…"
+  ],
+  "manage.logs.empty": [
+    "暂无管理日志",
+    "No audit entries"
+  ],
+  "manage.logs.emptyHint": [
+    "频道内的操作记录会显示在这里。",
+    "Channel actions will appear here."
+  ],
+  "manage.logs.operator": [
+    "操作人",
+    "Operator"
+  ],
+  "manage.logs.target": [
+    "对象",
+    "Target"
+  ],
+  "manage.logs.detail": [
+    "详情",
+    "Details"
+  ],
+  "manage.members.list": [
+    "成员列表",
+    "Members"
+  ],
+  "manage.reports.loading": [
+    "正在加载举报…",
+    "Loading reports…"
+  ],
+  "manage.reports.empty": [
+    "暂无待处理举报",
+    "No pending reports"
+  ],
+  "manage.reports.emptyHint": [
+    "频道内的举报会显示在这里。",
+    "Reports from this channel will appear here."
+  ],
+  "manage.reports.handleTitle": [
+    "处理举报",
+    "Handle report"
+  ],
+  "manage.reports.handleAction": [
+    "处理方式",
+    "Action"
+  ],
+  "manage.reports.handleNote": [
+    "处理备注",
+    "Note"
+  ],
+  "router.postDetail": [
+    "帖子详情",
+    "Post"
+  ],
+  "router.inviteAccept": [
+    "邀请加入频道",
+    "Join channel"
+  ],
+  "router.notFound": [
+    "页面不存在",
+    "Not found"
+  ],
+  "router.appTitle": [
+    "群岛 Isles",
+    "Isles"
+  ],
+  "common.memberSuffix": [
+    "{n} 成员",
+    "{n} members"
+  ],
+  "common.postSuffix": [
+    "{n} 帖子",
+    "{n} posts"
+  ],
+  "common.manage": [
+    "管理",
+    "Manage"
+  ],
+  "common.visitor": [
+    "游",
+    "G"
+  ],
+  "common.removeEmoji": [
+    "移除表情 {emoji}",
+    "Remove emoji {emoji}"
+  ],
+  "common.send": [
+    "发送",
+    "Send"
+  ],
+  "avatar.altOf": [
+    "{name}的头像",
+    "{name}'s avatar"
+  ],
+  "ai.thinkingProcess": [
+    "深度思考过程",
+    "Reasoning"
+  ],
+  "ai.regenerate": [
+    "重新生成",
+    "Regenerate"
+  ],
+  "dm.noMessagesHint": [
+    "还没有消息，发一句问候开始聊天吧。",
+    "No messages yet — say hello."
+  ],
+  "nav.home": [
+    "群岛首页",
+    "Isles home"
+  ],
+  "nav.currentChannel": [
+    "当前频道",
+    "Current channel"
+  ],
+  "auth.productIntro": [
+    "产品介绍",
+    "Product intro"
+  ],
+  "channel.publishLongBtn": [
+    "发长文",
+    "New post"
+  ],
+  "error.httpStatus": [
+    "请求失败（HTTP {status}）",
+    "Request failed (HTTP {status})"
+  ],
+  "media.sizeLimit": [
+    "{type}大小不能超过 {max}MB",
+    "{type} must be at most {max}MB"
+  ],
+  "time.minutesAgo": [
+    "{n} 分钟前",
+    "{n} minutes ago"
+  ],
+  "time.hoursAgo": [
+    "{n} 小时前",
+    "{n} hours ago"
+  ],
+  "time.daysAgo": [
+    "{n} 天前",
+    "{n} days ago"
+  ],
+  "app.slogan": [
+    "每个频道是一座岛，在岛与岛之间发现同频的人。",
+    "Every channel is an island — find your people between them."
+  ],
+  "report.reason.spam": [
+    "垃圾广告",
+    "Spam"
+  ],
+  "report.reason.abuse": [
+    "人身攻击",
+    "Harassment"
+  ],
+  "report.reason.porn": [
+    "色情低俗",
+    "Adult content"
+  ],
+  "report.reason.illegal": [
+    "违法违规",
+    "Illegal content"
+  ],
+  "common.errorBoundary": [
+    "页面出了点问题，请刷新后重试",
+    "Something went wrong. Please refresh and try again."
+  ],
+  "validation.comment.empty": [
+    "评论内容、图片或表情至少要有一项",
+    "Comment text, images or emoji — at least one is required"
+  ],
+  "validation.comment.tooLong": [
+    "评论不能超过 2000 个字符",
+    "Comment must be at most 2000 characters"
+  ],
+  "channel.create.avatarUpload": [
+    "上传频道头像",
+    "Upload channel avatar"
+  ],
+  "channel.create.tip": [
+    "创建后会自动生成默认板块；成员、身份组等复杂设置请前往频道管理中心。",
+    "A default board is created automatically. Manage members and roles in the console."
+  ],
+  "post.publishToBoard": [
+    "将发布到 {name}",
+    "Posting to {name}"
+  ],
+  "profile.signaturePlaceholder": [
+    "介绍一下自己",
+    "Tell people about yourself"
+  ],
+  "profile.regionPlaceholder": [
+    "如：上海",
+    "e.g. Shanghai"
+  ],
+  "comment.countSuffix": [
+    "{n} 条评论",
+    "{n} comments"
+  ],
+  "quickComment.viewAll": [
+    "查看全部 {n} 条评论",
+    "View all {n} comments"
+  ],
+  "report.notePlaceholder": [
+    "补充说明（选填）",
+    "Additional details (optional)"
+  ],
+  "search.scopeChannelHint": [
+    "频道内搜索：仅搜索当前频道「{name}」的内容。",
+    "Searching only within “{name}”."
+  ],
+  "search.pressEnter": [
+    "按回车搜索「{kw}」",
+    "Press Enter to search “{kw}”"
+  ],
+  "search.removeHistoryItem": [
+    "删除搜索历史 {kw}",
+    "Remove “{kw}” from history"
+  ],
+  "search.localFallback": [
+    "当前显示本地搜索记录（登录后可同步到账号）。",
+    "Showing local history; sign in to sync."
+  ],
+  "ai.chat.askChannel": [
+    "向{name}提问，只会基于本频道内容回答…",
+    "Ask {name} — answers use only this channel…"
+  ],
+  "ai.chat.stop": [
+    "停止",
+    "Stop"
+  ],
+  "ai.chat.disclaimer": [
+    "AI 生成内容仅供参考，请自行甄别；引用来源可点击查看原帖。",
+    "AI output may be inaccurate — click a source to open the post."
+  ],
+  "ai.chat.currentModel": [
+    "当前模型：{name}",
+    "Model: {name}"
+  ],
+  "ai.session.deleteConfirm": [
+    "删除后会话历史将不再展示，确定删除「{title}」？",
+    "This permanently deletes “{title}”. Continue?"
+  ],
+  "ai.session.messageCount": [
+    "{n} 条",
+    "{n} msgs"
+  ],
+  "channel.invite.expiresAt": [
+    "过期时间 {time}",
+    "Expires {time}"
+  ],
+  "channel.invite.expires": [
+    "过期 {time}",
+    "Expires {time}"
+  ],
+  "channel.invite.used": [
+    "已用 {used}",
+    "Used {used}"
+  ],
+  "channel.invite.usedOf": [
+    "已用 {used} / {max}",
+    "Used {used} / {max}"
+  ],
+  "channel.member.mutedToast": [
+    "已禁言 {name}",
+    "{name} muted"
+  ],
+  "channel.member.removeConfirm": [
+    "确认将「{name}」移出频道吗？",
+    "Remove “{name}” from this channel?"
+  ],
+  "channel.member.joinedAt": [
+    "加入于 {time}",
+    "Joined {time}"
+  ],
+  "channel.member.total": [
+    "共 {n} 名成员",
+    "{n} members"
+  ],
+  "channel.profile.visibilityHint": [
+    "公开频道任何人可直接加入；私密频道需要邀请链接，可要求审批。",
+    "Public channels are open to anyone; private ones need an invite link and may require approval."
+  ],
+  "channel.settings.titleOf": [
+    "频道设置 · {name}",
+    "Channel settings · {name}"
+  ],
+  "channel.settings.memberSummary": [
+    "共 {n} 名成员 · 频道主：{owner}",
+    "{n} members · Owner: {owner}"
+  ],
+  "channel.settings.muteAllUntil": [
+    "全员禁言中，结束时间：{time}",
+    "Muted until {time}"
+  ],
+  "dm.chat.loadEarlier": [
+    "加载更早的消息",
+    "Load earlier messages"
+  ],
+  "dm.share.sentTo": [
+    "已分享给 {name}",
+    "Shared with {name}"
+  ],
+  "manage.sidebar.memberCount": [
+    "{n} 成员",
+    "{n} members"
+  ],
+  "manage.sidebar.channelHome": [
+    "频道主页",
+    "Channel home"
+  ],
+  "manage.stats.dayN": [
+    "第 {n} 天",
+    "Day {n}"
+  ],
+  "manage.stats.peak": [
+    "峰值 {value}",
+    "Peak {value}"
+  ],
+  "media.crop.tooLarge": [
+    "图片超过 {max}MB，请缩小裁剪范围或换一张图",
+    "Image exceeds {max}MB — crop a smaller area or pick another"
+  ],
+  "media.crop.downscaled": [
+    "原图较大，已按上限缩放到 {w}×{h}",
+    "Original was large; scaled down to {w}×{h}"
+  ],
+  "media.crop.dragHint": [
+    "拖动图片调整位置，滚轮或滑块缩放。",
+    "Drag to reposition, scroll or use the slider to zoom."
+  ],
+  "media.crop.sourceArea": [
+    "（原裁剪区域 {w}×{h}）",
+    "(source area {w}×{h})"
+  ],
+  "channel.settingsLabel": [
+    "频道设置",
+    "Channel settings"
+  ],
+  "channel.page.joinedToast": [
+    "已加入「{name}」",
+    "Joined “{name}”"
+  ],
+  "channel.page.muteAllBannerLong": [
+    "全员禁言中，结束时间：{time}，仅频道主与超级管理员可发言",
+    "Muted until {time}; only the owner and super admins can post"
+  ],
+  "channel.page.allBoards": [
+    "全部板块",
+    "All boards"
+  ],
+  "channel.page.noBoardsHint": [
+    "该频道还没有配置板块，频道主可在管理中心创建板块。",
+    "This channel has no boards yet — the owner can create them in the console."
+  ],
+  "channel.page.pinnedCount": [
+    "共 {n} 条",
+    "{n} total"
+  ],
+  "channel.page.boardEmpty": [
+    "「{name}」板块还没有内容，来发布第一条帖子吧。",
+    "“{name}” is empty — be the first to post."
+  ],
+  "channel.page.loadMorePosts": [
+    "加载更多帖子",
+    "Load more posts"
+  ],
+  "channel.page.channelNo": [
+    "频道号 #{no}",
+    "Channel #{no}"
+  ],
+  "feed.loadMore": [
+    "加载更多动态",
+    "Load more"
+  ],
+  "hot.loadMore": [
+    "加载更多热门内容",
+    "Load more"
+  ],
+  "hot.loginForRecommendations": [
+    "登录后根据你加入的频道与浏览行为推荐岛屿。",
+    "Sign in to get recommendations based on your channels and activity."
+  ],
+  "hot.memberCount": [
+    "{n} 成员",
+    "{n} members"
+  ],
+  "friends.removeConfirm": [
+    "确认删除好友「{name}」？",
+    "Remove “{name}” from friends?"
+  ],
+  "friends.blockConfirm": [
+    "拉黑后对方将无法向你发起好友申请或私信。确认拉黑「{name}」？",
+    "Blocked users can't send you requests or messages. Block “{name}”?"
+  ],
+  "friends.since": [
+    "成为好友于 {time}",
+    "Friends since {time}"
+  ],
+  "friends.message": [
+    "留言：{text}",
+    "Note: {text}"
+  ],
+  "friends.accept": [
+    "同意",
+    "Accept"
+  ],
+  "auth.login.title": [
+    "登录{app}",
+    "Sign in to {app}"
+  ],
+  "auth.login.noAccount": [
+    "还没有账号？",
+    "No account yet?"
+  ],
+  "manage.subtitle": [
+    "{name} · 权限由身份组与服务端共同校验",
+    "{name} · Permissions checked by roles and the server"
+  ],
+  "manage.contentLabel": [
+    "管理中心内容：{section}",
+    "Console section: {section}"
+  ],
+  "dm.page.post": [
+    "[帖子] {title}",
+    "[Post] {title}"
+  ],
+  "dm.page.backToList": [
+    "返回会话列表",
+    "Back to chats"
+  ],
+  "dm.page.unreadOnly": [
+    "只看未读",
+    "Unread only"
+  ],
+  "dm.page.loadMore": [
+    "加载更多会话",
+    "Load more chats"
+  ],
+  "notifications.channelOnly": [
+    "仅显示频道：{name}",
+    "Only: {name}"
+  ],
+  "notifications.loadMore": [
+    "加载更多通知",
+    "Load more"
+  ],
+  "post.detail.board": [
+    "板块：{name}",
+    "Board: {name}"
+  ],
+  "post.detail.views": [
+    "{n} 浏览",
+    "{n} views"
+  ],
+  "post.detail.likes": [
+    "{n} 点赞",
+    "{n} likes"
+  ],
+  "post.detail.comments": [
+    "{n} 评论",
+    "{n} comments"
+  ],
+  "auth.register.title": [
+    "注册{app}",
+    "Sign up for {app}"
+  ],
+  "auth.register.agreePrefix": [
+    "我已阅读并同意",
+    "I have read and agree to"
+  ],
+  "auth.register.submit": [
+    "注册并登录",
+    "Sign up & sign in"
+  ],
+  "auth.register.hasAccount": [
+    "已经有账号？",
+    "Already have an account?"
+  ],
+  "search.scopeHint": [
+    "频道内搜索：{name}，仅展示该频道的公开内容。",
+    "Searching only within {name}."
+  ],
+  "search.tryOther": [
+    "试试其他关键词，或返回频道动态。",
+    "Try another keyword or go back to the feed."
+  ],
+  "search.loadMoreChannels": [
+    "加载更多频道",
+    "Load more channels"
+  ],
+  "search.loadMorePosts": [
+    "加载更多帖子",
+    "Load more posts"
+  ],
+  "common.totalCount": [
+    "共 {n} 条",
+    "{n} total"
+  ],
+  "admin.aiModels.deleteConfirm": [
+    "确定删除模型配置「{name}」？",
+    "Delete model “{name}”?"
+  ],
+  "admin.aiModels.thinkingHint": [
+    "关闭「深度思考」时后端会显式下发关闭参数；若模型仍继续思考，多半是这里选错了方式。",
+    "When thinking is off the server sends an explicit disable flag; if the model keeps thinking, this setting is likely wrong."
+  ],
+  "admin.aiModels.connectOkMs": [
+    "连接成功（{ms}ms）",
+    "Connected ({ms}ms)"
+  ],
+  "admin.aiModels.availableList": [
+    "可用模型：{models}",
+    "Available models: {models}"
+  ],
+  "admin.aiModels.upstreamList": [
+    "上游模型：{models}",
+    "Upstream models: {models}"
+  ],
+  "admin.channels.unbanConfirm": [
+    "确定解禁频道「{name}」？",
+    "Unban channel “{name}”?"
+  ],
+  "admin.channels.banConfirm": [
+    "确定封禁频道「{name}」？封禁后频道内容将不可见。",
+    "Ban “{name}”? Its content becomes invisible."
+  ],
+  "admin.channels.channelNo": [
+    "频道号 {no}",
+    "Channel {no}"
+  ],
+  "admin.overview.newToday": [
+    "今日新增 {n}",
+    "+{n} today"
+  ],
+  "admin.overview.aiMessages": [
+    "消息 {n} 条",
+    "{n} messages"
+  ],
+  "admin.reports.reservedHint": [
+    "接口已按契约预留，等待依赖：{dep}",
+    "API reserved; waiting for {dep}"
+  ],
+  "admin.reports.reportId": [
+    "举报 ID：{id}",
+    "Report ID: {id}"
+  ],
+  "admin.users.unbanConfirm": [
+    "确定解禁用户「{name}」？",
+    "Enable “{name}”?"
+  ],
+  "admin.users.banConfirm": [
+    "确定禁用用户「{name}」？禁用后无法登录与访问。",
+    "Disable “{name}”? They won't be able to sign in."
+  ],
+  "assistant.page.runConfirm": [
+    "确定立即执行「{label}」任务？任务会调用已配置的 AI 模型，并按开关与频率上限校验。",
+    "Run “{label}” now? It calls the configured AI model and is subject to switches and limits."
+  ],
+  "assistant.page.subtitleOf": [
+    "配置助手身份与自动运营任务（频道：{name}）",
+    "Configure the assistant and automated tasks (channel: {name})"
+  ],
+  "assistant.page.subtitle": [
+    "配置助手身份与自动运营任务",
+    "Configure the assistant and automated tasks"
+  ],
+  "assistant.page.dailyHourHint": [
+    "每天 {hour}:00（UTC）生成频道日报帖子",
+    "Posts a daily digest at {hour}:00 UTC"
+  ],
+  "assistant.page.runNow": [
+    "立即执行：{label}",
+    "Run now: {label}"
+  ],
+  "manage.boards.deleteConfirm": [
+    "确认删除板块「{name}」？板块内帖子需要先迁移或删除。",
+    "Delete board “{name}”? Move or delete its posts first."
+  ],
+  "manage.boards.sortOrder": [
+    "排序 {n}",
+    "Order {n}"
+  ],
+  "manage.boards.postCount": [
+    "{n} 帖子",
+    "{n} posts"
+  ],
+  "manage.content.deleteSelected": [
+    "确认批量删除选中的 {n} 条帖子？",
+    "Delete the {n} selected posts?"
+  ],
+  "manage.content.selectedCount": [
+    "已选择 {n} 条",
+    "{n} selected"
+  ],
+  "manage.content.mediaPrefix": [
+    "{n} 个媒体 · ",
+    "{n} media · "
+  ],
+  "manage.content.viewsLikes": [
+    "{views} 浏览 · {likes} 赞",
+    "{views} views · {likes} likes"
+  ],
+  "manage.members.deleteRoleConfirm": [
+    "确认删除身份组「{name}」？组内成员将回退为默认身份组。",
+    "Delete role “{name}”? Members fall back to the default role."
+  ],
+  "manage.members.roleMemberCount": [
+    "{n} 名成员",
+    "{n} members"
+  ],
+  "manage.members.roleBoardScope": [
+    "板块范围：{name}",
+    "Board scope: {name}"
+  ],
+  "manage.profile.meta": [
+    "频道 ID：{id} · 创建于 {date}",
+    "Channel ID: {id} · Created {date}"
+  ],
+  "manage.reports.reporter": [
+    "举报人：{name}",
+    "Reporter: {name}"
+  ],
+  "manage.reports.target": [
+    "目标：{name}",
+    "Target: {name}"
+  ],
+  "manage.reports.viewContent": [
+    "查看内容",
+    "View content"
+  ],
+  "manage.reports.handle": [
+    "处理",
+    "Handle"
+  ],
+  "auth.register.closedTitle": [
+    "平台当前未开放注册",
+    "Registration is currently closed"
+  ],
+  "auth.register.closedHint": [
+    "请联系平台管理员开通账号，或稍后再来。",
+    "Contact a platform admin to get an account, or check back later."
+  ]
+}
