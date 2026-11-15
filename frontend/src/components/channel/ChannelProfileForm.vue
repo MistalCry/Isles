@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { manageApi } from '@/api'
@@ -11,6 +12,8 @@ import {
 } from '@/utils/channelPermissions'
 import type { Channel } from '@/types/models'
 import ImageCropUpload from '../media/ImageCropUpload.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{ channel: Channel }>()
 
@@ -66,7 +69,7 @@ watch(
 async function save(): Promise<void> {
   if (!canEdit.value) return
   if (!form.name.trim()) {
-    ElMessage.warning('频道名称不能为空')
+    ElMessage.warning(t('channel.profile.nameRequired'))
     return
   }
   saving.value = true
@@ -80,10 +83,10 @@ async function save(): Promise<void> {
       type: form.type,
       ...(canEditVisibility.value ? { visibility: form.visibility } : {}),
     })
-    ElMessage.success('频道资料已保存')
+    ElMessage.success(t('channel.profile.saved'))
     emit('updated', updated)
   } catch (err) {
-    errorMessage.value = resolveErrorMessage(err, '保存失败，请稍后重试')
+    errorMessage.value = resolveErrorMessage(err, t('channel.profile.saveFailed'))
   } finally {
     saving.value = false
   }
@@ -94,7 +97,7 @@ async function save(): Promise<void> {
   <div class="channel-profile-form">
     <el-alert
       v-if="!canEdit"
-      title="你当前没有修改频道资料的权限，仅可查看。"
+      :title="t('channel.profileReadonly')"
       type="info"
       :closable="false"
       show-icon
@@ -111,63 +114,63 @@ async function save(): Promise<void> {
 
     <div class="channel-profile-form__media">
       <div class="channel-profile-form__avatar">
-        <span class="channel-profile-form__label">频道头像</span>
+        <span class="channel-profile-form__label">{{ t('channel.profile.avatar') }}</span>
         <ImageCropUpload
           v-model="form.avatarUrl"
           :aspect-ratio="1"
-          :output-width="256"
+          :max-output-width="1024"
           :box-width="220"
           :preview-width="88"
           shape="circle"
-          label="上传头像"
-          hint="建议正方形，1:1"
+          :label="t('media.crop.avatarLabel')"
+          :hint="t('media.crop.squareHint')"
           :disabled="!canEdit"
         />
       </div>
       <div class="channel-profile-form__cover">
-        <span class="channel-profile-form__label">频道背景</span>
+        <span class="channel-profile-form__label">{{ t('channel.profile.cover') }}</span>
         <ImageCropUpload
           v-model="form.coverUrl"
           :aspect-ratio="4"
-          :output-width="1280"
+          :max-output-width="2560"
           :box-width="320"
           :preview-width="300"
-          label="上传背景"
-          hint="长条图，4:1"
+          :label="t('media.crop.backgroundLabel')"
+          :hint="t('media.crop.backgroundHint')"
           :disabled="!canEdit"
         />
       </div>
     </div>
 
     <el-form label-position="top" :disabled="!canEdit" @submit.prevent>
-      <el-form-item label="频道名称">
+      <el-form-item :label="t('channel.nameLabel')">
         <el-input v-model="form.name" maxlength="30" show-word-limit />
       </el-form-item>
-      <el-form-item label="频道简介">
+      <el-form-item :label="t('channel.page.intro')">
         <el-input v-model="form.description" type="textarea" :rows="3" maxlength="200" show-word-limit />
       </el-form-item>
-      <el-form-item label="加入方式">
+      <el-form-item :label="t('channel.joinMethod')">
         <el-radio-group v-model="form.type">
-          <el-radio value="PUBLIC">公开频道（自由加入）</el-radio>
-          <el-radio value="PRIVATE">私密频道（邀请加入）</el-radio>
+          <el-radio value="PUBLIC">{{ t('channel.profile.public') }}</el-radio>
+          <el-radio value="PRIVATE">{{ t('channel.profile.private') }}</el-radio>
         </el-radio-group>
         <p class="channel-profile-form__hint">
-          公开频道任何人可直接加入；私密频道需要邀请链接，可要求审批。
+          {{ t('channel.profile.visibilityHint') }}
         </p>
       </el-form-item>
-      <el-form-item v-if="form.type === 'PRIVATE'" label="可见性">
+      <el-form-item v-if="form.type === 'PRIVATE'" :label="t('channel.visibility')">
         <el-select v-model="form.visibility" :disabled="!canEditVisibility">
-          <el-option label="公开可见（未加入可浏览）" value="PUBLIC_VISIBLE" />
-          <el-option label="仅成员可见" value="MEMBERS_ONLY" />
+          <el-option :label="t('channel.visibilityPublic')" value="PUBLIC_VISIBLE" />
+          <el-option :label="t('channel.visibilityMembers')" value="MEMBERS_ONLY" />
         </el-select>
-        <p v-if="!canEditVisibility" class="channel-profile-form__hint">你没有修改可见性的权限。</p>
+        <p v-if="!canEditVisibility" class="channel-profile-form__hint">{{ t('channel.profile.noVisibilityPermission') }}</p>
       </el-form-item>
-      <el-form-item label="频道号">
-        <el-input :model-value="channel.channelNo ? `#${channel.channelNo}` : '未分配'" disabled />
+      <el-form-item :label="t('channel.channelNo')">
+        <el-input :model-value="channel.channelNo ? `#${channel.channelNo}` : t('channel.profile.unassigned')" disabled />
       </el-form-item>
     </el-form>
 
-    <el-button v-if="canEdit" type="primary" :loading="saving" @click="save">保存资料</el-button>
+    <el-button v-if="canEdit" type="primary" :loading="saving" @click="save">{{ t('channel.profile.save') }}</el-button>
   </div>
 </template>
 

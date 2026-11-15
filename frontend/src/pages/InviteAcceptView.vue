@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -7,6 +8,9 @@ import { resolveErrorMessage } from '@/api/client'
 import type { InviteAcceptResult } from '@/api/channels'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
+
+const { t } = useI18n()
+
 
 const route = useRoute()
 const router = useRouter()
@@ -20,12 +24,12 @@ async function accept(): Promise<void> {
   try {
     result.value = await channelsApi.acceptInvite(String(route.params.token ?? ''))
     if (result.value.status === 'JOINED') {
-      ElMessage.success('已加入频道')
+      ElMessage.success(t('invite.joined'))
     } else {
-      ElMessage.success('加入申请已提交，等待管理员审批')
+      ElMessage.success(t('invite.pending'))
     }
   } catch (err) {
-    error.value = resolveErrorMessage(err, '邀请链接无效或已过期')
+    error.value = resolveErrorMessage(err, t('invite.invalid'))
   } finally {
     loading.value = false
   }
@@ -43,32 +47,32 @@ onMounted(() => {
 
 <template>
   <div class="page invite-accept-page">
-    <LoadingState v-if="loading" :rows="3" tip="正在处理邀请链接…" />
+    <LoadingState v-if="loading" :rows="3" :tip="t('invite.processing')" />
 
     <ErrorState
       v-else-if="error"
       :message="error"
-      retry-text="重试"
+      :retry-text="t('common.retry')"
       @retry="accept"
     >
       <template #action>
-        <el-button @click="$router.push('/feed')">回到频道动态</el-button>
+        <el-button @click="$router.push('/feed')">{{ t('channel.page.backToFeed') }}</el-button>
       </template>
     </ErrorState>
 
     <div v-else-if="result" class="invite-result isles-card">
       <el-result
         :icon="result.status === 'JOINED' ? 'success' : 'info'"
-        :title="result.status === 'JOINED' ? '已成功加入频道' : '加入申请已提交'"
+        :title="result.status === 'JOINED' ? t('invite.joinedSuccess') : t('invite.pendingSuccess')"
         :sub-title="
           result.status === 'JOINED'
-            ? '现在可以在频道内发帖、评论和互动了。'
-            : '需要频道管理员审批，通过后会收到通知。'
+            ? t('invite.joinedHint')
+            : t('invite.pendingHint')
         "
       >
         <template #extra>
-          <el-button type="primary" @click="goChannel">进入频道</el-button>
-          <el-button @click="$router.push('/notifications')">查看通知</el-button>
+          <el-button type="primary" @click="goChannel">{{ t('invite.enterChannel') }}</el-button>
+          <el-button @click="$router.push('/notifications')">{{ t('invite.viewNotifications') }}</el-button>
         </template>
       </el-result>
     </div>

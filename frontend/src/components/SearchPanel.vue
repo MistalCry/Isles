@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -7,6 +8,8 @@ import { searchApi } from '@/api'
 import { useSearchHistory } from '@/composables/useSearchHistory'
 import UserAvatar from './UserAvatar.vue'
 import type { HotKeyword, SearchSuggestion } from '@/types/models'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -83,7 +86,7 @@ onBeforeUnmount(() => {
 function submit(value?: string): void {
   const query = (value ?? keyword.value).trim()
   if (!query) {
-    ElMessage.warning('请输入搜索关键词')
+    ElMessage.warning(t('search.keywordRequired'))
     return
   }
   keyword.value = query
@@ -109,26 +112,26 @@ async function clearHistory(): Promise<void> {
 </script>
 
 <template>
-  <section class="search-panel" aria-label="搜索">
+  <section class="search-panel" :aria-label="t('common.search')">
     <form class="search-panel__bar" role="search" @submit.prevent="submit()">
       <el-input
         v-model="keyword"
         size="large"
         clearable
         :prefix-icon="Search"
-        placeholder="搜索频道、帖子"
-        aria-label="搜索关键词"
+        :placeholder="t('search.placeholder')"
+        :aria-label="t('search.keywordLabel')"
         @keyup.enter="submit()"
       />
-      <el-button type="primary" size="large" native-type="submit">搜索</el-button>
+      <el-button type="primary" size="large" native-type="submit">{{ t('common.search') }}</el-button>
     </form>
 
     <p v-if="scope === 'channel'" class="search-panel__scope">
-      频道内搜索：仅搜索当前频道「{{ channelId }}」的内容。
+      {{ t('search.scopeChannelHint', { name: channelId }) }}
     </p>
 
     <div v-if="keyword.trim()" class="search-panel__suggest">
-      <div v-if="suggesting" class="search-panel__suggest-status muted">正在联想…</div>
+      <div v-if="suggesting" class="search-panel__suggest-status muted">{{ t('search.suggesting') }}</div>
       <template v-else>
         <button
           v-for="channel in suggestion.channels"
@@ -139,7 +142,7 @@ async function clearHistory(): Promise<void> {
         >
           <UserAvatar :src="channel.avatarUrl" :name="channel.name" :size="24" square />
           <span class="suggest-item__text">{{ channel.name }}</span>
-          <span class="muted">频道</span>
+          <span class="muted">{{ t('common.channel') }}</span>
         </button>
         <button
           v-for="word in suggestion.keywords"
@@ -152,7 +155,7 @@ async function clearHistory(): Promise<void> {
           <span class="suggest-item__text">{{ word }}</span>
         </button>
         <p v-if="suggestion.channels.length === 0 && suggestion.keywords.length === 0" class="muted search-panel__suggest-status">
-          按回车搜索「{{ keyword.trim() }}」
+          {{ t('search.pressEnter', { kw: keyword.trim() }) }}
         </p>
       </template>
     </div>
@@ -160,7 +163,7 @@ async function clearHistory(): Promise<void> {
     <div v-else class="search-panel__history">
       <div v-if="hotKeywords.length > 0 || hotLoading" class="search-panel__hot">
         <div class="search-panel__history-head">
-          <h3>热门搜索</h3>
+          <h3>{{ t('search.hot') }}</h3>
         </div>
         <el-skeleton v-if="hotLoading" :rows="1" animated />
         <div v-else class="search-panel__chips">
@@ -178,8 +181,8 @@ async function clearHistory(): Promise<void> {
       </div>
 
       <div class="search-panel__history-head">
-        <h3>搜索历史</h3>
-        <button v-if="history.length > 0" type="button" class="link" @click="clearHistory">清空</button>
+        <h3>{{ t('search.history') }}</h3>
+        <button v-if="history.length > 0" type="button" class="link" @click="clearHistory">{{ t('search.clear') }}</button>
       </div>
 
       <el-skeleton v-if="historyLoading" :rows="1" animated />
@@ -192,7 +195,7 @@ async function clearHistory(): Promise<void> {
           <button
             type="button"
             class="history-chip__remove"
-            :aria-label="`删除搜索历史 ${item.keyword}`"
+            :aria-label="t('search.removeHistoryItem', { kw: item.keyword })"
             @click="removeHistory(item.id)"
           >
             <el-icon :size="12"><Close /></el-icon>
@@ -200,10 +203,10 @@ async function clearHistory(): Promise<void> {
         </span>
       </div>
 
-      <p v-else class="muted search-panel__empty">暂无搜索历史，试试搜索感兴趣的频道或帖子。</p>
+      <p v-else class="muted search-panel__empty">{{ t('search.historyEmpty') }}</p>
 
       <p v-if="usingLocalFallback && history.length > 0" class="muted search-panel__fallback">
-        当前显示本地搜索记录（登录后可同步到账号）。
+        {{ t('search.localFallback') }}
       </p>
     </div>
   </section>

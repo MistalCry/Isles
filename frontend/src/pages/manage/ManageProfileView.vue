@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import type { Channel } from '@/types/models'
 import ChannelProfileForm from '@/components/channel/ChannelProfileForm.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   channel: Channel
@@ -16,15 +19,22 @@ const emit = defineEmits<{
   <section class="manage-section">
     <header class="manage-section__header">
       <div>
-        <h2>频道资料</h2>
-        <p class="muted">名称、头像、封面、简介与可见性；修改后立即生效</p>
+        <h2>{{ t('channel.settings.tabProfile') }}</h2>
+        <p class="muted">{{ t('manage.profile.subtitle') }}</p>
       </div>
     </header>
 
     <div class="isles-card manage-profile">
       <ChannelProfileForm :channel="channel" @updated="(updated) => emit('updated', updated)" />
       <p class="muted manage-profile__meta">
-        频道 ID：{{ channelId }} · 创建于 {{ channel.createdAt ? new Date(channel.createdAt).toLocaleDateString('zh-CN') : '未知' }}
+        {{
+          t('manage.profile.meta', {
+            id: channelId,
+            date: channel.createdAt
+              ? new Date(channel.createdAt).toLocaleDateString()
+              : t('common.unknown'),
+          })
+        }}
       </p>
     </div>
   </section>

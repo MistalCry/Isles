@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { channelsApi } from '@/api'
@@ -31,7 +32,7 @@ export const useChannelStore = defineStore('channel', () => {
       try {
         myChannels.value = await channelsApi.getMyChannels()
       } catch (error) {
-        myChannelsError.value = resolveErrorMessage(error, '我的频道加载失败')
+        myChannelsError.value = resolveErrorMessage(error, t('channel.mineFailed'))
       } finally {
         loadingMyChannels.value = false
         fetchTask = null

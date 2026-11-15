@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { ElMessageBox } from 'element-plus'
 import { Delete, EditPen, Plus } from '@element-plus/icons-vue'
 import type { AiConversation } from '@/api/ai'
 import { formatRelativeTime } from '@/utils/format'
 import EmptyState from '@/components/EmptyState.vue'
+
+const { t } = useI18n()
 
 defineProps<{
   conversations: AiConversation[]
@@ -21,14 +24,14 @@ const emit = defineEmits<{
 }>()
 
 async function promptRename(conversation: AiConversation): Promise<void> {
-  const result = await ElMessageBox.prompt('请输入新的会话名称', '重命名会话', {
+  const result = await ElMessageBox.prompt(t('ai.session.renamePrompt'), t('ai.session.rename'), {
     inputValue: conversation.title,
-    confirmButtonText: '保存',
-    cancelButtonText: '取消',
+    confirmButtonText: t('common.save'),
+    cancelButtonText: t('common.cancel'),
     inputValidator: (value) => {
       const text = (value ?? '').trim()
-      if (!text) return '名称不能为空'
-      if (text.length > 120) return '名称最长 120 个字符'
+      if (!text) return t('ai.session.nameRequired')
+      if (text.length > 120) return t('ai.session.nameTooLong')
       return true
     },
   }).catch(() => null)
@@ -38,9 +41,9 @@ async function promptRename(conversation: AiConversation): Promise<void> {
 
 async function confirmRemove(conversation: AiConversation): Promise<void> {
   const confirmed = await ElMessageBox.confirm(
-    `删除后会话历史将不再展示，确定删除「${conversation.title}」？`,
-    '删除会话',
-    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    t('ai.session.deleteConfirm', { title: conversation.title }),
+    t('ai.session.delete'),
+    { type: 'warning', confirmButtonText: t('common.delete'), cancelButtonText: t('common.cancel') },
   ).catch(() => false)
   if (confirmed) emit('remove', conversation.id)
 }
@@ -49,21 +52,21 @@ async function confirmRemove(conversation: AiConversation): Promise<void> {
 <template>
   <aside class="ai-session-sidebar">
     <header class="ai-session-sidebar__head">
-      <span class="ai-session-sidebar__title">历史会话</span>
-      <el-button type="primary" size="small" :icon="Plus" @click="emit('create')">新会话</el-button>
+      <span class="ai-session-sidebar__title">{{ t('ai.session.title') }}</span>
+      <el-button type="primary" size="small" :icon="Plus" @click="emit('create')">{{ t('ai.session.new') }}</el-button>
     </header>
 
     <div class="ai-session-sidebar__body">
       <el-skeleton v-if="loading && conversations.length === 0" :rows="4" animated />
       <div v-else-if="error" class="ai-session-sidebar__error">
         <p>{{ error }}</p>
-        <el-button size="small" @click="emit('retry')">重试</el-button>
+        <el-button size="small" @click="emit('retry')">{{ t('common.retry') }}</el-button>
       </div>
       <EmptyState
         v-else-if="conversations.length === 0"
         compact
-        title="还没有会话"
-        description="点击「新会话」开始第一次提问"
+        :title="t('ai.noConversations')"
+        :description="t('ai.noConversationsHint')"
       />
       <ul v-else class="ai-session-list">
         <li
@@ -74,17 +77,17 @@ async function confirmRemove(conversation: AiConversation): Promise<void> {
           @click="emit('select', conversation.id)"
         >
           <div class="ai-session-item__main">
-            <p class="ai-session-item__title line-clamp-1">{{ conversation.title || '新会话' }}</p>
+            <p class="ai-session-item__title line-clamp-1">{{ conversation.title || t('ai.session.new') }}</p>
             <span class="ai-session-item__meta">
               {{ formatRelativeTime(conversation.lastMessageAt || conversation.updatedAt) }}
-              · {{ conversation.messageCount }} 条
+              · {{ t('ai.session.messageCount', { n: conversation.messageCount }) }}
             </span>
           </div>
           <div class="ai-session-item__actions">
-            <button type="button" class="icon-btn" aria-label="重命名会话" @click.stop="promptRename(conversation)">
+            <button type="button" class="icon-btn" :aria-label="t('ai.session.rename')" @click.stop="promptRename(conversation)">
               <el-icon :size="13"><EditPen /></el-icon>
             </button>
-            <button type="button" class="icon-btn" aria-label="删除会话" @click.stop="confirmRemove(conversation)">
+            <button type="button" class="icon-btn" :aria-label="t('ai.session.delete')" @click.stop="confirmRemove(conversation)">
               <el-icon :size="13"><Delete /></el-icon>
             </button>
           </div>

@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { WarningFilled } from '@element-plus/icons-vue'
+
+const { t } = useI18n()
 
 withDefaults(
   defineProps<{
@@ -8,8 +11,8 @@ withDefaults(
     showRetry?: boolean
   }>(),
   {
-    message: '内容加载失败，请稍后再试',
-    retryText: '重新加载',
+    message: '',
+    retryText: '',
     showRetry: true,
   },
 )
@@ -20,10 +23,10 @@ defineEmits<{ retry: [] }>()
 <template>
   <div class="error-state" role="alert">
     <el-icon class="error-state__icon" :size="28"><WarningFilled /></el-icon>
-    <h3 class="error-state__title">加载失败</h3>
-    <p class="error-state__message">{{ message }}</p>
+    <h3 class="error-state__title">{{ t('error.title') }}</h3>
+    <p class="error-state__message">{{ message || t('error.hint') }}</p>
     <div class="error-state__actions">
-      <el-button v-if="showRetry" type="primary" plain @click="$emit('retry')">{{ retryText }}</el-button>
+      <el-button v-if="showRetry" type="primary" plain @click="$emit('retry')">{{ retryText || t('error.reload') }}</el-button>
       <slot name="action" />
     </div>
   </div>

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { Client, type IMessage } from '@stomp/stompjs'
@@ -71,12 +72,12 @@ export const useRealtimeStore = defineStore('realtime', () => {
         connected.value = false
       },
       onStompError: (frame) => {
-        lastError.value = frame.headers?.message || '实时通道连接失败'
+        lastError.value = frame.headers?.message || t('realtime.connectFailed')
         connected.value = false
         connecting.value = false
       },
       onWebSocketError: () => {
-        lastError.value = '实时通道连接失败，将自动重试'
+        lastError.value = t('realtime.connectRetrying')
         connecting.value = false
       },
     })

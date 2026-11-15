@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -11,6 +12,8 @@ import { useRequireLogin } from '@/composables/useRequireLogin'
 import { formatDateTime, genderLabel } from '@/utils/format'
 import type { UserCard, UserSummary } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -50,7 +53,7 @@ async function handleShow(): Promise<void> {
   try {
     card.value = await usersApi.getUserCard(props.user.id, props.channelId || undefined)
   } catch (err) {
-    error.value = resolveErrorMessage(err, '用户卡片加载失败')
+    error.value = resolveErrorMessage(err, t('userCard.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -67,29 +70,29 @@ watch(
 )
 
 async function handleMessage(): Promise<void> {
-  if (!requireLogin('登录后可发送私信')) return
+  if (!requireLogin(t('userCard.dmLoginRequired'))) return
   if (openingChat.value) return
   openingChat.value = true
   try {
     const conversation = await dm.openConversationWithUser(props.user.id)
     await router.push({ name: 'message-detail', params: { id: conversation.id } })
   } catch (err) {
-    ElMessage.error(resolveErrorMessage(err, '无法发起私信，请稍后重试'))
+    ElMessage.error(resolveErrorMessage(err, t('userCard.dmFailed')))
   } finally {
     openingChat.value = false
   }
 }
 
 async function handleAddFriend(): Promise<void> {
-  if (!requireLogin('登录后可添加好友')) return
+  if (!requireLogin(t('userCard.friendLoginRequired'))) return
   if (requestingFriend.value || friendRequested.value) return
   requestingFriend.value = true
   try {
     await friendsApi.sendFriendRequest(props.user.id)
     friendRequested.value = true
-    ElMessage.success('好友申请已发送，等待对方同意')
+    ElMessage.success(t('userCard.friendSent'))
   } catch (err) {
-    ElMessage.error(resolveErrorMessage(err, '好友申请发送失败'))
+    ElMessage.error(resolveErrorMessage(err, t('userCard.friendFailed')))
   } finally {
     requestingFriend.value = false
   }
@@ -125,15 +128,15 @@ async function handleAddFriend(): Promise<void> {
 
         <dl class="user-card__meta">
           <div v-if="genderLabel(profile.gender)">
-            <dt>性别</dt>
+            <dt>{{ t('userCard.gender') }}</dt>
             <dd>{{ genderLabel(profile.gender) }}</dd>
           </div>
           <div v-if="profile.region">
-            <dt>地区</dt>
+            <dt>{{ t('userCard.region') }}</dt>
             <dd>{{ profile.region }}</dd>
           </div>
           <div v-if="showChannelMeta && channelId && card?.joinedAt">
-            <dt>加入频道</dt>
+            <dt>{{ t('userCard.joinChannel') }}</dt>
             <dd>{{ formatDateTime(card.joinedAt) }}</dd>
           </div>
         </dl>
@@ -142,9 +145,7 @@ async function handleAddFriend(): Promise<void> {
 
         <div class="user-card__actions">
           <template v-if="!isSelf">
-            <el-button type="primary" size="small" :icon="ChatDotRound" :loading="openingChat" @click="handleMessage">
-              私信
-            </el-button>
+            <el-button type="primary" size="small" :icon="ChatDotRound" :loading="openingChat" @click="handleMessage">{{ t('friends.dm') }}</el-button>
             <el-button
               size="small"
               :icon="Plus"
@@ -152,10 +153,10 @@ async function handleAddFriend(): Promise<void> {
               :disabled="friendRequested"
               @click="handleAddFriend"
             >
-              {{ friendRequested ? '已申请' : '加好友' }}
+              {{ friendRequested ? t('userCard.friendRequested') : t('userCard.addFriend') }}
             </el-button>
           </template>
-          <span v-else class="muted">这是你自己</span>
+          <span v-else class="muted">{{ t('userCard.self') }}</span>
         </div>
       </template>
     </div>

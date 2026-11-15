@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
@@ -12,6 +13,8 @@ import UserCardPopover from '../UserCardPopover.vue'
 import LoadingState from '../LoadingState.vue'
 import ErrorState from '../ErrorState.vue'
 import EmptyState from '../EmptyState.vue'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -48,10 +51,10 @@ const mutingIds = ref<Set<string>>(new Set())
 
 const hasMore = computed(() => members.value.length < total.value)
 const mutedDurations = [
-  { label: '10 分钟', seconds: 600 },
-  { label: '1 小时', seconds: 3600 },
-  { label: '1 天', seconds: 86400 },
-  { label: '7 天', seconds: 604800 },
+  { label: t('duration.min10'), seconds: 600 },
+  { label: t('duration.hour1'), seconds: 3600 },
+  { label: t('duration.day1'), seconds: 86400 },
+  { label: t('duration.day7'), seconds: 604800 },
 ]
 
 async function load(reset = false): Promise<void> {
@@ -70,7 +73,7 @@ async function load(reset = false): Promise<void> {
     members.value = reset ? result.items : [...members.value, ...result.items]
     total.value = result.total ?? members.value.length
   } catch (err) {
-    error.value = resolveErrorMessage(err, '成员列表加载失败')
+    error.value = resolveErrorMessage(err, t('mention.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -87,7 +90,7 @@ async function loadMore(): Promise<void> {
 }
 
 function memberName(member: ChannelMemberItem): string {
-  return member.nickname || member.username || '岛民'
+  return member.nickname || member.username || t('common.islander')
 }
 
 function isMuted(member: ChannelMemberItem): boolean {
@@ -96,7 +99,7 @@ function isMuted(member: ChannelMemberItem): boolean {
 }
 
 function isOwnerRow(member: ChannelMemberItem): boolean {
-  return member.roleName === '频道主'
+  return member.roleName === t('channel.role.owner')
 }
 
 async function assignRole(member: ChannelMemberItem, roleId: string): Promise<void> {
@@ -106,7 +109,7 @@ async function assignRole(member: ChannelMemberItem, roleId: string): Promise<vo
     const role = props.roles.find((item) => item.id === roleId)
     member.roleId = roleId
     member.roleName = role?.name ?? member.roleName
-    ElMessage.success('身份组已更新')
+    ElMessage.success(t('channel.member.roleUpdated'))
     emit('changed')
   } catch {
     // 拦截器已提示
@@ -121,7 +124,7 @@ async function mute(member: ChannelMemberItem, seconds: number): Promise<void> {
     await manageApi.muteMember(props.channelId, member.userId, seconds)
     member.status = 'MUTED'
     member.mutedUntil = new Date(Date.now() + seconds * 1000).toISOString()
-    ElMessage.success(`已禁言 ${memberName(member)}`)
+    ElMessage.success(t('channel.member.mutedToast', { name: memberName(member) }))
   } catch {
     // 拦截器已提示
   } finally {
@@ -134,7 +137,7 @@ async function unmute(member: ChannelMemberItem): Promise<void> {
     await manageApi.unmuteMember(props.channelId, member.userId)
     member.status = 'ACTIVE'
     member.mutedUntil = null
-    ElMessage.success('已解除禁言')
+    ElMessage.success(t('channel.member.unmuted'))
   } catch {
     // 拦截器已提示
   }
@@ -143,10 +146,13 @@ async function unmute(member: ChannelMemberItem): Promise<void> {
 async function remove(member: ChannelMemberItem): Promise<void> {
   if (!props.canRemove) return
   try {
-    await ElMessageBox.confirm(`确认将「${memberName(member)}」移出频道吗？`, '移除成员', {
+    await ElMessageBox.confirm(
+      t('channel.member.removeConfirm', { name: memberName(member) }),
+      t('channel.member.remove'),
+      {
       type: 'warning',
-      confirmButtonText: '移除',
-      cancelButtonText: '取消',
+      confirmButtonText: t('common.remove'),
+      cancelButtonText: t('common.cancel'),
     })
   } catch {
     return
@@ -155,7 +161,7 @@ async function remove(member: ChannelMemberItem): Promise<void> {
     await manageApi.removeMember(props.channelId, member.userId)
     members.value = members.value.filter((item) => item.userId !== member.userId)
     total.value = Math.max(0, total.value - 1)
-    ElMessage.success('成员已移除')
+    ElMessage.success(t('channel.member.removed'))
     emit('changed')
   } catch {
     // 拦截器已提示
@@ -183,13 +189,13 @@ defineExpose({ reload: () => load(true) })
       <el-input
         v-model="keyword"
         :prefix-icon="Search"
-        placeholder="搜索成员用户名 / 昵称"
+        :placeholder="t('channel.memberSearch')"
         clearable
         class="member-list__search"
         @keyup.enter="search"
         @clear="search"
       />
-      <el-button @click="search">搜索</el-button>
+      <el-button @click="search">{{ t('common.search') }}</el-button>
     </div>
 
     <LoadingState v-if="loading && members.length === 0" :rows="3" />
@@ -199,8 +205,8 @@ defineExpose({ reload: () => load(true) })
     <EmptyState
       v-else-if="members.length === 0"
       compact
-      title="没有找到成员"
-      description="试试其他关键词，或等待更多岛民加入。"
+      :title="t('channel.memberNotFound')"
+      :description="t('channel.memberNotFoundHint')"
     />
 
     <ul v-else class="member-items">
@@ -217,16 +223,20 @@ defineExpose({ reload: () => load(true) })
 
         <div class="member-item__tags">
           <el-tag v-if="member.roleName" size="small" effect="plain" type="info">{{ member.roleName }}</el-tag>
-          <el-tag v-if="isMuted(member)" size="small" type="warning" effect="plain">禁言中</el-tag>
+          <el-tag v-if="isMuted(member)" size="small" type="warning" effect="plain">{{ t('channel.member.muted') }}</el-tag>
         </div>
 
         <small v-if="member.joinedAt" class="member-item__joined">
-          {{ compact ? formatRelativeTime(member.joinedAt) : `加入于 ${formatDateTime(member.joinedAt)}` }}
+          {{
+            compact
+              ? formatRelativeTime(member.joinedAt)
+              : t('channel.member.joinedAt', { time: formatDateTime(member.joinedAt) })
+          }}
         </small>
 
         <div v-if="canAssignRole || canMute || canRemove" class="member-item__actions">
           <el-dropdown v-if="canAssignRole && roles.length > 0" trigger="click" @command="(command) => handleAssignCommand(member, command)">
-            <el-button text size="small">身份组</el-button>
+            <el-button text size="small">{{ t('channel.member.role') }}</el-button>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item
@@ -242,7 +252,7 @@ defineExpose({ reload: () => load(true) })
           </el-dropdown>
 
           <el-dropdown v-if="canMute && !isMuted(member) && !isOwnerRow(member)" trigger="click" @command="(command) => handleMuteCommand(member, command)">
-            <el-button text size="small">禁言</el-button>
+            <el-button text size="small">{{ t('channel.member.mute') }}</el-button>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item v-for="duration in mutedDurations" :key="duration.seconds" :command="duration.seconds">
@@ -251,7 +261,7 @@ defineExpose({ reload: () => load(true) })
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-          <el-button v-if="canMute && isMuted(member)" text size="small" @click="unmute(member)">解除禁言</el-button>
+          <el-button v-if="canMute && isMuted(member)" text size="small" @click="unmute(member)">{{ t('channel.member.unmute') }}</el-button>
 
           <el-button
             v-if="canRemove && !isOwnerRow(member) && member.userId !== auth.currentUser?.id"
@@ -259,17 +269,17 @@ defineExpose({ reload: () => load(true) })
             size="small"
             type="danger"
             @click="remove(member)"
-          >
-            移除
-          </el-button>
+          >{{ t('common.remove') }}</el-button>
         </div>
       </li>
     </ul>
 
     <div v-if="hasMore" class="member-list__more">
-      <el-button text type="primary" :loading="loading" @click="loadMore">加载更多成员</el-button>
+      <el-button text type="primary" :loading="loading" @click="loadMore">{{ t('channel.member.loadMore') }}</el-button>
     </div>
-    <p v-else-if="members.length > 0" class="member-list__total">共 {{ total || members.length }} 名成员</p>
+    <p v-else-if="members.length > 0" class="member-list__total">
+      {{ t('channel.member.total', { n: total || members.length }) }}
+    </p>
   </div>
 </template>
 

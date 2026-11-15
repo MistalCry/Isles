@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
@@ -18,6 +19,8 @@ import UserAvatar from '@/components/UserAvatar.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import EmptyState from '@/components/EmptyState.vue'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -58,14 +61,14 @@ async function loadRecommendations(refresh = false): Promise<void> {
     // 手动刷新带 seed，让后端在候选窗口内轮换，避免每次都拿到同一批
     recommendations.value = await feedApi.getRecommendations(6, refresh ? Date.now() : undefined)
   } catch (err) {
-    recommendationsError.value = resolveErrorMessage(err, '频道推荐加载失败')
+    recommendationsError.value = resolveErrorMessage(err, t('hot.recommendFailed'))
   } finally {
     recommendationsLoading.value = false
   }
 }
 
 async function handleJoin(recommendation: ChannelRecommendation): Promise<void> {
-  if (!requireLogin('登录后可加入频道')) return
+  if (!requireLogin(t('channel.page.joinLoginRequired'))) return
   if (channelStore.isJoined(recommendation.channel.id)) {
     void router.push({ name: 'channel', params: { id: recommendation.channel.id } })
     return
@@ -74,7 +77,7 @@ async function handleJoin(recommendation: ChannelRecommendation): Promise<void> 
   try {
     await channelStore.joinChannel(recommendation.channel.id)
     await channelStore.fetchMyChannels(true)
-    ElMessage.success(`已加入「${recommendation.channel.name}」`)
+    ElMessage.success(t('channel.page.joinedToast', { name: recommendation.channel.name }))
   } catch {
     // 拦截器已提示
   } finally {
@@ -96,20 +99,20 @@ onMounted(() => {
   <div class="page hot-page">
     <header class="page-header">
       <div>
-        <h1 class="page-title">热门讨论</h1>
-        <p class="page-subtitle">全站正在被讨论的内容（浏览 / 点赞 / 评论 + 时间衰减）</p>
+        <h1 class="page-title">{{ t('nav.hot') }}</h1>
+        <p class="page-subtitle">{{ t('hot.subtitle') }}</p>
       </div>
-      <el-button :icon="Refresh" @click="list.refresh()">刷新</el-button>
+      <el-button :icon="Refresh" @click="list.refresh()">{{ t('common.refresh') }}</el-button>
     </header>
 
     <div class="hot-layout">
-      <section class="hot-main" aria-label="热门帖子">
-        <LoadingState v-if="list.initialLoading.value" :rows="5" tip="正在加载热门讨论…" />
+      <section class="hot-main" :aria-label="t('manage.data.topPosts')">
+        <LoadingState v-if="list.initialLoading.value" :rows="5" :tip="t('hot.loading')" />
         <ErrorState v-else-if="list.error.value" :message="list.error.value" @retry="list.refresh()" />
         <EmptyState
           v-else-if="list.items.value.length === 0"
-          title="暂时没有热门内容"
-          description="等岛民们多发几篇帖子，这里就会热闹起来。"
+          :title="t('hot.empty')"
+          :description="t('hot.emptyHint')"
         />
         <div v-else class="hot-list">
           <PostCard v-for="post in list.items.value" :key="post.id" :post="post" show-channel />
@@ -121,24 +124,22 @@ onMounted(() => {
               :loading="list.loading.value"
               @click="list.loadMore()"
             >
-              加载更多热门内容
+              {{ t('hot.loadMore') }}
             </el-button>
-            <span v-else class="muted">已经到底啦</span>
+            <span v-else class="muted">{{ t('hot.end') }}</span>
           </div>
         </div>
       </section>
 
-      <aside class="hot-side" aria-label="频道推荐">
+      <aside class="hot-side" :aria-label="t('hot.recommend')">
         <div class="isles-card recommendation-panel">
           <header class="recommendation-panel__head">
-            <h2>频道推荐</h2>
-            <el-button text size="small" :icon="Refresh" :loading="recommendationsLoading" @click="loadRecommendations(true)">
-              刷新
-            </el-button>
+            <h2>{{ t('hot.recommend') }}</h2>
+            <el-button text size="small" :icon="Refresh" :loading="recommendationsLoading" @click="loadRecommendations(true)">{{ t('common.refresh') }}</el-button>
           </header>
 
           <p v-if="showLoginForRecommendations" class="muted recommendation-panel__login">
-            登录后根据你加入的频道与浏览行为推荐岛屿。
+            {{ t('hot.loginForRecommendations') }}
           </p>
 
           <template v-else>
@@ -151,8 +152,8 @@ onMounted(() => {
             <EmptyState
               v-else-if="recommendations.length === 0"
               compact
-              title="暂无推荐"
-              description="继续浏览频道，推荐会越来越准。"
+              :title="t('hot.recommendEmpty')"
+              :description="t('hot.recommendEmptyHint')"
             />
             <ul v-else class="recommendation-list">
               <li v-for="recommendation in recommendations" :key="recommendation.channel.id">
@@ -166,7 +167,7 @@ onMounted(() => {
                     />
                     <span class="recommendation-item__meta">
                       <strong class="line-clamp-1">{{ recommendation.channel.name }}</strong>
-                      <small class="muted">{{ formatCount(recommendation.channel.memberCount) }} 成员</small>
+                      <small class="muted">{{ t('hot.memberCount', { n: formatCount(recommendation.channel.memberCount) }) }}</small>
                       <small class="recommendation-item__reason line-clamp-2">{{ recommendation.reason }}</small>
                     </span>
                   </button>
@@ -177,10 +178,8 @@ onMounted(() => {
                     plain
                     :loading="joiningId === recommendation.channel.id"
                     @click="handleJoin(recommendation)"
-                  >
-                    加入
-                  </el-button>
-                  <el-tag v-else size="small" type="success" effect="plain">已加入</el-tag>
+                  >{{ t('channel.card.join') }}</el-button>
+                  <el-tag v-else size="small" type="success" effect="plain">{{ t('channel.joined') }}</el-tag>
                 </div>
               </li>
             </ul>

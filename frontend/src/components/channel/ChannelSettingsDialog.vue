@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -17,6 +18,8 @@ import type { Channel, ChannelRoleItem } from '@/types/models'
 import ChannelMemberList from './ChannelMemberList.vue'
 import ChannelInviteSection from './ChannelInviteSection.vue'
 import ChannelProfileForm from './ChannelProfileForm.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   modelValue: boolean
@@ -66,25 +69,25 @@ const canInvite = computed(
 )
 const canMuteAll = computed(() => hasChannelPermission(permissions.value, CHANNEL_PERMISSIONS.MUTE_ALL))
 const canManageCenter = computed(() => canManageChannel(permissions.value))
-const isOwner = computed(() => Boolean(props.channel.ownerId && props.channel.ownerId === auth.currentUser?.id) || props.channel.myRoleName === '频道主')
+const isOwner = computed(() => Boolean(props.channel.ownerId && props.channel.ownerId === auth.currentUser?.id) || props.channel.myRoleName === t('channel.role.owner'))
 
 const muteAllActive = computed(
   () => Boolean(props.channel.muteAllUntil && new Date(props.channel.muteAllUntil).getTime() > Date.now()),
 )
 
 const muteAllPresets = [
-  { label: '10 分钟', value: 600 },
-  { label: '1 小时', value: 3600 },
-  { label: '6 小时', value: 21600 },
-  { label: '1 天', value: 86400 },
-  { label: '7 天', value: 604800 },
+  { label: t('duration.min10'), value: 600 },
+  { label: t('duration.hour1'), value: 3600 },
+  { label: t('duration.hour6'), value: 21600 },
+  { label: t('duration.day1'), value: 86400 },
+  { label: t('duration.day7'), value: 604800 },
 ]
 
 const visibleTabs = computed(() => {
-  const tabs = [{ key: 'profile', label: '频道资料' }, { key: 'members', label: '成员' }]
-  if (canInvite.value) tabs.push({ key: 'invites', label: '邀请与审批' })
-  if (canMuteAll.value) tabs.push({ key: 'mute-all', label: '全员禁言' })
-  tabs.push({ key: 'danger', label: '退出 / 解散' })
+  const tabs = [{ key: 'profile', label: t('channel.settings.tabProfile') }, { key: 'members', label: t('common.member') }]
+  if (canInvite.value) tabs.push({ key: 'invites', label: t('channel.settings.tabInvite') })
+  if (canMuteAll.value) tabs.push({ key: 'mute-all', label: t('channel.settings.tabMuteAll') })
+  tabs.push({ key: 'danger', label: t('channel.settings.tabDanger') })
   return tabs
 })
 
@@ -128,14 +131,14 @@ async function applyMuteAll(): Promise<void> {
   if (!canMuteAll.value) return
   const seconds = muteAllDuration.value === -1 ? customMuteMinutes.value * 60 : muteAllDuration.value
   if (seconds <= 0) {
-    ElMessage.warning('请输入有效的禁言时长')
+    ElMessage.warning(t('channel.settings.muteInvalid'))
     return
   }
   muteAllLoading.value = true
   try {
     await manageApi.setMuteAll(props.channel.id, seconds)
     props.channel.muteAllUntil = new Date(Date.now() + seconds * 1000).toISOString()
-    ElMessage.success('已开启全员禁言')
+    ElMessage.success(t('channel.settings.muteAllOn'))
   } catch {
     // 拦截器已提示
   } finally {
@@ -148,7 +151,7 @@ async function liftMuteAll(): Promise<void> {
   try {
     await manageApi.setMuteAll(props.channel.id, 0)
     props.channel.muteAllUntil = null
-    ElMessage.success('已解除全员禁言')
+    ElMessage.success(t('channel.settings.muteAllOff'))
   } catch {
     // 拦截器已提示
   } finally {
@@ -158,10 +161,10 @@ async function liftMuteAll(): Promise<void> {
 
 async function leaveChannel(): Promise<void> {
   try {
-    await ElMessageBox.confirm('退出后你将不再是该频道成员，确认退出？', '退出频道', {
+    await ElMessageBox.confirm(t('channel.settings.leaveConfirm'), t('channel.settings.leave'), {
       type: 'warning',
-      confirmButtonText: '退出',
-      cancelButtonText: '取消',
+      confirmButtonText: t('channel.settings.leaveAction'),
+      cancelButtonText: t('common.cancel'),
     })
   } catch {
     return
@@ -170,7 +173,7 @@ async function leaveChannel(): Promise<void> {
   try {
     await channelsApi.leaveChannel(props.channel.id)
     channelStore.removeMyChannel(props.channel.id)
-    ElMessage.success('已退出频道')
+    ElMessage.success(t('channel.settings.left'))
     visible.value = false
     emit('left')
   } catch {
@@ -183,14 +186,14 @@ async function leaveChannel(): Promise<void> {
 async function dissolveChannel(): Promise<void> {
   if (!isOwner.value) return
   if (dissolveConfirm.value.trim() !== props.channel.name) {
-    ElMessage.warning('请输入完整频道名称以确认解散')
+    ElMessage.warning(t('channel.settings.dissolveNameRequired'))
     return
   }
   try {
-    await ElMessageBox.confirm('解散后频道与内容将无法访问，该操作不可恢复。确认解散？', '解散频道', {
+    await ElMessageBox.confirm(t('channel.settings.dissolveConfirm'), t('channel.settings.dissolve'), {
       type: 'error',
-      confirmButtonText: '确认解散',
-      cancelButtonText: '取消',
+      confirmButtonText: t('channel.settings.dissolveAction'),
+      cancelButtonText: t('common.cancel'),
     })
   } catch {
     return
@@ -199,7 +202,7 @@ async function dissolveChannel(): Promise<void> {
   try {
     await manageApi.dissolveChannel(props.channel.id)
     channelStore.removeMyChannel(props.channel.id)
-    ElMessage.success('频道已解散')
+    ElMessage.success(t('channel.settings.dissolved'))
     visible.value = false
     emit('dissolved')
   } catch {
@@ -218,7 +221,7 @@ function goManageCenter(): void {
 <template>
   <el-dialog
     v-model="visible"
-    :title="`频道设置 · ${channel.name}`"
+    :title="t('channel.settings.titleOf', { name: channel.name })"
     width="min(780px, 96vw)"
     top="5vh"
     append-to-body
@@ -231,15 +234,24 @@ function goManageCenter(): void {
     <div v-if="activeTab === 'profile'" class="settings-panel">
       <ChannelProfileForm :channel="channel" @updated="(updated) => emit('updated', updated)" />
       <div class="settings-panel__actions">
-        <el-button v-if="canManageCenter" :icon="Setting" @click="goManageCenter">进入频道管理中心</el-button>
+        <el-button v-if="canManageCenter" :icon="Setting" @click="goManageCenter">{{ t('channel.settings.manageCenter') }}</el-button>
       </div>
     </div>
 
     <div v-else-if="activeTab === 'members'" class="settings-panel">
       <p class="settings-panel__hint">
-        共 {{ channel.memberCount ?? 0 }} 名成员 · 频道主：{{ isOwner ? '你' : (channel.myRoleName === '频道主' ? '频道主' : '—') }}
+        {{
+          t('channel.settings.memberSummary', {
+            n: channel.memberCount ?? 0,
+            owner: isOwner
+              ? t('channel.settings.you')
+              : channel.myRoleName === t('channel.role.owner')
+                ? t('channel.role.owner')
+                : '—',
+          })
+        }}
       </p>
-      <p v-if="rolesLoading" class="muted">正在加载身份组…</p>
+      <p v-if="rolesLoading" class="muted">{{ t('channel.settings.roleLoading') }}</p>
       <ChannelMemberList
         :key="`members-${channel.id}`"
         :channel-id="channel.id"
@@ -263,47 +275,45 @@ function goManageCenter(): void {
     <div v-else-if="activeTab === 'mute-all'" class="settings-panel">
       <el-alert
         v-if="muteAllActive"
-        :title="`全员禁言中，结束时间：${formatDateTime(channel.muteAllUntil)}`"
+        :title="t('channel.settings.muteAllUntil', { time: formatDateTime(channel.muteAllUntil) })"
         type="warning"
         :closable="false"
         show-icon
         class="settings-panel__alert"
       />
-      <p class="settings-panel__hint">开启后仅频道主与超级管理员可发言，普通成员与子板块管理员将被限制发帖/评论。</p>
+      <p class="settings-panel__hint">{{ t('channel.settings.muteAllHint') }}</p>
       <el-form label-position="top" @submit.prevent>
-        <el-form-item label="禁言时长">
+        <el-form-item :label="t('channel.muteDuration')">
           <el-select v-model="muteAllDuration" class="settings-panel__select">
             <el-option v-for="preset in muteAllPresets" :key="preset.value" :label="preset.label" :value="preset.value" />
-            <el-option label="自定义（分钟）" :value="-1" />
+            <el-option :label="t('channel.customMinutes')" :value="-1" />
           </el-select>
           <el-input-number v-if="muteAllDuration === -1" v-model="customMuteMinutes" :min="1" :max="43200" class="settings-panel__minutes" />
         </el-form-item>
       </el-form>
       <div class="settings-panel__actions">
-        <el-button type="warning" :loading="muteAllLoading" @click="applyMuteAll">开启全员禁言</el-button>
-        <el-button v-if="muteAllActive" :disabled="muteAllLoading" @click="liftMuteAll">解除禁言</el-button>
+        <el-button type="warning" :loading="muteAllLoading" @click="applyMuteAll">{{ t('channel.settings.muteAll') }}</el-button>
+        <el-button v-if="muteAllActive" :disabled="muteAllLoading" @click="liftMuteAll">{{ t('channel.member.unmute') }}</el-button>
       </div>
     </div>
 
     <div v-else-if="activeTab === 'danger'" class="settings-panel">
       <div v-if="!isOwner" class="danger-block">
-        <h3>退出频道</h3>
-        <p class="muted">退出后将不再收到该频道的动态，可随时重新加入公开频道。</p>
-        <el-button :loading="leaving" @click="leaveChannel">退出频道</el-button>
+        <h3>{{ t('channel.settings.leave') }}</h3>
+        <p class="muted">{{ t('channel.settings.leaveHint') }}</p>
+        <el-button :loading="leaving" @click="leaveChannel">{{ t('channel.settings.leave') }}</el-button>
       </div>
 
       <div v-if="isOwner" class="danger-block danger-block--danger">
-        <h3>解散频道</h3>
-        <p class="muted">仅频道主可解散频道。解散后频道与全部内容将不可访问，操作不可恢复。</p>
-        <el-input v-model="dissolveConfirm" placeholder="输入完整频道名称以确认" class="settings-panel__select" />
-        <el-button type="danger" :loading="dissolving" :disabled="dissolveConfirm.trim() !== channel.name" @click="dissolveChannel">
-          解散频道
-        </el-button>
+        <h3>{{ t('channel.settings.dissolve') }}</h3>
+        <p class="muted">{{ t('channel.settings.dissolveHint') }}</p>
+        <el-input v-model="dissolveConfirm" :placeholder="t('channel.dissolveInputPlaceholder')" class="settings-panel__select" />
+        <el-button type="danger" :loading="dissolving" :disabled="dissolveConfirm.trim() !== channel.name" @click="dissolveChannel">{{ t('channel.settings.dissolve') }}</el-button>
       </div>
     </div>
 
     <template #footer>
-      <el-button @click="visible = false">关闭</el-button>
+      <el-button @click="visible = false">{{ t('channel.settings.close') }}</el-button>
     </template>
   </el-dialog>
 </template>

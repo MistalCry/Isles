@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 /**
  * 轻量富文本编辑器（长文发布使用）。
  *
@@ -8,9 +9,11 @@
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Link, Picture } from '@element-plus/icons-vue'
+import { Link, Picture, VideoCamera } from '@element-plus/icons-vue'
 import { mediaApi } from '@/api'
 import { resolveErrorMessage } from '@/api/client'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -21,7 +24,7 @@ const props = withDefaults(
     disabled?: boolean
   }>(),
   {
-    placeholder: '写下你想分享的内容…',
+    placeholder: '',
     minHeight: 240,
     maxLength: 50_000,
     disabled: false,
@@ -34,25 +37,29 @@ const emit = defineEmits<{
 
 const editorRef = ref<HTMLElement>()
 const fileInput = ref<HTMLInputElement>()
+const videoInput = ref<HTMLInputElement>()
+/** 打开系统文件框后选区会丢失，这里先存一份 Range，插入前再恢复 */
+const savedRange = ref<Range | null>(null)
 const uploading = ref(false)
 const focused = ref(false)
 const activeMarks = ref<Record<string, boolean>>({})
 
+const resolvedPlaceholder = computed(() => props.placeholder || t('editor.placeholder'))
 const plainText = computed(() => (props.modelValue || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim())
 const isEmpty = computed(() => plainText.value.length === 0)
 
 const blocks = [
-  { label: '正文', command: 'formatBlock', value: 'p' },
+  { label: t('editor.body'), command: 'formatBlock', value: 'p' },
   { label: 'H2', command: 'formatBlock', value: 'h2' },
   { label: 'H3', command: 'formatBlock', value: 'h3' },
-  { label: '引用', command: 'formatBlock', value: 'blockquote' },
+  { label: t('editor.quote'), command: 'formatBlock', value: 'blockquote' },
 ]
 
 const marks = [
-  { label: 'B', title: '加粗', command: 'bold', className: 'is-bold' },
-  { label: 'I', title: '斜体', command: 'italic', className: 'is-italic' },
-  { label: 'U', title: '下划线', command: 'underline', className: 'is-underline' },
-  { label: 'S', title: '删除线', command: 'strikeThrough', className: 'is-strike' },
+  { label: 'B', title: t('editor.bold'), command: 'bold', className: 'is-bold' },
+  { label: 'I', title: t('editor.italic'), command: 'italic', className: 'is-italic' },
+  { label: 'U', title: t('editor.underline'), command: 'underline', className: 'is-underline' },
+  { label: 'S', title: t('editor.strike'), command: 'strikeThrough', className: 'is-strike' },
 ]
 
 function syncFromDom(): void {
@@ -71,6 +78,22 @@ function exec(command: string, value?: string): void {
   refreshActiveMarks()
 }
 
+/**
+ * 在光标处插入纯文本（@提及等）。没有选区时追加到末尾。
+ */
+function insertText(text: string): void {
+  if (props.disabled) return
+  editorRef.value?.focus()
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0 || !editorRef.value?.contains(selection.anchorNode)) {
+    editorRef.value?.append(document.createTextNode(text))
+    syncFromDom()
+    return
+  }
+  document.execCommand('insertText', false, text)
+  syncFromDom()
+}
+
 function refreshActiveMarks(): void {
   const next: Record<string, boolean> = {}
   for (const mark of marks) {
@@ -87,11 +110,11 @@ async function insertLink(): Promise<void> {
   if (props.disabled) return
   editorRef.value?.focus()
   try {
-    const { value } = await ElMessageBox.prompt('输入链接地址（https:// 开头）', '插入链接', {
-      confirmButtonText: '插入',
-      cancelButtonText: '取消',
+    const { value } = await ElMessageBox.prompt(t('editor.linkPrompt'), t('editor.linkTitle'), {
+      confirmButtonText: t('common.insert'),
+      cancelButtonText: t('common.cancel'),
       inputPattern: /^https?:\/\/.+/,
-      inputErrorMessage: '请输入 http(s) 开头的完整地址',
+      inputErrorMessage: t('editor.linkInvalid'),
     })
     exec('createLink', value)
   } catch {
@@ -99,28 +122,92 @@ async function insertLink(): Promise<void> {
   }
 }
 
-function triggerImagePick(): void {
-  if (props.disabled) return
-  fileInput.value?.click()
-}
-
-async function handleImagePick(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  const invalid = mediaApi.validateMediaFile(file)
-  if (invalid) {
-    ElMessage.warning(invalid)
+function captureSelection(): void {
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0) {
+    savedRange.value = null
     return
   }
+  if (!editorRef.value?.contains(selection.anchorNode)) {
+    savedRange.value = null
+    return
+  }
+  savedRange.value = selection.getRangeAt(0).cloneRange()
+}
+
+function restoreSelection(): void {
+  editorRef.value?.focus()
+  const selection = window.getSelection()
+  if (!selection || !savedRange.value) return
+  selection.removeAllRanges()
+  selection.addRange(savedRange.value)
+}
+
+/** 在光标处插入节点；没有可用选区时追加到末尾 */
+function insertNodeAtCaret(node: Node): void {
+  restoreSelection()
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0) {
+    editorRef.value?.append(node)
+    syncFromDom()
+    return
+  }
+  const range = selection.getRangeAt(0)
+  range.deleteContents()
+  range.insertNode(node)
+  range.setStartAfter(node)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  syncFromDom()
+}
+
+function mediaCount(): number {
+  return editorRef.value?.querySelectorAll('img,video').length ?? 0
+}
+
+function triggerMediaPick(kind: 'image' | 'video'): void {
+  if (props.disabled || uploading.value) return
+  captureSelection()
+  if (kind === 'video') {
+    videoInput.value?.click()
+  } else {
+    fileInput.value?.click()
+  }
+}
+
+async function handleMediaPick(event: Event, kind: 'image' | 'video'): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = ''
+  if (files.length === 0) return
   uploading.value = true
   try {
-    const uploaded = await mediaApi.uploadMedia(file)
-    editorRef.value?.focus()
-    exec('insertImage', uploaded.url)
+    for (const file of files) {
+      const invalid = mediaApi.validateMediaFile(file)
+      if (invalid) {
+        ElMessage.warning(invalid)
+        continue
+      }
+      const before = mediaCount()
+      const uploaded = await mediaApi.uploadMedia(file)
+      const node = document.createElement(kind === 'video' ? 'video' : 'img')
+      if (kind === 'video') {
+        node.setAttribute('src', uploaded.url)
+        node.setAttribute('controls', 'controls')
+        node.setAttribute('preload', 'metadata')
+        node.setAttribute('width', '480')
+      } else {
+        node.setAttribute('src', uploaded.url)
+        node.setAttribute('alt', file.name.replace(/\.[^.]+$/, '') || t('common.image'))
+      }
+      insertNodeAtCaret(node)
+      if (mediaCount() <= before) {
+        ElMessage.warning(t('editor.insertFailed'))
+      }
+    }
   } catch (err) {
-    ElMessage.error(resolveErrorMessage(err, '图片上传失败'))
+    ElMessage.error(resolveErrorMessage(err, kind === 'video' ? t('editor.videoUploadFailed') : t('editor.imageUploadFailed')))
   } finally {
     uploading.value = false
   }
@@ -178,11 +265,12 @@ watch(
 onMounted(() => {
   if (editorRef.value) editorRef.value.innerHTML = props.modelValue || ''
 })
+defineExpose({ insertText, focus: () => editorRef.value?.focus() })
 </script>
 
 <template>
   <div class="rich-editor" :class="{ 'rich-editor--disabled': disabled }">
-    <div class="rich-editor__toolbar" role="toolbar" aria-label="富文本工具栏">
+    <div class="rich-editor__toolbar" role="toolbar" :aria-label="t('editor.toolbar')">
       <button
         v-for="mark in marks"
         :key="mark.command"
@@ -209,29 +297,37 @@ onMounted(() => {
         {{ block.label }}
       </button>
       <span class="rich-editor__divider" aria-hidden="true" />
-      <button type="button" class="rich-editor__btn" title="无序列表" @mousedown.prevent @click="exec('insertUnorderedList')">•</button>
-      <button type="button" class="rich-editor__btn" title="有序列表" @mousedown.prevent @click="exec('insertOrderedList')">1.</button>
-      <button type="button" class="rich-editor__btn" title="行内代码" @mousedown.prevent @click="exec('formatBlock', 'pre')">&lt;/&gt;</button>
+      <button type="button" class="rich-editor__btn" :title="t('editor.bulletList')" @mousedown.prevent @click="exec('insertUnorderedList')">•</button>
+      <button type="button" class="rich-editor__btn" :title="t('editor.orderedList')" @mousedown.prevent @click="exec('insertOrderedList')">1.</button>
+      <button type="button" class="rich-editor__btn" :title="t('editor.code')" @mousedown.prevent @click="exec('formatBlock', 'pre')">&lt;/&gt;</button>
       <span class="rich-editor__divider" aria-hidden="true" />
-      <button type="button" class="rich-editor__btn" title="插入链接" :disabled="disabled" @mousedown.prevent @click="insertLink">
+      <button type="button" class="rich-editor__btn" :title="t('editor.linkTitle')" :disabled="disabled" @mousedown.prevent @click="insertLink">
         <el-icon><Link /></el-icon>
       </button>
       <button
         type="button"
         class="rich-editor__btn"
-        :title="uploading ? '上传中…' : '插入图片'"
+        :title="uploading ? t('common.uploading') : t('editor.insertImage')"
         :disabled="disabled || uploading"
         @mousedown.prevent
-        @click="triggerImagePick"
+        @click="triggerMediaPick('image')"
       >
         <el-icon><Picture /></el-icon>
       </button>
-      <span class="rich-editor__divider" aria-hidden="true" />
-      <button type="button" class="rich-editor__btn" title="撤销" @mousedown.prevent @click="exec('undo')">↺</button>
-      <button type="button" class="rich-editor__btn" title="重做" @mousedown.prevent @click="exec('redo')">↻</button>
-      <button type="button" class="rich-editor__btn rich-editor__btn--text" title="清除格式" @mousedown.prevent @click="exec('removeFormat')">
-        清除格式
+      <button
+        type="button"
+        class="rich-editor__btn"
+        :title="t('editor.insertVideo')"
+        :disabled="disabled || uploading"
+        @mousedown.prevent
+        @click="triggerMediaPick('video')"
+      >
+        <el-icon><VideoCamera /></el-icon>
       </button>
+      <span class="rich-editor__divider" aria-hidden="true" />
+      <button type="button" class="rich-editor__btn" :title="t('channel.invite.revoke')" @mousedown.prevent @click="exec('undo')">↺</button>
+      <button type="button" class="rich-editor__btn" :title="t('editor.redo')" @mousedown.prevent @click="exec('redo')">↻</button>
+      <button type="button" class="rich-editor__btn rich-editor__btn--text" :title="t('editor.clearFormat')" @mousedown.prevent @click="exec('removeFormat')">{{ t('editor.clearFormat') }}</button>
     </div>
 
     <div
@@ -241,7 +337,7 @@ onMounted(() => {
       :contenteditable="!disabled"
       role="textbox"
       aria-multiline="true"
-      :aria-label="placeholder"
+      :aria-label="resolvedPlaceholder"
       spellcheck="false"
       @input="syncFromDom"
       @blur="focused = false; syncFromDom()"
@@ -250,14 +346,29 @@ onMounted(() => {
       @mouseup="refreshActiveMarks"
       @paste="handlePaste"
     />
-    <p v-if="isEmpty" class="rich-editor__placeholder">{{ placeholder }}</p>
+    <p v-if="isEmpty" class="rich-editor__placeholder">{{ resolvedPlaceholder }}</p>
 
     <div class="rich-editor__footer">
-      <span class="muted">支持加粗、标题、列表、引用、链接与图片</span>
+      <span class="muted">{{ t('editor.hint') }}</span>
       <span class="muted">{{ plainText.length }} / {{ maxLength }}</span>
     </div>
 
-    <input ref="fileInput" type="file" accept="image/*" class="visually-hidden" @change="handleImagePick" />
+    <input
+      ref="fileInput"
+      type="file"
+      accept="image/*"
+      multiple
+      class="visually-hidden"
+      @change="handleMediaPick($event, 'image')"
+    />
+    <input
+      ref="videoInput"
+      type="file"
+      accept="video/*"
+      multiple
+      class="visually-hidden"
+      @change="handleMediaPick($event, 'video')"
+    />
   </div>
 </template>
 

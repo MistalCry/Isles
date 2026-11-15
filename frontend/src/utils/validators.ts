@@ -1,42 +1,46 @@
 /** 客户端表单校验规则：只为体验服务，最终以服务端校验为准（规范 §3.3）。 */
+import { t } from '@/i18n'
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_-]{3,20}$/
 
 export function validateUsername(value: string): string | null {
-  if (!value) return '请输入用户名'
-  if (!USERNAME_PATTERN.test(value)) return '用户名需为 3–20 位字母、数字、下划线或连字符'
+  if (!value) return t('auth.login.usernameRequired')
+  if (!USERNAME_PATTERN.test(value)) return t('validation.usernamePattern')
   return null
 }
 
 export function validatePassword(value: string): string | null {
-  if (!value) return '请输入密码'
-  if (value.length < 8) return '密码至少 8 位'
-  if (value.length > 64) return '密码不能超过 64 位'
-  if (!/[a-zA-Z]/.test(value) || !/\d/.test(value)) return '密码需同时包含字母和数字'
+  if (!value) return t('auth.login.passwordRequired')
+  if (value.length < 8) return t('validation.passwordMin')
+  if (value.length > 64) return t('validation.passwordMax')
+  if (!/[a-zA-Z]/.test(value) || !/\d/.test(value)) return t('validation.passwordPattern')
   return null
 }
 
 export function validateNickname(value: string): string | null {
   if (!value) return null
-  if (value.length > 20) return '昵称不能超过 20 个字符'
+  if (value.length > 20) return t('validation.nicknameMax')
   return null
 }
 
 export function validateChannelName(value: string): string | null {
   const name = value.trim()
-  if (!name) return '请输入频道名称'
-  if (name.length < 2) return '频道名称至少 2 个字符'
-  if (name.length > 30) return '频道名称最多 30 个字符'
+  if (!name) return t('validation.channelNameRequired')
+  if (name.length < 2) return t('validation.channelNameMin')
+  if (name.length > 30) return t('validation.channelNameMax')
   return null
 }
 
 export function validateChannelDescription(value: string): string | null {
-  if (value.length > 200) return '简介不能超过 200 个字符'
+  if (value.length > 200) return t('validation.channelDescMax')
   return null
 }
 
-export function validateComment(value: string): string | null {
-  if (!value.trim()) return '评论内容不能为空'
-  if (value.length > 2000) return '评论不能超过 2000 个字符'
+/**
+ * 评论校验：文字、媒体、表情**至少一项**非空（docs/03 FR-CMT-03，与后端 CreateCommentRequest 一致）。
+ */
+export function validateComment(value: string, mediaCount = 0, emojiCount = 0): string | null {
+  if (!value.trim() && mediaCount === 0 && emojiCount === 0) return t('validation.comment.empty')
+  if (value.length > 2000) return t('validation.comment.tooLong')
   return null
 }

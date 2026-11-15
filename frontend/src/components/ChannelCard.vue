@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { formatCount } from '@/utils/format'
 import { canManageChannelSummary } from '@/utils/channelPermissions'
 import type { ChannelSummary } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -38,15 +41,13 @@ function openManage(event: Event): void {
     <div class="channel-card__body">
       <div class="channel-card__title-row">
         <h3 class="channel-card__name line-clamp-1">{{ channel.name }}</h3>
-        <el-tag v-if="isPrivate" size="small" type="info" effect="plain">私密</el-tag>
-        <button v-if="isManager" type="button" class="channel-card__manage" title="进入频道管理中心" @click="openManage">
-          管理
-        </button>
+        <el-tag v-if="isPrivate" size="small" type="info" effect="plain">{{ t('channel.private') }}</el-tag>
+        <button v-if="isManager" type="button" class="channel-card__manage" :title="t('channel.settings.manageCenter')" @click="openManage">{{ t('common.manage') }}</button>
       </div>
       <p class="channel-card__meta">
         <span v-if="channelNo">{{ channelNo }}</span>
-        <span>{{ formatCount(channel.memberCount) }} 成员</span>
-        <span>{{ formatCount(channel.postCount) }} 帖子</span>
+        <span>{{ t('common.memberSuffix', { n: formatCount(channel.memberCount) }) }}</span>
+        <span>{{ t('common.postSuffix', { n: formatCount(channel.postCount) }) }}</span>
       </p>
       <p v-if="channel.description" class="channel-card__description line-clamp-2">
         {{ channel.description }}

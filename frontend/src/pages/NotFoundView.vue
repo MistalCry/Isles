@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import EmptyState from '@/components/EmptyState.vue'
+
+const { t } = useI18n()
 
 const router = useRouter()
 
@@ -12,11 +15,11 @@ function goHome(): void {
 <template>
   <div class="page not-found">
     <EmptyState
-      title="404 · 这座岛不存在"
-      description="你访问的页面可能已经漂走，或者链接有误。"
+      :title="t('notFound.title')"
+      :description="t('notFound.hint')"
     >
       <template #action>
-        <el-button type="primary" @click="goHome">回到频道动态</el-button>
+        <el-button type="primary" @click="goHome">{{ t('channel.page.backToFeed') }}</el-button>
       </template>
     </EmptyState>
   </div>

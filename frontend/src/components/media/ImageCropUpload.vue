@@ -1,23 +1,32 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 /**
  * 可复用图片上传 + 裁剪组件（头像 / 封面 / 背景统一使用，避免各处重复实现）。
  *
- * 能力：选择图片 → 拖拽平移 + 滑块/滚轮缩放 → 按固定比例裁剪 → 上传 → 回填 URL。
- * 比例由 `aspectRatio` 决定：头像 1（正方形/圆形），频道背景 4（长条）。
+ * 能力：选择图片 → 拖拽平移 + 滑块/滚轮缩放 → 按固定比例裁剪 → 上传 → 回填 URL；
+ * 也可以「使用原图」直接上传，保留原始分辨率与格式（GIF 动图、PNG 透明只能靠这条）。
+ *
+ * <p>导出策略（docs/03 FR-MEDIA-05）：
+ * 导出尺寸按**裁剪区域的原图像素**计算，只在超过 `maxOutputWidth` 时才等比缩小，
+ * 不再像旧实现那样无条件缩放到固定宽度（4000×3000 的照片会被压成 512×512）。
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Picture } from '@element-plus/icons-vue'
 import { mediaApi } from '@/api'
 import { resolveErrorMessage } from '@/api/client'
+import { MAX_IMAGE_SIZE_MB } from '@/constants/app'
+import { resolveBaseScale, resolveCropRect, resolveExportSize } from '@/utils/crop'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
     modelValue?: string | null
     /** 宽 / 高，头像 1，频道背景 4 */
     aspectRatio?: number
-    /** 导出图片的宽度（像素），高度按比例换算 */
-    outputWidth?: number
+    /** 导出宽度上限（像素）：裁剪区域小于该值时保持原像素，不做放大 */
+    maxOutputWidth?: number
     label?: string
     hint?: string
     shape?: 'square' | 'circle' | 'rect'
@@ -30,8 +39,8 @@ const props = withDefaults(
   {
     modelValue: null,
     aspectRatio: 1,
-    outputWidth: 512,
-    label: '上传图片',
+    maxOutputWidth: 4096,
+    label: '',
     hint: '',
     shape: 'square',
     disabled: false,
@@ -49,16 +58,20 @@ const fileInput = ref<HTMLInputElement>()
 const imageRef = ref<HTMLImageElement>()
 const dialogVisible = ref(false)
 const uploading = ref(false)
+const usingOriginal = ref(false)
 const loadingImage = ref(false)
 
 const sourceUrl = ref('')
 const sourceName = ref('image.png')
+/** 原始文件：用于「使用原图」与格式判定 */
+const sourceFile = ref<File | null>(null)
 const natural = ref({ width: 0, height: 0 })
 const zoom = ref(1)
 const offset = ref({ x: 0, y: 0 })
 const dragging = ref(false)
 const dragStart = ref({ x: 0, y: 0, ox: 0, oy: 0 })
 
+const resolvedLabel = computed(() => props.label || t('media.uploadLabel'))
 const boxHeight = computed(() => Math.round(props.boxWidth / props.aspectRatio))
 /** 预览宽度：头像类传小值，封面类不传则与裁剪框一致 */
 const previewWidth = computed(() => props.previewWidth > 0 ? props.previewWidth : props.boxWidth)
@@ -75,11 +88,9 @@ const stageStyle = computed(() => ({
 }))
 
 /** 让图片刚好覆盖裁剪框的缩放比例 */
-const baseScale = computed(() => {
-  const { width, height } = natural.value
-  if (!width || !height) return 1
-  return Math.max(props.boxWidth / width, boxHeight.value / height)
-})
+const baseScale = computed(() =>
+  resolveBaseScale(natural.value.width, natural.value.height, props.boxWidth, boxHeight.value),
+)
 
 const renderScale = computed(() => baseScale.value * zoom.value)
 
@@ -91,6 +102,24 @@ const imageStyle = computed(() => {
     transform: `translate(${offset.value.x}px, ${offset.value.y}px)`,
   }
 })
+
+/** 当前裁剪区域（原图像素） */
+const cropRect = computed(() =>
+  resolveCropRect({
+    naturalWidth: natural.value.width,
+    naturalHeight: natural.value.height,
+    boxWidth: props.boxWidth,
+    boxHeight: boxHeight.value,
+    scale: renderScale.value,
+    offsetX: offset.value.x,
+    offsetY: offset.value.y,
+  }),
+)
+
+/** 实际导出尺寸：只在超过上限时等比缩小 */
+const exportSize = computed(() => resolveExportSize(cropRect.value, props.maxOutputWidth))
+
+const isGif = computed(() => (sourceFile.value?.type ?? '').toLowerCase().includes('gif'))
 
 function clampOffset(): void {
   const scale = renderScale.value
@@ -124,7 +153,7 @@ async function handleFileChange(event: Event): Promise<void> {
   input.value = ''
   if (!file) return
   if (!file.type.startsWith('image/')) {
-    ElMessage.warning('请选择图片文件')
+    ElMessage.warning(t('media.crop.pickImage'))
     return
   }
   const invalid = mediaApi.validateMediaFile(file)
@@ -136,6 +165,7 @@ async function handleFileChange(event: Event): Promise<void> {
   try {
     if (sourceUrl.value) URL.revokeObjectURL(sourceUrl.value)
     sourceUrl.value = URL.createObjectURL(file)
+    sourceFile.value = file
     sourceName.value = file.name.replace(/\.[^.]+$/, '') || 'image'
     const size = await loadImageSize(sourceUrl.value)
     natural.value = size
@@ -144,7 +174,7 @@ async function handleFileChange(event: Event): Promise<void> {
     await nextTick()
     centerImage()
   } catch {
-    ElMessage.error('图片读取失败，请换一张试试')
+    ElMessage.error(t('media.crop.readFailed'))
   } finally {
     loadingImage.value = false
   }
@@ -199,40 +229,94 @@ function onWheel(event: WheelEvent): void {
   onZoomChange(Math.min(4, Math.max(1, Number((zoom.value + step).toFixed(2)))))
 }
 
-async function confirmCrop(): Promise<void> {
-  const image = imageRef.value
-  if (!image || !natural.value.width) return
-  const scale = renderScale.value
-  const sourceX = Math.max(0, -offset.value.x / scale)
-  const sourceY = Math.max(0, -offset.value.y / scale)
-  const sourceWidth = Math.min(natural.value.width - sourceX, props.boxWidth / scale)
-  const sourceHeight = Math.min(natural.value.height - sourceY, boxHeight.value / scale)
-
-  const canvas = document.createElement('canvas')
-  canvas.width = props.outputWidth
-  canvas.height = Math.round(props.outputWidth / props.aspectRatio)
-  const context = canvas.getContext('2d')
-  if (!context) return
-  context.imageSmoothingQuality = 'high'
-  context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height)
-
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92))
-  if (!blob) {
-    ElMessage.error('裁剪失败，请重试')
-    return
+/** 画布编码：PNG/WebP 保留透明通道，其余走 JPEG；超过大小上限时逐级降质 */
+async function encodeBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
+  const sourceType = (sourceFile.value?.type ?? '').toLowerCase()
+  const keepAlpha = sourceType.includes('png') || sourceType.includes('webp')
+  const mime = keepAlpha ? 'image/png' : 'image/jpeg'
+  const limit = MAX_IMAGE_SIZE_MB * 1024 * 1024
+  const qualities = keepAlpha ? [undefined] : [0.95, 0.9, 0.85, 0.8, 0.7]
+  let last: Blob | null = null
+  for (const quality of qualities) {
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, mime, quality))
+    if (!blob) return null
+    last = blob
+    if (blob.size <= limit) return blob
   }
+  return last
+}
+
+async function uploadBlob(blob: Blob, filename: string, type: string): Promise<void> {
   uploading.value = true
   try {
-    const file = new File([blob], `${sourceName.value}-crop.jpg`, { type: 'image/jpeg' })
+    const file = new File([blob], filename, { type })
     const uploaded = await mediaApi.uploadMedia(file)
     emit('update:modelValue', uploaded.url)
     emit('uploaded', uploaded.url)
-    ElMessage.success('图片已上传')
+    ElMessage.success(t('media.crop.uploaded'))
     dialogVisible.value = false
   } catch (err) {
-    ElMessage.error(resolveErrorMessage(err, '上传失败，请稍后重试'))
+    ElMessage.error(resolveErrorMessage(err, t('media.crop.uploadFailed')))
   } finally {
     uploading.value = false
+  }
+}
+
+async function confirmCrop(): Promise<void> {
+  const image = imageRef.value
+  if (!image || !natural.value.width) return
+  const rect = cropRect.value
+  const { width: outWidth, height: outHeight, downscaled } = exportSize.value
+
+  const canvas = document.createElement('canvas')
+  canvas.width = outWidth
+  canvas.height = outHeight
+  const context = canvas.getContext('2d')
+  if (!context) return
+  context.imageSmoothingQuality = 'high'
+  context.drawImage(image, rect.x, rect.y, rect.width, rect.height, 0, 0, outWidth, outHeight)
+
+  const blob = await encodeBlob(canvas)
+  if (!blob) {
+    ElMessage.error(t('media.crop.failed'))
+    return
+  }
+  if (blob.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+    ElMessage.error(t('media.crop.tooLarge', { max: MAX_IMAGE_SIZE_MB }))
+    return
+  }
+  if (downscaled) {
+    ElMessage.info(t('media.crop.downscaled', { w: outWidth, h: outHeight }))
+  }
+  if (isGif.value) {
+    ElMessage.warning(t('media.crop.gifWarning'))
+  }
+  const ext = blob.type === 'image/png' ? 'png' : 'jpg'
+  await uploadBlob(blob, `${sourceName.value}-crop.${ext}`, blob.type)
+}
+
+/** 直接上传原始文件：保留原始分辨率、透明与动图 */
+async function useOriginal(): Promise<void> {
+  const file = sourceFile.value
+  if (!file) return
+  const invalid = mediaApi.validateMediaFile(file)
+  if (invalid) {
+    ElMessage.warning(invalid)
+    return
+  }
+  usingOriginal.value = true
+  uploading.value = true
+  try {
+    const uploaded = await mediaApi.uploadMedia(file)
+    emit('update:modelValue', uploaded.url)
+    emit('uploaded', uploaded.url)
+    ElMessage.success(t('media.crop.originalUploaded'))
+    dialogVisible.value = false
+  } catch (err) {
+    ElMessage.error(resolveErrorMessage(err, t('media.crop.uploadFailed')))
+  } finally {
+    uploading.value = false
+    usingOriginal.value = false
   }
 }
 
@@ -259,24 +343,24 @@ onBeforeUnmount(() => {
 <template>
   <div class="image-crop-upload">
     <div class="image-crop-upload__preview" :style="previewStyle">
-      <img v-if="modelValue" :src="modelValue" :alt="label" />
+      <img v-if="modelValue" :src="modelValue" :alt="resolvedLabel" />
       <div v-else class="image-crop-upload__placeholder">
         <el-icon><Picture /></el-icon>
-        <span v-if="previewWidth >= 120">{{ hint || '暂无图片' }}</span>
+        <span v-if="previewWidth >= 120">{{ hint || t('media.crop.empty') }}</span>
       </div>
     </div>
     <div class="image-crop-upload__actions">
       <el-button size="small" :icon="Picture" :loading="loadingImage" :disabled="disabled" @click="triggerPick">
-        {{ modelValue ? '更换图片' : label }}
+        {{ modelValue ? t('media.crop.change') : resolvedLabel }}
       </el-button>
-      <el-button v-if="modelValue && !disabled" size="small" text type="danger" @click="clearImage">移除</el-button>
+      <el-button v-if="modelValue && !disabled" size="small" text type="danger" @click="clearImage">{{ t('common.remove') }}</el-button>
     </div>
     <input ref="fileInput" type="file" accept="image/*" class="visually-hidden" @change="handleFileChange" />
 
     <el-dialog
       v-model="dialogVisible"
-      title="裁剪图片"
-      width="min(420px, 94vw)"
+      :title="t('media.crop.title')"
+      width="min(440px, 94vw)"
       append-to-body
       class="image-crop-dialog"
     >
@@ -296,20 +380,32 @@ onBeforeUnmount(() => {
             :src="sourceUrl"
             :style="imageStyle"
             class="image-crop-upload__source"
-            alt="待裁剪图片"
+            :alt="t('media.crop.pending')"
             draggable="false"
           />
           <div class="image-crop-upload__grid" aria-hidden="true" />
         </div>
       </div>
       <div class="image-crop-upload__zoom">
-        <span class="muted">缩放</span>
+        <span class="muted">{{ t('media.crop.zoom') }}</span>
         <el-slider :model-value="zoom" :min="1" :max="4" :step="0.01" :show-tooltip="false" @input="onZoomChange" />
       </div>
-      <p class="muted image-crop-upload__tip">拖动图片调整位置，滚轮或滑块缩放；导出尺寸 {{ outputWidth }}×{{ Math.round(outputWidth / aspectRatio) }}</p>
+      <p class="muted image-crop-upload__tip">
+        {{ t('media.crop.dragHint') }}
+        {{ t('media.crop.exportSize') }}
+        <strong>{{ exportSize.width }}×{{ exportSize.height }}</strong>
+        {{ t('media.crop.sourceArea', { w: cropRect.width, h: cropRect.height }) }}
+        <template v-if="isGif">{{ t('media.crop.gifHint') }}</template>
+      </p>
       <template #footer>
-        <el-button @click="closeDialog">取消</el-button>
-        <el-button type="primary" :loading="uploading" @click="confirmCrop">裁剪并上传</el-button>
+        <el-button @click="closeDialog">{{ t('common.cancel') }}</el-button>
+        <el-button :loading="usingOriginal" :disabled="uploading" @click="useOriginal">{{ t('media.crop.useOriginal') }}</el-button>
+        <el-button
+          type="primary"
+          :loading="uploading && !usingOriginal"
+          :disabled="uploading"
+          @click="confirmCrop"
+        >{{ t('media.crop.confirm') }}</el-button>
       </template>
     </el-dialog>
   </div>

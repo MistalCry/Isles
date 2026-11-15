@@ -1,19 +1,26 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { nextTick, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage, type InputInstance } from 'element-plus'
-import { ChatDotRound } from '@element-plus/icons-vue'
-import { commentsApi } from '@/api'
+import { ElMessage, ElMessageBox, type InputInstance } from 'element-plus'
+import { ChatDotRound, Picture } from '@element-plus/icons-vue'
+import { commentsApi, manageApi, mediaApi } from '@/api'
+import { resolveErrorMessage } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useCursorList } from '@/composables/useCursorList'
 import { useRequireLogin } from '@/composables/useRequireLogin'
 import { validateComment } from '@/utils/validators'
 import { formatCount } from '@/utils/format'
-import type { Comment, CommentSort } from '@/types/models'
+import { EMOJI_LIST, MAX_MEDIA_COUNT } from '@/constants/app'
+import type { Comment, CommentSort, MediaItem } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
+import MentionPicker from './MentionPicker.vue'
+import { mentionToken } from '@/utils/mention'
 import CommentItem from './CommentItem.vue'
 import LoadingState from './LoadingState.vue'
 import ErrorState from './ErrorState.vue'
 import EmptyState from './EmptyState.vue'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -38,6 +45,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   created: [comment: Comment]
+  deleted: [comment: Comment]
 }>()
 
 const auth = useAuthStore()
@@ -47,6 +55,11 @@ const sort = ref<CommentSort>(props.defaultSort)
 const content = ref('')
 const replyTarget = ref<Comment | null>(null)
 const submitting = ref(false)
+/** 评论附件：图片/视频（≤9）与表情，与文字至少有一项非空 */
+const mediaItems = ref<MediaItem[]>([])
+const emojis = ref<string[]>([])
+const uploading = ref(false)
+const fileInput = ref<HTMLInputElement>()
 const inputRef = ref<InputInstance>()
 const likingIds = reactive(new Set<string>())
 
@@ -72,11 +85,11 @@ watch(
 )
 
 function replyTargetName(comment: Comment): string {
-  return comment.author.nickname || comment.author.username || '岛民'
+  return comment.author.nickname || comment.author.username || t('common.islander')
 }
 
 function handleReply(comment: Comment): void {
-  if (!requireLogin('登录后可回复评论')) return
+  if (!requireLogin(t('comment.replyLoginRequired'))) return
   replyTarget.value = comment
   void nextTick(() => inputRef.value?.focus())
 }
@@ -85,13 +98,98 @@ function cancelReply(): void {
   replyTarget.value = null
 }
 
-async function submit(): Promise<void> {
-  if (!requireLogin('登录后可发表评论')) return
-  if (!props.canComment) {
-    ElMessage.warning('加入频道后才能评论')
+function triggerFilePicker(): void {
+  if (!requireLogin(t('comment.uploadLoginRequired'))) return
+  fileInput.value?.click()
+}
+
+async function handleFiles(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = ''
+  if (files.length === 0) return
+  const remaining = MAX_MEDIA_COUNT - mediaItems.value.length
+  if (remaining <= 0) {
+    ElMessage.warning(t('comment.mediaLimit', { n: MAX_MEDIA_COUNT }))
     return
   }
-  const message = validateComment(content.value)
+  for (const file of files.slice(0, remaining)) {
+    const invalid = mediaApi.validateMediaFile(file)
+    if (invalid) {
+      ElMessage.warning(invalid)
+      continue
+    }
+    uploading.value = true
+    try {
+      mediaItems.value.push(await mediaApi.uploadMedia(file))
+    } catch (err) {
+      ElMessage.error(resolveErrorMessage(err, t('comment.mediaUploadFailed')))
+    } finally {
+      uploading.value = false
+    }
+  }
+}
+
+function removeMedia(index: number): void {
+  mediaItems.value.splice(index, 1)
+}
+
+function appendEmoji(emoji: string): void {
+  if (emojis.value.length >= 20) {
+    ElMessage.warning(t('comment.emojiLimit'))
+    return
+  }
+  emojis.value.push(emoji)
+}
+
+function removeEmoji(index: number): void {
+  emojis.value.splice(index, 1)
+}
+
+function insertMention(payload: { id: string; name: string }): void {
+  const token = `${mentionToken(payload.id, payload.name)} `
+  const textarea = (inputRef.value as unknown as { textarea?: HTMLTextAreaElement } | null)?.textarea
+  if (!textarea) {
+    content.value += token
+    return
+  }
+  const start = textarea.selectionStart ?? content.value.length
+  const end = textarea.selectionEnd ?? start
+  content.value = content.value.slice(0, start) + token + content.value.slice(end)
+  void nextTick(() => {
+    textarea.focus()
+    const caret = start + token.length
+    textarea.setSelectionRange(caret, caret)
+  })
+}
+
+async function handleDelete(comment: Comment): Promise<void> {
+  try {
+    await ElMessageBox.confirm(t('comment.deleteConfirm'), t('comment.deleteTitle'), {
+      confirmButtonText: t('common.delete'),
+      cancelButtonText: t('common.cancel'),
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  try {
+    await manageApi.deleteComment(comment.id)
+    ElMessage.success(t('comment.deleted'))
+    emit('deleted', comment)
+    await list.refresh()
+  } catch (err) {
+    ElMessage.error(resolveErrorMessage(err, t('comment.deleteFailed')))
+  }
+}
+
+async function submit(): Promise<void> {
+  if (!requireLogin(t('comment.loginRequired'))) return
+  if (!props.canComment) {
+    ElMessage.warning(t('comment.joinBeforePost'))
+    return
+  }
+  const message = validateComment(content.value, mediaItems.value.length, emojis.value.length)
   if (message) {
     ElMessage.warning(message)
     return
@@ -104,12 +202,16 @@ async function submit(): Promise<void> {
         ? (replyTarget.value.parentId ?? replyTarget.value.id)
         : null,
       replyToUserId: replyTarget.value?.author.id ?? null,
+      media: mediaItems.value,
+      emoji: emojis.value,
     })
     content.value = ''
+    mediaItems.value = []
+    emojis.value = []
     replyTarget.value = null
     emit('created', created)
     await list.refresh()
-    ElMessage.success('评论已发布')
+    ElMessage.success(t('comment.posted'))
   } catch {
     // 错误提示由 axios 拦截器统一处理
   } finally {
@@ -118,7 +220,7 @@ async function submit(): Promise<void> {
 }
 
 async function handleLike(comment: Comment): Promise<void> {
-  if (!requireLogin('登录后可点赞评论')) return
+  if (!requireLogin(t('comment.likeLoginRequired'))) return
   if (likingIds.has(comment.id)) return
   likingIds.add(comment.id)
   try {
@@ -138,27 +240,23 @@ async function handleLike(comment: Comment): Promise<void> {
   }
 }
 
-const placeholder = () => (auth.isAuthenticated ? '友善发言，理性讨论…' : '登录后参与评论')
+const placeholder = () => (auth.isAuthenticated ? t('comment.placeholder') : t('comment.placeholderGuest'))
 </script>
 
 <template>
-  <section class="comment-section" :class="{ 'comment-section--embedded': embedded }" aria-label="评论区">
+  <section class="comment-section" :class="{ 'comment-section--embedded': embedded }" :aria-label="t('comment.section')">
     <header class="comment-section__toolbar">
-      <h2 class="comment-section__title">
-        评论
-        <span v-if="commentCount > 0" class="comment-section__count">{{ formatCount(commentCount) }}</span>
+      <h2 class="comment-section__title">{{ t('common.comment') }}<span v-if="commentCount > 0" class="comment-section__count">{{ formatCount(commentCount) }}</span>
       </h2>
-      <el-radio-group v-model="sort" size="small" aria-label="评论排序">
-        <el-radio-button value="likes">最热</el-radio-button>
-        <el-radio-button value="latest">最新</el-radio-button>
+      <el-radio-group v-model="sort" size="small" :aria-label="t('comment.sortLabel')">
+        <el-radio-button value="likes">{{ t('comment.sort.hot') }}</el-radio-button>
+        <el-radio-button value="latest">{{ t('comment.sort.latest') }}</el-radio-button>
       </el-radio-group>
     </header>
 
     <div v-if="!canComment" class="comment-section__join-tip">
-      <p>加入该频道后才能评论与回复。</p>
-      <RouterLink v-if="channelId" :to="{ name: 'channel', params: { id: channelId } }" class="link">
-        前往频道页加入 →
-      </RouterLink>
+      <p>{{ t('comment.joinRequired') }}</p>
+      <RouterLink v-if="channelId" :to="{ name: 'channel', params: { id: channelId } }" class="link">{{ t('comment.joinHintLink') }}</RouterLink>
     </div>
 
     <div v-else class="comment-composer">
@@ -168,11 +266,11 @@ const placeholder = () => (auth.isAuthenticated ? '友善发言，理性讨论�
         :name="auth.displayName"
         :size="34"
       />
-      <UserAvatar v-else name="游" :size="34" />
+      <UserAvatar v-else :name="t('common.visitor')" :size="34" />
       <div class="comment-composer__body">
         <div v-if="replyTarget" class="comment-composer__reply">
-          <span>回复 @{{ replyTargetName(replyTarget) }}</span>
-          <button type="button" class="link" @click="cancelReply">取消</button>
+          <span>{{ t('comment.replyTo', { name: replyTargetName(replyTarget) }) }}</span>
+          <button type="button" class="link" @click="cancelReply">{{ t('common.cancel') }}</button>
         </div>
         <el-input
           ref="inputRef"
@@ -185,20 +283,84 @@ const placeholder = () => (auth.isAuthenticated ? '友善发言，理性讨论�
           :aria-label="placeholder()"
           @keydown.ctrl.enter.prevent="submit"
         />
+        <div v-if="mediaItems.length > 0" class="comment-composer__media">
+          <div v-for="(item, index) in mediaItems" :key="`${item.url}-${index}`" class="comment-composer__media-item">
+            <img v-if="item.type === 'IMAGE'" :src="item.thumbUrl || item.url" :alt="t('media.selectedImage', { n: index + 1 })" />
+            <video v-else :src="item.url" muted playsinline preload="metadata" />
+            <button
+              type="button"
+              class="comment-composer__media-remove"
+              :aria-label="t('media.crop.removeMedia')"
+              @click="removeMedia(index)"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div v-if="emojis.length > 0" class="comment-composer__emoji-selected">
+          <button
+            v-for="(emoji, index) in emojis"
+            :key="`${emoji}-${index}`"
+            type="button"
+            class="comment-composer__emoji-chip"
+            :aria-label="t('common.removeEmoji', { emoji })"
+            @click="removeEmoji(index)"
+          >
+            {{ emoji }}<span aria-hidden="true"> ×</span>
+          </button>
+        </div>
+
         <div class="comment-composer__actions">
-          <span class="muted">Ctrl + Enter 快捷发表</span>
+          <div class="comment-composer__tools">
+            <MentionPicker :channel-id="channelId" label="@" :disabled="!auth.isAuthenticated" @select="insertMention" />
+            <el-popover trigger="click" :width="220" placement="top-start">
+              <template #reference>
+                <button type="button" class="comment-composer__tool" :aria-label="t('media.crop.insertEmoji')">😊</button>
+              </template>
+              <div class="comment-composer__emoji-panel">
+                <button
+                  v-for="emoji in EMOJI_LIST"
+                  :key="emoji"
+                  type="button"
+                  class="comment-composer__emoji-btn"
+                  @click="appendEmoji(emoji)"
+                >
+                  {{ emoji }}
+                </button>
+              </div>
+            </el-popover>
+            <button
+              type="button"
+              class="comment-composer__tool"
+              :disabled="uploading || !auth.isAuthenticated"
+              :aria-label="t('media.uploadMedia')"
+              @click="triggerFilePicker"
+            >
+              <el-icon :size="15"><Picture /></el-icon>
+              <span v-if="uploading">{{ t('common.uploading') }}</span>
+            </button>
+            <span v-if="mediaItems.length > 0" class="muted">{{ mediaItems.length }} / {{ MAX_MEDIA_COUNT }}</span>
+            <span class="muted">{{ t('comment.shortcutHint') }}</span>
+          </div>
           <el-button
             type="primary"
             size="small"
             :loading="submitting"
             @click="submit"
           >
-            {{ auth.isAuthenticated ? '发表评论' : '登录后评论' }}
+            {{ auth.isAuthenticated ? t('comment.submit') : t('comment.submitGuest') }}
           </el-button>
         </div>
-        <p v-if="!auth.isAuthenticated" class="comment-section__guest-tip">
-          游客可浏览评论，登录后即可参与讨论。
-        </p>
+        <input
+          ref="fileInput"
+          type="file"
+          accept="image/*,video/*"
+          multiple
+          class="visually-hidden"
+          @change="handleFiles"
+        />
+        <p v-if="!auth.isAuthenticated" class="comment-section__guest-tip">{{ t('comment.guestHint') }}</p>
       </div>
     </div>
 
@@ -211,7 +373,7 @@ const placeholder = () => (auth.isAuthenticated ? '友善发言，理性讨论�
     />
 
     <div v-else-if="list.items.value.length === 0" class="comment-section__empty">
-      <EmptyState compact title="还没有评论" description="成为第一个留下想法的人吧。" />
+      <EmptyState compact :title="t('comment.emptyTitle')" :description="t('comment.emptyHint')" />
     </div>
 
     <div v-else class="comment-list">
@@ -221,8 +383,10 @@ const placeholder = () => (auth.isAuthenticated ? '友善发言，理性讨论�
         :comment="comment"
         :post-author-id="postAuthorId"
         :channel-id="channelId"
+        :current-user-id="auth.currentUser?.id"
         @reply="handleReply"
         @like="handleLike"
+        @delete="handleDelete"
       />
 
       <div class="comment-section__more">
@@ -232,13 +396,9 @@ const placeholder = () => (auth.isAuthenticated ? '友善发言，理性讨论�
           type="primary"
           :loading="list.loading.value"
           @click="list.loadMore()"
-        >
-          加载更多评论
-        </el-button>
+        >{{ t('comment.loadMore') }}</el-button>
         <span v-else class="muted">
-          <el-icon><ChatDotRound /></el-icon>
-          已加载全部评论
-        </span>
+          <el-icon><ChatDotRound /></el-icon>{{ t('comment.allLoaded') }}</span>
       </div>
     </div>
   </section>
@@ -276,6 +436,111 @@ const placeholder = () => (auth.isAuthenticated ? '友善发言，理性讨论�
   font-size: var(--isles-font-sm);
   background: var(--isles-surface-muted);
   border-radius: var(--isles-radius-md);
+}
+
+.comment-composer__media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--isles-space-2);
+  margin-top: var(--isles-space-2);
+}
+
+.comment-composer__media-item {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  background: var(--isles-surface-muted);
+  border-radius: var(--isles-radius-sm);
+
+  img,
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.comment-composer__media-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: #fff;
+  cursor: pointer;
+  background: rgb(0 0 0 / 55%);
+  border: none;
+  border-radius: 50%;
+}
+
+.comment-composer__emoji-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--isles-space-2);
+}
+
+.comment-composer__emoji-chip {
+  padding: 1px 8px;
+  font-size: 14px;
+  cursor: pointer;
+  background: var(--isles-surface-muted);
+  border: 1px solid var(--isles-border);
+  border-radius: 999px;
+}
+
+.comment-composer__emoji-panel {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.comment-composer__emoji-btn {
+  padding: 4px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: var(--isles-radius-sm);
+
+  &:hover {
+    background: var(--isles-surface-muted);
+  }
+}
+
+.comment-composer__tool {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  padding: 0 6px;
+  font-size: var(--isles-font-sm);
+  line-height: 24px;
+  color: var(--isles-text-secondary);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: var(--isles-radius-sm);
+
+  &:hover:not(:disabled) {
+    color: var(--isles-primary);
+    background: var(--isles-surface-muted);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+}
+
+.comment-composer__tools {
+  display: flex;
+  gap: var(--isles-space-2);
+  align-items: center;
 }
 
 .comment-composer {

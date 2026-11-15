@@ -1,3 +1,4 @@
+import { formatMentions } from './mention'
 import DOMPurify from 'dompurify'
 
 /**
@@ -17,9 +18,10 @@ export function sanitizeHtml(html: string): string {
 export function renderContent(content: string, format?: string | null): string {
   if (!content) return ''
   if (format === 'HTML' || format === 'MARKDOWN') {
-    return sanitizeHtml(content)
+    // 富文本里 @[id:昵称] 也还原成可读文本（sanitize 不处理纯文本节点内容）
+    return formatMentions(sanitizeHtml(content))
   }
-  const escaped = content
+  const escaped = formatMentions(content)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')

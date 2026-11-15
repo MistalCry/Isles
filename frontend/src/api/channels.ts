@@ -76,3 +76,15 @@ export async function createChannelPost(channelId: string, payload: CreatePostPa
   const { data } = await http.post(`/channels/${encodeURIComponent(channelId)}/posts`, payload)
   return toPost(data)
 }
+
+/** @提及候选：频道内活跃成员（含频道助手），用于编辑器的 @ 联想。 */
+export async function getMentionCandidates(
+  channelId: string,
+  keyword?: string,
+): Promise<Array<{ id: string; username?: string | null; nickname?: string | null; avatarUrl?: string | null }>> {
+  const { data } = await http.get(`/channels/${encodeURIComponent(channelId)}/mention-candidates`, {
+    params: { q: keyword || undefined },
+    silent: true,
+  })
+  return Array.isArray(data) ? data : []
+}

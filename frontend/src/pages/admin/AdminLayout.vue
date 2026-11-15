@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { onMounted, ref } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { DataAnalysis, Document, Picture, Setting, User } from '@element-plus/icons-vue'
@@ -6,6 +7,8 @@ import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import { getAdminIdentity, type AdminIdentity } from './adminApi'
 import { resolveErrorMessage } from '@/api/client'
+
+const { t } = useI18n()
 
 interface AdminNavItem {
   name: string
@@ -15,11 +18,11 @@ interface AdminNavItem {
 }
 
 const navItems: AdminNavItem[] = [
-  { name: 'admin-overview', path: '/admin/overview', label: '平台数据', icon: DataAnalysis },
-  { name: 'admin-ai-models', path: '/admin/ai-models', label: 'AI 配置', icon: Setting },
-  { name: 'admin-reports', path: '/admin/reports', label: '举报处置', icon: Document },
-  { name: 'admin-users', path: '/admin/users', label: '用户管理', icon: User },
-  { name: 'admin-channels', path: '/admin/channels', label: '频道管理', icon: Picture },
+  { name: 'admin-overview', path: '/admin/overview', label: t('admin.layout.overview'), icon: DataAnalysis },
+  { name: 'admin-ai-models', path: '/admin/ai-models', label: t('admin.layout.ai'), icon: Setting },
+  { name: 'admin-reports', path: '/admin/reports', label: t('admin.layout.reports'), icon: Document },
+  { name: 'admin-users', path: '/admin/users', label: t('admin.layout.users'), icon: User },
+  { name: 'admin-channels', path: '/admin/channels', label: t('admin.channels.title'), icon: Picture },
 ]
 
 const route = useRoute()
@@ -34,7 +37,7 @@ async function loadIdentity(): Promise<void> {
   try {
     identity.value = await getAdminIdentity()
   } catch (cause) {
-    error.value = resolveErrorMessage(cause, '管理员身份校验失败')
+    error.value = resolveErrorMessage(cause, t('admin.layout.authFailed'))
   } finally {
     loading.value = false
   }
@@ -51,8 +54,8 @@ onMounted(loadIdentity)
   <div class="page admin-layout">
     <header class="page-header">
       <div>
-        <h1 class="page-title">平台管理后台</h1>
-        <p class="page-subtitle">平台运营与内容治理（仅平台管理员可见）</p>
+        <h1 class="page-title">{{ t('admin.layout.title') }}</h1>
+        <p class="page-subtitle">{{ t('admin.layout.subtitle') }}</p>
       </div>
       <div v-if="identity" class="admin-layout__identity">
         <el-tag size="small" type="warning" effect="plain">{{ identity.platformRole }}</el-tag>
@@ -64,16 +67,16 @@ onMounted(loadIdentity)
     <ErrorState v-else-if="error" :message="error" @retry="loadIdentity" />
     <EmptyState
       v-else-if="identity && !identity.admin"
-      title="没有平台管理权限"
-      description="当前账号不是平台管理员。若需要权限，请联系平台管理员将你的账号 platform_role 设为 ADMIN，或加入配置白名单。"
+      :title="t('admin.noPermission')"
+      :description="t('admin.noPermissionHint')"
     >
       <template #action>
-        <el-button @click="router.push('/feed')">返回首页</el-button>
+        <el-button @click="router.push('/feed')">{{ t('admin.layout.backHome') }}</el-button>
       </template>
     </EmptyState>
 
     <div v-else class="admin-layout__body">
-      <nav class="admin-nav" aria-label="平台管理导航">
+      <nav class="admin-nav" :aria-label="t('admin.navLabel')">
         <RouterLink
           v-for="item in navItems"
           :key="item.name"

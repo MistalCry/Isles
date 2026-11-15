@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Picture } from '@element-plus/icons-vue'
@@ -8,6 +9,8 @@ import { useChannelStore } from '@/stores/channel'
 import { validateChannelDescription, validateChannelName } from '@/utils/validators'
 import type { Channel, ChannelType, ChannelVisibility } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{
@@ -93,9 +96,9 @@ async function handleAvatarChange(event: Event): Promise<void> {
   try {
     const media = await mediaApi.uploadMedia(file)
     form.avatarUrl = media.url
-    ElMessage.success('头像上传成功')
+    ElMessage.success(t('channel.create.avatarUploaded'))
   } catch (err) {
-    ElMessage.error(resolveErrorMessage(err, '头像上传失败'))
+    ElMessage.error(resolveErrorMessage(err, t('channel.create.avatarFailed')))
   } finally {
     uploading.value = false
   }
@@ -115,11 +118,11 @@ async function handleSubmit(): Promise<void> {
       visibility: form.type === 'PRIVATE' ? form.visibility : 'PUBLIC_VISIBLE',
       avatarUrl: form.avatarUrl || null,
     })
-    ElMessage.success('频道创建成功，复杂设置请前往管理中心')
+    ElMessage.success(t('channel.create.success'))
     emit('created', channel)
     visible.value = false
   } catch (err) {
-    errorMessage.value = resolveErrorMessage(err, '创建频道失败，请稍后重试')
+    errorMessage.value = resolveErrorMessage(err, t('channel.create.failed'))
   } finally {
     submitting.value = false
   }
@@ -127,7 +130,7 @@ async function handleSubmit(): Promise<void> {
 </script>
 
 <template>
-  <el-dialog v-model="visible" title="创建频道" width="520px" :close-on-click-modal="false" append-to-body>
+  <el-dialog v-model="visible" :title="t('manage.nav.createChannel')" width="520px" :close-on-click-modal="false" append-to-body>
     <el-alert
       v-if="errorMessage"
       :title="errorMessage"
@@ -139,58 +142,58 @@ async function handleSubmit(): Promise<void> {
 
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent>
       <div class="create-channel__avatar">
-        <UserAvatar :src="form.avatarUrl" :name="form.name || '岛'" :size="64" square />
+        <UserAvatar :src="form.avatarUrl" :name="form.name || t('channel.create.island')" :size="64" square />
         <div class="create-channel__avatar-actions">
           <el-button size="small" :icon="Picture" :loading="uploading" @click="triggerFilePicker">
-            上传频道头像
+            {{ t('channel.create.avatarUpload') }}
           </el-button>
-          <span class="muted">选填，JPG / PNG / WebP，≤ 10MB</span>
+          <span class="muted">{{ t('channel.create.avatarHint') }}</span>
         </div>
         <input
           ref="fileInputRef"
           type="file"
           accept="image/*"
           class="visually-hidden"
-          aria-label="选择频道头像文件"
+          :aria-label="t('channel.avatarPick')"
           @change="handleAvatarChange"
         />
       </div>
 
-      <el-form-item label="频道名称" prop="name">
-        <el-input v-model="form.name" maxlength="30" show-word-limit placeholder="例如：VRChat 中文社区" />
+      <el-form-item :label="t('channel.nameLabel')" prop="name">
+        <el-input v-model="form.name" maxlength="30" show-word-limit :placeholder="t('channel.namePlaceholder')" />
       </el-form-item>
 
-      <el-form-item label="频道简介" prop="description">
+      <el-form-item :label="t('channel.page.intro')" prop="description">
         <el-input
           v-model="form.description"
           type="textarea"
           :rows="3"
           maxlength="200"
           show-word-limit
-          placeholder="介绍一下这个频道（选填）"
+          :placeholder="t('channel.descPlaceholder')"
         />
       </el-form-item>
 
-      <el-form-item label="频道类型">
+      <el-form-item :label="t('channel.type')">
         <el-radio-group v-model="form.type">
-          <el-radio value="PUBLIC">公开频道（自由加入）</el-radio>
-          <el-radio value="PRIVATE">私密频道（邀请加入）</el-radio>
+          <el-radio value="PUBLIC">{{ t('channel.profile.public') }}</el-radio>
+          <el-radio value="PRIVATE">{{ t('channel.profile.private') }}</el-radio>
         </el-radio-group>
       </el-form-item>
 
-      <el-form-item v-if="form.type === 'PRIVATE'" label="可见性">
+      <el-form-item v-if="form.type === 'PRIVATE'" :label="t('channel.visibility')">
         <el-select v-model="form.visibility" class="create-channel__select">
-          <el-option label="公开可见（未加入可浏览）" value="PUBLIC_VISIBLE" />
-          <el-option label="仅成员可见" value="MEMBERS_ONLY" />
+          <el-option :label="t('channel.visibilityPublic')" value="PUBLIC_VISIBLE" />
+          <el-option :label="t('channel.visibilityMembers')" value="MEMBERS_ONLY" />
         </el-select>
       </el-form-item>
     </el-form>
 
-    <p class="create-channel__tip">创建后会自动生成默认板块；成员、身份组等复杂设置请前往频道管理中心（M2）。</p>
+    <p class="create-channel__tip">{{ t('channel.create.tip') }}</p>
 
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="handleSubmit">创建频道</el-button>
+      <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
+      <el-button type="primary" :loading="submitting" @click="handleSubmit">{{ t('manage.nav.createChannel') }}</el-button>
     </template>
   </el-dialog>
 </template>

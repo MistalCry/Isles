@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onMounted, ref } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import ErrorState from '@/components/ErrorState.vue'
@@ -6,6 +7,8 @@ import LoadingState from '@/components/LoadingState.vue'
 import { getAdminOverview, type AdminOverview } from './adminApi'
 import { resolveErrorMessage } from '@/api/client'
 import { formatCount } from '@/utils/format'
+
+const { t } = useI18n()
 
 const overview = ref<AdminOverview | null>(null)
 const loading = ref(false)
@@ -15,16 +18,16 @@ const cards = computed(() => {
   if (!overview.value) return []
   const data = overview.value
   return [
-    { label: '用户总数', value: formatCount(data.userCount), hint: `今日新增 ${data.todayNewUsers}` },
-    { label: '频道总数', value: formatCount(data.channelCount), hint: '仅统计运营中的频道' },
-    { label: '帖子总数', value: formatCount(data.postCount), hint: `今日新增 ${data.todayNewPosts}` },
-    { label: '评论总数', value: formatCount(data.commentCount), hint: '已发布评论' },
-    { label: '今日活跃用户', value: formatCount(data.todayActiveUsers), hint: '发帖/评论/点赞去重（UTC 自然日）' },
-    { label: 'AI 会话', value: formatCount(data.aiConversationCount), hint: `消息 ${data.aiMessageCount} 条` },
+    { label: t('admin.overview.users'), value: formatCount(data.userCount), hint: t('admin.overview.newToday', { n: data.todayNewUsers }) },
+    { label: t('admin.overview.channels'), value: formatCount(data.channelCount), hint: t('admin.overview.channelsHint') },
+    { label: t('admin.overview.posts'), value: formatCount(data.postCount), hint: t('admin.overview.newToday', { n: data.todayNewPosts }) },
+    { label: t('admin.overview.comments'), value: formatCount(data.commentCount), hint: t('admin.overview.commentsHint') },
+    { label: t('admin.overview.activeUsers'), value: formatCount(data.todayActiveUsers), hint: t('admin.overview.activeHint') },
+    { label: t('admin.overview.aiSessions'), value: formatCount(data.aiConversationCount), hint: t('admin.overview.aiMessages', { n: data.aiMessageCount }) },
     {
-      label: '待处理举报',
+      label: t('admin.overview.pendingReports'),
       value: data.reportTableReady ? formatCount(data.pendingReportCount) : '—',
-      hint: data.reportTableReady ? 'PENDING 状态' : '举报表尚未就绪（等待 V2 迁移）',
+      hint: data.reportTableReady ? t('admin.overview.pendingHint') : t('admin.overview.reportsNotReady'),
     },
   ]
 })
@@ -35,7 +38,7 @@ async function load(): Promise<void> {
   try {
     overview.value = await getAdminOverview()
   } catch (cause) {
-    error.value = resolveErrorMessage(cause, '平台数据加载失败')
+    error.value = resolveErrorMessage(cause, t('admin.overview.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -48,13 +51,13 @@ onMounted(load)
   <section class="admin-overview">
     <header class="admin-section-head">
       <div>
-        <h2 class="admin-section-title">平台数据概览</h2>
-        <p class="admin-section-subtitle">全站规模与今日活跃的近似统计（docs/03 §4.16 FR-PADM-03）</p>
+        <h2 class="admin-section-title">{{ t('admin.overview.title') }}</h2>
+        <p class="admin-section-subtitle">{{ t('admin.overview.subtitle') }}</p>
       </div>
-      <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
+      <el-button :icon="Refresh" :loading="loading" @click="load">{{ t('common.refresh') }}</el-button>
     </header>
 
-    <LoadingState v-if="loading && !overview" :rows="4" tip="正在统计平台数据…" />
+    <LoadingState v-if="loading && !overview" :rows="4" :tip="t('admin.overview.loading')" />
     <ErrorState v-else-if="error" :message="error" @retry="load" />
     <template v-else-if="overview">
       <div class="overview-grid">
@@ -70,8 +73,8 @@ onMounted(load)
         type="info"
         show-icon
         :closable="false"
-        title="举报数据尚未就绪"
-        description="reports 表由 WP1（V2 迁移）创建，当前接口已按契约预留：表就绪后举报列表与处置会自动可用，无需改动前端。"
+        :title="t('admin.reports.notReady')"
+        :description="t('admin.reports.notReadyHint')"
       />
     </template>
   </section>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Connection, Plus, Refresh } from '@element-plus/icons-vue'
@@ -18,6 +19,8 @@ import {
   type ModelConfigPayload,
 } from './adminApi'
 import { resolveErrorMessage } from '@/api/client'
+
+const { t } = useI18n()
 
 const models = ref<AiModel[]>([])
 const loading = ref(false)
@@ -54,7 +57,7 @@ async function load(): Promise<void> {
   try {
     models.value = await listAdminAiModels()
   } catch (cause) {
-    error.value = resolveErrorMessage(cause, 'AI 模型配置加载失败')
+    error.value = resolveErrorMessage(cause, t('admin.aiModels.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -91,10 +94,10 @@ function openEdit(model: AiModel): void {
 }
 
 function validateForm(): string | null {
-  if (!form.value.name.trim()) return '请填写配置名称'
-  if (!form.value.baseUrl.trim()) return '请填写 Base URL'
-  if (!form.value.model.trim()) return '请填写模型 ID'
-  if (!/^https?:\/\//.test(form.value.baseUrl.trim())) return 'Base URL 需以 http:// 或 https:// 开头'
+  if (!form.value.name.trim()) return t('admin.aiModels.nameRequired')
+  if (!form.value.baseUrl.trim()) return t('admin.aiModels.baseUrlRequired')
+  if (!form.value.model.trim()) return t('admin.aiModels.modelRequired')
+  if (!/^https?:\/\//.test(form.value.baseUrl.trim())) return t('admin.aiModels.baseUrlInvalid')
   return null
 }
 
@@ -112,15 +115,15 @@ async function save(): Promise<void> {
     }
     if (editingId.value) {
       await updateAdminAiModel(editingId.value, payload)
-      ElMessage.success('模型配置已更新')
+      ElMessage.success(t('admin.aiModels.updated'))
     } else {
       await createAdminAiModel(payload)
-      ElMessage.success('模型配置已创建')
+      ElMessage.success(t('admin.aiModels.created'))
     }
     dialogVisible.value = false
     await load()
   } catch (cause) {
-    formError.value = resolveErrorMessage(cause, '保存失败')
+    formError.value = resolveErrorMessage(cause, t('profile.saveFailed'))
   } finally {
     saving.value = false
   }
@@ -128,7 +131,7 @@ async function save(): Promise<void> {
 
 async function testFormConnection(): Promise<void> {
   if (!form.value.baseUrl.trim()) {
-    formError.value = '请先填写 Base URL'
+    formError.value = t('admin.aiModels.testFirst')
     return
   }
   testing.value = true
@@ -143,7 +146,7 @@ async function testFormConnection(): Promise<void> {
       void loadRemoteModels()
     }
   } catch (cause) {
-    testResult.value = { success: false, latencyMs: 0, models: [], message: resolveErrorMessage(cause, '测试连接失败') }
+    testResult.value = { success: false, latencyMs: 0, models: [], message: resolveErrorMessage(cause, t('admin.aiModels.testFailed')) }
   } finally {
     testing.value = false
   }
@@ -158,7 +161,7 @@ async function testSaved(model: AiModel): Promise<void> {
       ElMessage.warning(result.message)
     }
   } catch (cause) {
-    ElMessage.error(resolveErrorMessage(cause, '测试连接失败'))
+    ElMessage.error(resolveErrorMessage(cause, t('admin.aiModels.testFailed')))
   }
 }
 
@@ -166,23 +169,26 @@ async function loadRemoteModels(): Promise<void> {
   if (!editingId.value) return
   try {
     remoteModels.value = await listRemoteModels(editingId.value)
-    if (remoteModels.value.length === 0) ElMessage.info('上游未返回模型列表')
+    if (remoteModels.value.length === 0) ElMessage.info(t('admin.aiModels.emptyUpstream'))
   } catch (cause) {
-    ElMessage.error(resolveErrorMessage(cause, '模型列表获取失败'))
+    ElMessage.error(resolveErrorMessage(cause, t('admin.aiModels.listFailed')))
   }
 }
 
 async function remove(model: AiModel): Promise<void> {
-  const confirmed = await ElMessageBox.confirm(`确定删除模型配置「${model.name}」？`, '删除配置', {
+  const confirmed = await ElMessageBox.confirm(
+    t('admin.aiModels.deleteConfirm', { name: model.name }),
+    t('admin.aiModels.deleteTitle'),
+    {
     type: 'warning',
   }).catch(() => false)
   if (!confirmed) return
   try {
     await deleteAdminAiModel(model.id)
-    ElMessage.success('已删除')
+    ElMessage.success(t('admin.aiModels.deleted'))
     await load()
   } catch (cause) {
-    ElMessage.error(resolveErrorMessage(cause, '删除失败'))
+    ElMessage.error(resolveErrorMessage(cause, t('admin.aiModels.deleteFailed')))
   }
 }
 
@@ -193,24 +199,24 @@ onMounted(load)
   <section class="admin-ai">
     <header class="admin-section-head">
       <div>
-        <h2 class="admin-section-title">AI 模型配置</h2>
-        <p class="admin-section-subtitle">LMStudio / OpenAI 兼容协议；API Key 只写不读（仅返回掩码）</p>
+        <h2 class="admin-section-title">{{ t('admin.aiModels.title') }}</h2>
+        <p class="admin-section-subtitle">{{ t('admin.aiModels.subtitle') }}</p>
       </div>
       <div class="admin-section-actions">
-        <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
-        <el-button type="primary" :icon="Plus" @click="openCreate">新增配置</el-button>
+        <el-button :icon="Refresh" :loading="loading" @click="load">{{ t('common.refresh') }}</el-button>
+        <el-button type="primary" :icon="Plus" @click="openCreate">{{ t('admin.aiModels.create') }}</el-button>
       </div>
     </header>
 
-    <LoadingState v-if="loading && models.length === 0" :rows="3" tip="正在加载模型配置…" />
+    <LoadingState v-if="loading && models.length === 0" :rows="3" :tip="t('admin.models.loading')" />
     <ErrorState v-else-if="error" :message="error" @retry="load" />
     <EmptyState
       v-else-if="models.length === 0"
-      title="还没有配置 AI 模型"
-      description="配置 LMStudio（如 http://localhost:1234/v1）或任意 OpenAI 兼容服务后，频道问问与频道助手即可使用。"
+      :title="t('admin.models.empty')"
+      :description="t('admin.models.emptyHint')"
     >
       <template #action>
-        <el-button type="primary" @click="openCreate">新增配置</el-button>
+        <el-button type="primary" @click="openCreate">{{ t('admin.aiModels.create') }}</el-button>
       </template>
     </EmptyState>
     <div v-else class="model-list">
@@ -219,80 +225,80 @@ onMounted(load)
           <div>
             <p class="model-card__name">
               {{ model.name }}
-              <el-tag v-if="model.isDefault" size="small" type="success" effect="plain">默认</el-tag>
-              <el-tag v-if="!model.enabled" size="small" type="info" effect="plain">已停用</el-tag>
+              <el-tag v-if="model.isDefault" size="small" type="success" effect="plain">{{ t('admin.aiModels.default') }}</el-tag>
+              <el-tag v-if="!model.enabled" size="small" type="info" effect="plain">{{ t('admin.aiModels.disabled') }}</el-tag>
             </p>
             <p class="model-card__meta">{{ model.model }} · {{ model.baseUrl }}</p>
           </div>
           <div class="model-card__tags">
-            <el-tag v-if="model.visionEnabled" size="small" effect="plain">视觉</el-tag>
-            <el-tag v-if="model.reasoningEnabled" size="small" effect="plain" type="warning">深度思考</el-tag>
+            <el-tag v-if="model.visionEnabled" size="small" effect="plain">{{ t('ai.chat.visionTag') }}</el-tag>
+            <el-tag v-if="model.reasoningEnabled" size="small" effect="plain" type="warning">{{ t('ai.chat.deepThinking') }}</el-tag>
             <el-tag size="small" effect="plain" :type="model.apiKeyConfigured ? 'success' : 'info'">
-              {{ model.apiKeyConfigured ? '已配置密钥' : '无需密钥' }}
+              {{ model.apiKeyConfigured ? t('admin.aiModels.keyConfigured') : t('admin.aiModels.keyNotNeeded') }}
             </el-tag>
           </div>
         </div>
         <div class="model-card__actions">
-          <el-button size="small" link type="primary" @click="openEdit(model)">编辑</el-button>
-          <el-button size="small" link :icon="Connection" @click="testSaved(model)">测试连接</el-button>
-          <el-button size="small" link type="danger" @click="remove(model)">删除</el-button>
+          <el-button size="small" link type="primary" @click="openEdit(model)">{{ t('common.edit') }}</el-button>
+          <el-button size="small" link :icon="Connection" @click="testSaved(model)">{{ t('admin.aiModels.test') }}</el-button>
+          <el-button size="small" link type="danger" @click="remove(model)">{{ t('common.delete') }}</el-button>
         </div>
       </article>
     </div>
 
     <el-dialog
       v-model="dialogVisible"
-      :title="editingId ? '编辑模型配置' : '新增模型配置'"
+      :title="editingId ? t('admin.aiModels.edit') : t('admin.aiModels.new')"
       width="640px"
       append-to-body
       destroy-on-close
     >
       <el-form label-position="top" @submit.prevent>
         <div class="form-grid">
-          <el-form-item label="配置名称">
-            <el-input v-model="form.name" maxlength="64" placeholder="如：本地 LMStudio" />
+          <el-form-item :label="t('admin.models.namePlaceholder')">
+            <el-input v-model="form.name" maxlength="64" :placeholder="t('admin.models.nameExample')" />
           </el-form-item>
-          <el-form-item label="模型 ID">
-            <el-input v-model="form.model" maxlength="128" placeholder="如：qwen2.5-vl-7b" />
+          <el-form-item :label="t('admin.models.modelId')">
+            <el-input v-model="form.model" maxlength="128" :placeholder="t('admin.models.modelExample')" />
           </el-form-item>
         </div>
         <el-form-item label="Base URL">
           <el-input v-model="form.baseUrl" maxlength="500" placeholder="http://localhost:1234/v1" />
         </el-form-item>
-        <el-form-item label="API Key（留空表示不修改/无需鉴权）">
-          <el-input v-model="form.apiKey" type="password" show-password maxlength="200" placeholder="本地 LMStudio 通常无需填写" />
+        <el-form-item :label="t('admin.models.apiKeyHint')">
+          <el-input v-model="form.apiKey" type="password" show-password maxlength="200" :placeholder="t('admin.models.apiKeyLocal')" />
         </el-form-item>
         <div class="form-grid form-grid--three">
-          <el-form-item label="超时（秒）">
+          <el-form-item :label="t('admin.models.timeout')">
             <el-input-number v-model="form.timeoutSeconds" :min="1" :max="600" />
           </el-form-item>
-          <el-form-item label="最大输出 token">
+          <el-form-item :label="t('admin.models.maxTokens')">
             <el-input-number v-model="form.maxTokens" :min="1" :max="128000" :step="256" />
           </el-form-item>
-          <el-form-item label="默认模型">
+          <el-form-item :label="t('admin.models.defaultModel')">
             <el-switch v-model="form.isDefault" />
           </el-form-item>
         </div>
         <div class="form-grid form-grid--three">
-          <el-form-item label="启用">
+          <el-form-item :label="t('admin.models.enabled')">
             <el-switch v-model="form.enabled" />
           </el-form-item>
-          <el-form-item label="支持图片（视觉）">
+          <el-form-item :label="t('admin.models.vision')">
             <el-switch v-model="form.visionEnabled" />
           </el-form-item>
-          <el-form-item label="支持深度思考">
+          <el-form-item :label="t('admin.models.reasoning')">
             <el-switch v-model="form.reasoningEnabled" />
           </el-form-item>
         </div>
-        <el-form-item v-if="form.reasoningEnabled" label="思考参数下发方式">
+        <el-form-item v-if="form.reasoningEnabled" :label="t('admin.models.thinkingMode')">
           <el-select v-model="form.thinkingMode" class="thinking-mode">
-            <el-option label="reasoning_effort（OpenAI / 云端推理模型）" value="REASONING_EFFORT" />
+            <el-option :label="t('admin.models.thinkingEffort')" value="REASONING_EFFORT" />
             <el-option label="chat_template_kwargs（LM Studio / vLLM + Qwen3）" value="CHAT_TEMPLATE" />
-            <el-option label="两者都发（兼容性最好）" value="BOTH" />
-            <el-option label="不发送（模型自带开关，无法通过参数控制）" value="NONE" />
+            <el-option :label="t('admin.models.thinkingBoth')" value="BOTH" />
+            <el-option :label="t('admin.models.thinkingNone')" value="NONE" />
           </el-select>
           <p class="form-hint">
-            关闭「深度思考」时后端会显式下发关闭参数；若模型仍继续思考，多半是这里选错了方式。
+            {{ t('admin.aiModels.thinkingHint') }}
           </p>
         </el-form-item>
 
@@ -301,8 +307,18 @@ onMounted(load)
           v-if="testResult"
           class="form-alert"
           :type="testResult.success ? 'success' : 'warning'"
-          :title="testResult.success ? `连接成功（${testResult.latencyMs}ms）` : '连接失败'"
-          :description="testResult.success ? `可用模型：${testResult.models.join('、') || '未返回'}` : testResult.message"
+          :title="
+            testResult.success
+              ? t('admin.aiModels.connectOkMs', { ms: testResult.latencyMs })
+              : t('admin.aiModels.connectFailed')
+          "
+          :description="
+            testResult.success
+              ? t('admin.aiModels.availableList', {
+                  models: testResult.models.join(', ') || t('admin.aiModels.notReturned'),
+                })
+              : testResult.message
+          "
           show-icon
           :closable="false"
         />
@@ -310,15 +326,15 @@ onMounted(load)
           v-if="editingId && remoteModels.length > 0"
           class="form-alert"
           type="info"
-          :title="`上游模型：${remoteModels.join('、')}`"
+          :title="t('admin.aiModels.upstreamList', { models: remoteModels.join(', ') })"
           :closable="false"
         />
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button :loading="testing" @click="testFormConnection">测试连接</el-button>
-        <el-button v-if="editingId" @click="loadRemoteModels">拉取模型列表</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+        <el-button @click="dialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button :loading="testing" @click="testFormConnection">{{ t('admin.aiModels.test') }}</el-button>
+        <el-button v-if="editingId" @click="loadRemoteModels">{{ t('admin.aiModels.listModels') }}</el-button>
+        <el-button type="primary" :loading="saving" @click="save">{{ t('common.save') }}</el-button>
       </template>
     </el-dialog>
   </section>

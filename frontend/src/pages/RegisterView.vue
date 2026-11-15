@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
@@ -6,11 +7,17 @@ import { useAuthStore } from '@/stores/auth'
 import { resolveErrorMessage } from '@/api/client'
 import { validateNickname, validatePassword, validateUsername } from '@/utils/validators'
 import { APP_NAME } from '@/constants/app'
+import { useSiteStore } from '@/stores/site'
 import AuthLayout from '@/layouts/AuthLayout.vue'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const site = useSiteStore()
+/** 平台关闭注册时直接拦住，避免填完表单才报错 */
+const registrationEnabled = computed(() => site.config.registrationEnabled)
 
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
@@ -31,7 +38,7 @@ const redirectTarget = computed(() => {
 
 const rules: FormRules = {
   username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { required: true, message: t('auth.login.usernameRequired'), trigger: 'blur' },
     {
       validator: (_rule, value, callback) => {
         const message = validateUsername(String(value ?? ''))
@@ -52,7 +59,7 @@ const rules: FormRules = {
     },
   ],
   password: [
-    { required: true, message: '请设置密码', trigger: 'blur' },
+    { required: true, message: t('auth.register.passwordRequired'), trigger: 'blur' },
     {
       validator: (_rule, value, callback) => {
         const message = validatePassword(String(value ?? ''))
@@ -63,10 +70,10 @@ const rules: FormRules = {
     },
   ],
   confirmPassword: [
-    { required: true, message: '请再次输入密码', trigger: 'blur' },
+    { required: true, message: t('auth.register.confirmRequired'), trigger: 'blur' },
     {
       validator: (_rule, value, callback) => {
-        if (value !== form.password) callback(new Error('两次输入的密码不一致'))
+        if (value !== form.password) callback(new Error(t('auth.register.passwordMismatch')))
         else callback()
       },
       trigger: 'blur',
@@ -75,7 +82,7 @@ const rules: FormRules = {
   agree: [
     {
       validator: (_rule, value, callback) => {
-        if (value !== true) callback(new Error('请先阅读并同意用户协议与隐私政策'))
+        if (value !== true) callback(new Error(t('auth.register.termsRequired')))
         else callback()
       },
       trigger: 'change',
@@ -95,17 +102,17 @@ async function handleSubmit(): Promise<void> {
       password: form.password,
       nickname: form.nickname.trim() || undefined,
     })
-    ElMessage.success('注册成功，欢迎来到群岛')
+    ElMessage.success(t('auth.register.success'))
     await router.replace(redirectTarget.value)
   } catch (err) {
-    errorMessage.value = resolveErrorMessage(err, '注册失败，请稍后重试')
+    errorMessage.value = resolveErrorMessage(err, t('auth.register.failed'))
   } finally {
     submitting.value = false
   }
 }
 
 function showPolicyTip(): void {
-  ElMessage.info('用户协议与隐私政策将在上线前完成法务确认')
+  ElMessage.info(t('auth.register.termsHint'))
 }
 </script>
 
@@ -113,9 +120,19 @@ function showPolicyTip(): void {
   <AuthLayout>
     <div class="auth-card">
       <header class="auth-card__header">
-        <h1>注册{{ APP_NAME }}</h1>
-        <p>创建账号，开始探索属于你的岛屿。</p>
+        <h1>{{ t('auth.register.title', { app: APP_NAME }) }}</h1>
+        <p>{{ t('auth.register.subtitle') }}</p>
       </header>
+
+      <el-alert
+        v-if="!registrationEnabled"
+        :title="t('auth.register.closedTitle')"
+        :description="t('auth.register.closedHint')"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="auth-card__alert"
+      />
 
       <el-alert
         v-if="errorMessage"
@@ -127,48 +144,51 @@ function showPolicyTip(): void {
       />
 
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent="handleSubmit">
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="form.username" placeholder="3–20 位字母、数字、下划线或连字符" autocomplete="username" />
+        <el-form-item :label="t('common.username')" prop="username">
+          <el-input v-model="form.username" :placeholder="t('auth.usernameHint')" autocomplete="username" />
         </el-form-item>
-        <el-form-item label="昵称（选填）" prop="nickname">
-          <el-input v-model="form.nickname" maxlength="20" placeholder="展示给其他岛民的名字" />
+        <el-form-item :label="t('auth.nicknameOptional')" prop="nickname">
+          <el-input v-model="form.nickname" maxlength="20" :placeholder="t('auth.nicknameHint')" />
         </el-form-item>
-        <el-form-item label="密码" prop="password">
+        <el-form-item :label="t('common.password')" prop="password">
           <el-input
             v-model="form.password"
             type="password"
             show-password
-            placeholder="至少 8 位，包含字母与数字"
+            :placeholder="t('auth.passwordHint')"
             autocomplete="new-password"
           />
         </el-form-item>
-        <el-form-item label="确认密码" prop="confirmPassword">
+        <el-form-item :label="t('auth.confirmPassword')" prop="confirmPassword">
           <el-input
             v-model="form.confirmPassword"
             type="password"
             show-password
-            placeholder="再次输入密码"
+            :placeholder="t('auth.confirmPasswordPlaceholder')"
             autocomplete="new-password"
             @keyup.enter="handleSubmit"
           />
         </el-form-item>
         <el-form-item prop="agree">
           <el-checkbox v-model="form.agree">
-            我已阅读并同意
-            <button type="button" class="link auth-card__policy" @click.prevent="showPolicyTip">《用户协议》与《隐私政策》</button>
+            {{ t('auth.register.agreePrefix') }}
+            <button type="button" class="link auth-card__policy" @click.prevent="showPolicyTip">{{ t('auth.register.terms') }}</button>
           </el-checkbox>
         </el-form-item>
 
-        <el-button type="primary" class="auth-card__submit" :loading="submitting" @click="handleSubmit">
-          注册并登录
+        <el-button type="primary" class="auth-card__submit" :loading="submitting"
+          :disabled="!registrationEnabled"
+          @click="handleSubmit"
+        >
+          {{ t('auth.register.submit') }}
         </el-button>
       </el-form>
 
       <p class="auth-card__switch">
-        已经有账号？
-        <RouterLink :to="{ name: 'login', query: route.query }" class="link">直接登录</RouterLink>
+        {{ t('auth.register.hasAccount') }}
+        <RouterLink :to="{ name: 'login', query: route.query }" class="link">{{ t('auth.register.toLogin') }}</RouterLink>
       </p>
-      <RouterLink to="/feed" class="auth-card__back">先随便逛逛 →</RouterLink>
+      <RouterLink to="/feed" class="auth-card__back">{{ t('auth.login.browse') }}</RouterLink>
     </div>
   </AuthLayout>
 </template>

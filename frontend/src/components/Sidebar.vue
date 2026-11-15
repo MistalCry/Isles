@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useI18n } from 'vue-i18n'
+import { SUPPORTED_LOCALES, setLocale, type AppLocale } from '@/i18n'
 import { canManageChannelSummary } from '@/utils/channelPermissions'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -20,6 +22,7 @@ import { useNotificationStore } from '@/stores/notifications'
 import { useDmStore } from '@/stores/dm'
 import { useRequireLogin } from '@/composables/useRequireLogin'
 import { APP_NAME, APP_NAME_EN } from '@/constants/app'
+import { useSiteStore } from '@/stores/site'
 import { formatRelativeTime } from '@/utils/format'
 import UserAvatar from './UserAvatar.vue'
 import ProfileEditDialog from './ProfileEditDialog.vue'
@@ -30,10 +33,14 @@ const emit = defineEmits<{ navigate: [] }>()
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const auth = useAuthStore()
 const channelStore = useChannelStore()
 const notificationStore = useNotificationStore()
 const dmStore = useDmStore()
+const site = useSiteStore()
+/** 站点名来自平台配置，未加载时回落到内置常量 */
+const siteName = computed(() => site.config.name || APP_NAME)
 const { requireLogin } = useRequireLogin()
 const { currentUser, isAuthenticated } = storeToRefs(auth)
 const { myChannels, loadingMyChannels, currentChannel } = storeToRefs(channelStore)
@@ -56,7 +63,7 @@ function openManage(channelId: string): void {
   void router.push({ name: 'manage', params: { channelId } })
 }
 
-const signature = computed(() => currentUser.value?.signature || '这个人很神秘，还没有留下签名')
+const signature = computed(() => currentUser.value?.signature || t('nav.noSignature'))
 const activeChannelId = computed(() => (route.name === 'channel' ? String(route.params.id) : ''))
 const showCurrentChannel = computed(
   () => Boolean(currentChannel.value && !channelStore.isJoined(currentChannel.value.id)),
@@ -78,7 +85,7 @@ function goTo(name: string): void {
 }
 
 function openCreateChannel(): void {
-  if (!requireLogin('登录后可创建频道')) return
+  if (!requireLogin(t('nav.loginToCreateChannel'))) return
   createDialogVisible.value = true
 }
 
@@ -90,7 +97,7 @@ function handleChannelCreated(channel: Channel): void {
 async function handleLogout(): Promise<void> {
   await auth.logout()
   channelStore.clear()
-  ElMessage.success('已退出登录')
+  ElMessage.success(t('common.loggedOut'))
   notifyNavigate()
   void router.push('/feed')
 }
@@ -116,6 +123,12 @@ function handleUserCommand(command: string | number | object): void {
     profileOpen.value = true
   } else if (command === 'logout') {
     void handleLogout()
+  } else if (typeof command === 'string' && command.startsWith('lang-')) {
+    const next = command.replace('lang-', '') as AppLocale
+    if ((SUPPORTED_LOCALES as readonly string[]).includes(next)) {
+      setLocale(next)
+      ElMessage.success(next === 'zh-CN' ? t('nav.switchedZh') : 'Switched to English')
+    }
   }
 }
 
@@ -141,7 +154,7 @@ watch(
 <template>
   <div class="sidebar">
     <div class="sidebar__scroll">
-      <RouterLink to="/feed" class="brand" aria-label="群岛首页" @click="notifyNavigate">
+      <RouterLink to="/feed" class="brand" :aria-label="t('nav.home')" @click="notifyNavigate">
         <svg class="brand__mark" viewBox="0 0 64 64" aria-hidden="true">
           <rect width="64" height="64" rx="16" fill="currentColor" />
           <path d="M8 44c8-6 15-6 23-1 9 6 16 6 25 0v13H8z" fill="#fff" opacity="0.22" />
@@ -149,12 +162,12 @@ watch(
           <circle cx="46" cy="18" r="6" fill="#f0a06b" />
         </svg>
         <span class="brand__text">
-          <strong>{{ APP_NAME }}</strong>
+          <strong>{{ siteName }}</strong>
           <small>{{ APP_NAME_EN }}</small>
         </span>
       </RouterLink>
 
-      <nav class="sidebar__nav" aria-label="主导航">
+      <nav class="sidebar__nav" :aria-label="t('search.mainNav')">
         <button
           type="button"
           class="nav-item"
@@ -162,7 +175,7 @@ watch(
           @click="goTo('search')"
         >
           <el-icon><Search /></el-icon>
-          <span>搜索</span>
+          <span>{{ t('common.search') }}</span>
         </button>
         <button
           type="button"
@@ -171,7 +184,7 @@ watch(
           @click="goTo('ai')"
         >
           <el-icon><ChatDotRound /></el-icon>
-          <span>频道问问</span>
+          <span>{{ t('nav.ai') }}</span>
         </button>
         <button
           type="button"
@@ -180,7 +193,7 @@ watch(
           @click="goTo('feed')"
         >
           <el-icon><HomeFilled /></el-icon>
-          <span>频道动态</span>
+          <span>{{ t('nav.feed') }}</span>
         </button>
         <button
           type="button"
@@ -189,7 +202,7 @@ watch(
           @click="goTo('hot')"
         >
           <el-icon><HotWater /></el-icon>
-          <span>热门讨论</span>
+          <span>{{ t('nav.hot') }}</span>
         </button>
         <button
           type="button"
@@ -198,7 +211,7 @@ watch(
           @click="goTo('notifications')"
         >
           <el-icon><Bell /></el-icon>
-          <span>通知</span>
+          <span>{{ t('nav.notifications') }}</span>
           <el-badge
             v-if="isAuthenticated && unreadCount > 0"
             :value="unreadCount"
@@ -213,17 +226,15 @@ watch(
           <button type="button" class="section-title" @click="myChannelsExpanded = !myChannelsExpanded">
             <el-icon :size="14" class="section-title__caret" :class="{ 'is-collapsed': !myChannelsExpanded }">
               <ArrowDown />
-            </el-icon>
-            我的频道
-          </button>
-          <button type="button" class="icon-btn" aria-label="创建频道" @click="openCreateChannel">
+            </el-icon>{{ t('nav.myChannels') }}</button>
+          <button type="button" class="icon-btn" :aria-label="t('manage.nav.createChannel')" @click="openCreateChannel">
             <el-icon :size="16"><Plus /></el-icon>
           </button>
         </div>
 
         <div v-if="myChannelsExpanded">
           <template v-if="isAuthenticated">
-            <p v-if="loadingMyChannels && myChannels.length === 0" class="section-hint">正在加载…</p>
+            <p v-if="loadingMyChannels && myChannels.length === 0" class="section-hint">{{ t('common.loading') }}</p>
             <ul v-else-if="myChannels.length > 0" class="channel-list">
               <li v-for="channel in myChannels" :key="channel.id">
                 <RouterLink
@@ -238,27 +249,23 @@ watch(
                     v-if="canManageChannelSummary(channel, currentUser?.id)"
                     type="button"
                     class="channel-item__manage"
-                    title="进入频道管理中心"
+                    :title="t('channel.settings.manageCenter')"
                     @click.stop.prevent="openManage(channel.id)"
-                  >
-                    管理
-                  </button>
+                  >{{ t('common.manage') }}</button>
                 </RouterLink>
               </li>
             </ul>
-            <p v-else class="section-hint">还没有加入频道，去发现感兴趣的岛吧。</p>
-            <RouterLink to="/my-channels" class="section-more" @click="notifyNavigate">查看全部频道</RouterLink>
+            <p v-else class="section-hint">{{ t('nav.channelEmpty') }}</p>
+            <RouterLink to="/my-channels" class="section-more" @click="notifyNavigate">{{ t('nav.viewAllChannels') }}</RouterLink>
           </template>
-          <p v-else class="section-hint">登录后展示已加入的频道</p>
+          <p v-else class="section-hint">{{ t('nav.channelLoadHint') }}</p>
         </div>
       </section>
 
       <section v-if="showCurrentChannel && currentChannel" class="sidebar__section">
         <div class="section-head">
           <span class="section-title section-title--static">
-            <el-icon :size="14"><Compass /></el-icon>
-            当前频道
-          </span>
+            <el-icon :size="14"><Compass /></el-icon>{{ t('nav.currentChannel') }}</span>
         </div>
         <RouterLink
           :to="{ name: 'channel', params: { id: currentChannel.id } }"
@@ -276,7 +283,7 @@ watch(
             <el-icon :size="14" class="section-title__caret" :class="{ 'is-collapsed': !messagesExpanded }">
               <ArrowDown />
             </el-icon>
-            我的私信
+            {{ t('nav.messages') }}
             <el-badge
               v-if="isAuthenticated && dmUnreadCount > 0"
               :value="dmUnreadCount"
@@ -287,7 +294,7 @@ watch(
         </div>
         <div v-if="messagesExpanded">
           <template v-if="isAuthenticated">
-            <p v-if="dmLoading && recentConversations.length === 0" class="section-hint">正在加载私信…</p>
+            <p v-if="dmLoading && recentConversations.length === 0" class="section-hint">{{ t('nav.dmLoading') }}</p>
             <ul v-else-if="recentConversations.length > 0" class="channel-list">
               <li v-for="conversation in recentConversations" :key="conversation.id">
                 <button type="button" class="channel-item dm-item" @click="goConversation(conversation.id)">
@@ -308,10 +315,10 @@ watch(
                 </button>
               </li>
             </ul>
-            <p v-else class="section-hint">还没有私信，去用户卡片打个招呼吧。</p>
-            <RouterLink to="/messages" class="section-more" @click="notifyNavigate">查看全部私信</RouterLink>
+            <p v-else class="section-hint">{{ t('nav.dmEmpty') }}</p>
+            <RouterLink to="/messages" class="section-more" @click="notifyNavigate">{{ t('nav.viewAllDm') }}</RouterLink>
           </template>
-          <p v-else class="section-hint">登录后查看私信会话</p>
+          <p v-else class="section-hint">{{ t('nav.dmLoadHint') }}</p>
         </div>
       </section>
     </div>
@@ -328,20 +335,22 @@ watch(
         </button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item command="channels">我的频道</el-dropdown-item>
-            <el-dropdown-item command="friends">我的好友</el-dropdown-item>
-            <el-dropdown-item command="notifications">通知中心</el-dropdown-item>
-            <el-dropdown-item command="profile">个人资料</el-dropdown-item>
-            <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+            <el-dropdown-item command="channels">{{ t('nav.myChannels') }}</el-dropdown-item>
+            <el-dropdown-item command="friends">{{ t('nav.friends') }}</el-dropdown-item>
+            <el-dropdown-item command="notifications">{{ t('nav.notificationCenter') }}</el-dropdown-item>
+            <el-dropdown-item command="profile">{{ t('nav.profile') }}</el-dropdown-item>
+            <el-dropdown-item command="lang-zh-CN">{{ t('nav.languageZh') }}</el-dropdown-item>
+            <el-dropdown-item command="lang-en-US">{{ t('nav.languageEn') }}</el-dropdown-item>
+            <el-dropdown-item command="logout" divided>{{ t('common.logout') }}</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
 
       <div v-else class="guest-box">
-        <p>登录后加入频道、发帖互动</p>
+        <p>{{ t('nav.loginHint') }}</p>
         <div class="guest-box__actions">
-          <el-button type="primary" size="small" @click="goLogin">登录</el-button>
-          <el-button size="small" @click="goRegister">注册</el-button>
+          <el-button type="primary" size="small" @click="goLogin">{{ t('common.login') }}</el-button>
+          <el-button size="small" @click="goRegister">{{ t('common.register') }}</el-button>
         </div>
       </div>
     </footer>

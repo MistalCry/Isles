@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
@@ -21,6 +22,8 @@ import ChannelAssistantPanel from '@/components/ai/ChannelAssistantPanel.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import EmptyState from '@/components/EmptyState.vue'
+
+const { t } = useI18n()
 
 type ChannelTab = 'latest' | 'hot' | 'essence' | 'boards'
 
@@ -49,10 +52,10 @@ const fullComposerOpen = ref(false)
 const sentinel = ref<HTMLElement | null>(null)
 
 const tabs: Array<{ key: ChannelTab; label: string }> = [
-  { key: 'latest', label: '全部' },
-  { key: 'hot', label: '热门' },
-  { key: 'essence', label: '精华' },
-  { key: 'boards', label: '板块' },
+  { key: 'latest', label: t('common.all') },
+  { key: 'hot', label: t('channel.page.hot') },
+  { key: 'essence', label: t('post.essence') },
+  { key: 'boards', label: t('channel.page.boards') },
 ]
 
 const joined = computed(
@@ -62,7 +65,7 @@ const muteAllActive = computed(
   () => Boolean(channel.value?.muteAllUntil && new Date(channel.value.muteAllUntil).getTime() > Date.now()),
 )
 const canPostDuringMuteAll = computed(
-  () => channel.value?.myRoleName === '频道主' || channel.value?.myRoleName === '超级管理员',
+  () => channel.value?.myRoleName === t('channel.role.owner') || channel.value?.myRoleName === t('channel.page.superAdmin'),
 )
 const canUseComposer = computed(
   () => isAuthenticated.value && joined.value && (!muteAllActive.value || canPostDuringMuteAll.value),
@@ -124,7 +127,7 @@ async function loadChannel(): Promise<void> {
     const status = err instanceof AppError ? err.status : 0
     channelErrorStatus.value = status
     channelError.value =
-      status === 404 ? '频道不存在或不可见' : resolveErrorMessage(err, '频道加载失败，请稍后重试')
+      status === 404 ? t('channel.page.notFound') : resolveErrorMessage(err, t('channel.page.loadFailed'))
   } finally {
     loadingChannel.value = false
   }
@@ -165,7 +168,7 @@ onBeforeUnmount(() => {
 })
 
 async function handleJoin(): Promise<void> {
-  if (!requireLogin('登录后可加入频道')) return
+  if (!requireLogin(t('channel.page.joinLoginRequired'))) return
   if (joining.value) return
   joining.value = true
   try {
@@ -175,7 +178,7 @@ async function handleJoin(): Promise<void> {
     channel.value = nextChannel
     channelStore.upsertMyChannel(nextChannel)
     channelStore.clearCurrentChannel(channelId.value)
-    ElMessage.success(`已加入「${detail.name}」`)
+    ElMessage.success(t('channel.page.joinedToast', { name: detail.name }))
     void channelStore.fetchMyChannels(true)
   } catch {
     // 错误提示由 axios 拦截器统一处理
@@ -217,9 +220,9 @@ function handleMessages(): void {
 }
 
 function handleSettings(): void {
-  if (!requireLogin('登录后可打开频道设置')) return
+  if (!requireLogin(t('channel.page.settingsLoginRequired'))) return
   if (!joined.value) {
-    ElMessage.info('加入频道后即可打开频道设置')
+    ElMessage.info(t('channel.page.settingsJoinRequired'))
     return
   }
   settingsOpen.value = true
@@ -239,7 +242,7 @@ function handleLeftChannel(): void {
 function handleDissolvedChannel(): void {
   channel.value = null
   channelStore.removeMyChannel(channelId.value)
-  ElMessage.success('频道已解散')
+  ElMessage.success(t('channel.settings.dissolved'))
   void router.push('/feed')
 }
 
@@ -254,22 +257,22 @@ function pinnedTitle(post: Post): string {
 
 <template>
   <div class="page channel-page">
-    <LoadingState v-if="loadingChannel" :rows="6" tip="正在加载频道…" />
+    <LoadingState v-if="loadingChannel" :rows="6" :tip="t('channel.loading')" />
 
     <ErrorState
       v-else-if="channelError"
       :message="channelError"
-      retry-text="重新加载频道"
+      :retry-text="t('channel.reload')"
       @retry="loadChannel"
     >
       <template #action>
-        <el-button @click="$router.push('/feed')">回到频道动态</el-button>
+        <el-button @click="$router.push('/feed')">{{ t('channel.page.backToFeed') }}</el-button>
       </template>
     </ErrorState>
 
     <template v-else-if="channel">
       <div class="channel-layout">
-        <section class="channel-main" aria-label="频道内容">
+        <section class="channel-main" :aria-label="t('channel.content')">
           <ChannelHeader
             :channel="channel"
             :joined="joined"
@@ -283,14 +286,14 @@ function pinnedTitle(post: Post): string {
 
           <el-alert
             v-if="muteAllActive"
-            :title="`全员禁言中，结束时间：${formatDateTime(channel.muteAllUntil)}，仅频道主与超级管理员可发言`"
+            :title="t('channel.page.muteAllBannerLong', { time: formatDateTime(channel.muteAllUntil) })"
             type="warning"
             :closable="false"
             show-icon
             class="channel-mute-alert"
           />
 
-          <nav class="channel-tabs" aria-label="频道内容筛选">
+          <nav class="channel-tabs" :aria-label="t('channel.contentFilter')">
             <button
               v-for="tab in tabs"
               :key="tab.key"
@@ -313,7 +316,7 @@ function pinnedTitle(post: Post): string {
               :class="{ 'is-active': selectedBoardId === '' }"
               @click="selectBoard('')"
             >
-              全部板块
+              {{ t('channel.page.allBoards') }}
             </button>
             <button
               v-for="board in boards"
@@ -326,13 +329,13 @@ function pinnedTitle(post: Post): string {
               {{ board.name }}
             </button>
             <p v-if="boards.length === 0" class="muted channel-board-filter__empty">
-              该频道还没有配置板块，M2 起频道主可在管理中心创建板块。
+              {{ t('channel.page.noBoardsHint') }}
             </p>
           </div>
 
-          <section v-if="pinnedCount > 0" class="pinned-panel" aria-label="置顶帖子">
+          <section v-if="pinnedCount > 0" class="pinned-panel" :aria-label="t('permission.pinPost')">
             <div class="pinned-panel__head">
-              <span class="pinned-panel__badge">置顶</span>
+              <span class="pinned-panel__badge">{{ t('post.pinned') }}</span>
               <button
                 v-if="pinnedPosts[0]"
                 type="button"
@@ -341,13 +344,13 @@ function pinnedTitle(post: Post): string {
               >
                 {{ pinnedTitle(pinnedPosts[0]) }}
               </button>
-              <span class="muted pinned-panel__count">共 {{ pinnedCount }} 条</span>
+              <span class="muted pinned-panel__count">{{ t('channel.page.pinnedCount', { n: pinnedCount }) }}</span>
               <button
                 type="button"
                 class="link pinned-panel__toggle"
                 @click="pinnedExpanded = !pinnedExpanded"
               >
-                {{ pinnedExpanded ? '收起' : '展开全部' }}
+                {{ pinnedExpanded ? t('channel.page.collapse') : t('channel.page.expand') }}
               </button>
             </div>
             <ul v-if="pinnedExpanded" class="pinned-panel__list">
@@ -360,7 +363,7 @@ function pinnedTitle(post: Post): string {
             </ul>
           </section>
 
-          <LoadingState v-if="postList.initialLoading.value" :rows="4" tip="正在加载帖子…" />
+          <LoadingState v-if="postList.initialLoading.value" :rows="4" :tip="t('common.loadingPosts')" />
 
           <ErrorState
             v-else-if="postList.error.value"
@@ -370,11 +373,11 @@ function pinnedTitle(post: Post): string {
 
           <EmptyState
             v-else-if="postList.items.value.length === 0"
-            title="还没有帖子"
+            :title="t('channel.noPosts')"
             :description="
               activeTab === 'boards' && selectedBoardName
-                ? `「${selectedBoardName}」板块还没有内容，来发布第一条帖子吧。`
-                : '成为第一个在频道里发帖的人吧。'
+                ? t('channel.page.boardEmpty', { name: selectedBoardName })
+                : t('channel.page.firstPost')
             "
           />
 
@@ -394,9 +397,9 @@ function pinnedTitle(post: Post): string {
                 :loading="postList.loading.value"
                 @click="postList.loadMore()"
               >
-                加载更多帖子
+                {{ t('channel.page.loadMorePosts') }}
               </el-button>
-              <span v-else class="muted">已浏览完该频道的全部帖子</span>
+              <span v-else class="muted">{{ t('channel.page.endOfPosts') }}</span>
             </div>
           </div>
 
@@ -412,39 +415,39 @@ function pinnedTitle(post: Post): string {
             />
             <div v-else-if="isAuthenticated && joined && muteAllActive" class="join-prompt">
               <div>
-                <strong>频道正在全员禁言</strong>
-                <p class="muted">禁言期间仅频道主与超级管理员可发帖，解除后可继续参与讨论。</p>
+                <strong>{{ t('channel.page.mutedAll') }}</strong>
+                <p class="muted">{{ t('channel.page.mutedAllHint') }}</p>
               </div>
             </div>
             <div v-else class="join-prompt">
               <div>
-                <strong>{{ isAuthenticated ? '加入频道后即可发帖' : '登录后加入频道参与讨论' }}</strong>
+                <strong>{{ isAuthenticated ? t('channel.page.joinToPost') : t('channel.page.joinToDiscuss') }}</strong>
                 <p class="muted">
-                  {{ isAuthenticated ? '加入后你就能在这里发帖、评论和点赞。' : '游客可浏览公开内容，互动需要登录。' }}
+                  {{ isAuthenticated ? t('channel.page.joinHint') : t('channel.page.guestHint') }}
                 </p>
               </div>
               <el-button type="primary" :loading="joining" @click="handleMemberAction">
-                {{ isAuthenticated ? '加入频道' : '登录 / 注册' }}
+                {{ isAuthenticated ? t('userCard.joinChannel') : t('channel.page.loginRegister') }}
               </el-button>
             </div>
           </div>
         </section>
 
-        <aside class="channel-side" aria-label="频道信息">
+        <aside class="channel-side" :aria-label="t('channel.info')">
           <div class="isles-card channel-about">
-            <h2 class="channel-about__title">频道简介</h2>
-            <p class="channel-about__description">{{ channel.description || '这个频道还没有填写简介。' }}</p>
+            <h2 class="channel-about__title">{{ t('channel.page.intro') }}</h2>
+            <p class="channel-about__description">{{ channel.description || t('channel.page.noIntro') }}</p>
             <dl class="channel-about__stats">
               <div>
-                <dt>帖子</dt>
+                <dt>{{ t('channel.page.posts') }}</dt>
                 <dd>{{ formatCount(channel.postCount) }}</dd>
               </div>
               <div>
-                <dt>成员</dt>
+                <dt>{{ t('common.member') }}</dt>
                 <dd>{{ formatCount(channel.memberCount) }}</dd>
               </div>
               <div>
-                <dt>板块</dt>
+                <dt>{{ t('channel.page.boards') }}</dt>
                 <dd>{{ formatCount(boards.length) }}</dd>
               </div>
             </dl>
@@ -454,18 +457,20 @@ function pinnedTitle(post: Post): string {
               class="channel-about__join"
               :loading="joining"
               @click="handleMemberAction"
-            >
-              加入频道
-            </el-button>
-            <el-tag v-else type="success" effect="plain" class="channel-about__joined">已加入</el-tag>
+            >{{ t('userCard.joinChannel') }}</el-button>
+            <el-tag v-else type="success" effect="plain" class="channel-about__joined">{{ t('channel.joined') }}</el-tag>
             <p class="muted channel-about__meta">
-              {{ channel.channelNo ? `频道号 #${channel.channelNo}` : '频道号分配中' }}
+              {{
+                channel.channelNo
+                  ? t('channel.page.channelNo', { no: channel.channelNo })
+                  : t('channel.page.channelNoPending')
+              }}
             </p>
           </div>
         </aside>
       </div>
 
-      <el-dialog v-model="searchOpen" title="频道内搜索" width="min(560px, 94vw)" append-to-body>
+      <el-dialog v-model="searchOpen" :title="t('channel.searchIn')" width="min(560px, 94vw)" append-to-body>
         <SearchPanel
           scope="channel"
           :channel-id="channelId"
@@ -474,7 +479,7 @@ function pinnedTitle(post: Post): string {
         />
       </el-dialog>
 
-      <el-dialog v-model="fullComposerOpen" title="发布长文" width="min(680px, 96vw)" top="6vh" append-to-body>
+      <el-dialog v-model="fullComposerOpen" :title="t('channel.publishLong')" width="min(680px, 96vw)" top="6vh" append-to-body>
         <PostComposer
           mode="full"
           :channel-id="channelId"
@@ -499,12 +504,10 @@ function pinnedTitle(post: Post): string {
         type="button"
         class="assistant-fab"
         :aria-expanded="assistantOpen"
-        aria-label="打开频道助手"
+        :aria-label="t('channel.openAssistant')"
         @click="assistantOpen = !assistantOpen"
       >
-        <span class="assistant-fab__dot" aria-hidden="true" />
-        频道助手
-      </button>
+        <span class="assistant-fab__dot" aria-hidden="true" />{{ t('ai.chat.assistant') }}</button>
       <Transition name="assistant-pop">
         <ChannelAssistantPanel
           v-if="assistantOpen"

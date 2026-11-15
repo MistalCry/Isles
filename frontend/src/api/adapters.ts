@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type {
   AuditLogItem,
   Board,
@@ -85,7 +86,10 @@ function toAuthor(raw: Raw): UserSummary {
 
 export function toMediaItem(value: unknown): MediaItem {
   const raw = record(value) ?? {}
-  const type = str(raw.type)?.toUpperCase() === 'VIDEO' ? 'VIDEO' : 'IMAGE'
+  // 后端上传响应字段是 mediaType（MediaUploadResponse），列表/详情里是 type；
+  // 只读 type 会让 type 变 undefined，前端把图片当视频渲染、提交时后端直接 400。
+  const rawType = (str(raw.type) ?? str(raw.mediaType) ?? '').toUpperCase()
+  const type = rawType === 'VIDEO' ? 'VIDEO' : 'IMAGE'
   return {
     id: str(raw.id) ?? undefined,
     type,
@@ -241,6 +245,7 @@ export function toComment(value: unknown): Comment {
     author: toAuthor(raw),
     content: str(raw.content) ?? '',
     media: Array.isArray(raw.media) ? raw.media.map((item) => toMediaItem(item)) : [],
+    emoji: Array.isArray(raw.emoji) ? raw.emoji.filter((item): item is string => typeof item === 'string') : [],
     likeCount: num(raw.likeCount),
     isLiked: raw.isLiked !== undefined ? bool(raw.isLiked) : bool(raw.liked),
     parentId,
@@ -448,7 +453,7 @@ function toTrendPoint(value: unknown): TrendPoint {
 function toDistribution(value: unknown): StatDistributionItem {
   const raw = record(value) ?? {}
   return {
-    name: str(raw.name) ?? str(raw.label) ?? str(raw.boardName) ?? str(raw.roleName) ?? '其他',
+    name: str(raw.name) ?? str(raw.label) ?? str(raw.boardName) ?? str(raw.roleName) ?? t('common.other'),
     value: num(raw.value ?? raw.count ?? raw.postCount),
   }
 }
@@ -623,7 +628,7 @@ export function toChannelRecommendation(value: unknown): ChannelRecommendation {
   })
   return {
     channel,
-    reason: str(raw.reason) ?? str(raw.recommendReason) ?? '根据你的兴趣推荐',
+    reason: str(raw.reason) ?? str(raw.recommendReason) ?? t('recommend.defaultReason'),
     score: num(raw.score),
   }
 }

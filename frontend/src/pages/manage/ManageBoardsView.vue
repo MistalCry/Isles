@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
@@ -15,6 +16,8 @@ import type { Board, Channel } from '@/types/models'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import EmptyState from '@/components/EmptyState.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   channel: Channel
@@ -40,7 +43,7 @@ async function load(): Promise<void> {
   try {
     boards.value = await channelsApi.getBoards(props.channelId)
   } catch (err) {
-    error.value = resolveErrorMessage(err, '板块加载失败')
+    error.value = resolveErrorMessage(err, t('manage.boards.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -66,7 +69,7 @@ function openEdit(board: Board): void {
 
 async function save(): Promise<void> {
   if (!form.name.trim()) {
-    formError.value = '请输入板块名称'
+    formError.value = t('manage.boards.nameRequired')
     return
   }
   saving.value = true
@@ -78,19 +81,19 @@ async function save(): Promise<void> {
         description: form.description.trim() || undefined,
         sort: form.sort,
       })
-      ElMessage.success('板块已更新')
+      ElMessage.success(t('manage.boards.updated'))
     } else {
       await manageApi.createBoard(props.channelId, {
         name: form.name.trim(),
         description: form.description.trim() || undefined,
         sort: form.sort,
       })
-      ElMessage.success('板块已创建')
+      ElMessage.success(t('manage.boards.created'))
     }
     dialogOpen.value = false
     await load()
   } catch (err) {
-    formError.value = resolveErrorMessage(err, '保存板块失败')
+    formError.value = resolveErrorMessage(err, t('manage.boards.saveFailed'))
   } finally {
     saving.value = false
   }
@@ -98,10 +101,13 @@ async function save(): Promise<void> {
 
 async function remove(board: Board): Promise<void> {
   try {
-    await ElMessageBox.confirm(`确认删除板块「${board.name}」？板块内帖子需要先迁移或删除。`, '删除板块', {
+    await ElMessageBox.confirm(
+      t('manage.boards.deleteConfirm', { name: board.name }),
+      t('manage.boards.deleteTitle'),
+      {
       type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      confirmButtonText: t('common.delete'),
+      cancelButtonText: t('common.cancel'),
     })
   } catch {
     return
@@ -109,14 +115,14 @@ async function remove(board: Board): Promise<void> {
   try {
     await manageApi.deleteBoard(props.channelId, board.id)
     boards.value = boards.value.filter((item) => item.id !== board.id)
-    ElMessage.success('板块已删除')
+    ElMessage.success(t('manage.boards.deleted'))
   } catch {
     // 拦截器已提示
   }
 }
 
 function boardDescription(board: Board): string {
-  return board.description || '暂无描述'
+  return board.description || t('common.noDescription')
 }
 
 onMounted(() => {
@@ -128,63 +134,63 @@ onMounted(() => {
   <section class="manage-section">
     <header class="manage-section__header">
       <div>
-        <h2>板块管理</h2>
-        <p class="muted">创建、重命名、排序与删除板块（FR-BOARD-02）</p>
+        <h2>{{ t('manage.nav.boards') }}</h2>
+        <p class="muted">{{ t('manage.boards.subtitle') }}</p>
       </div>
       <div class="manage-section__actions">
-        <el-button :icon="Refresh" @click="load">刷新</el-button>
-        <el-button v-if="canManage" type="primary" :icon="Plus" @click="openCreate">新建板块</el-button>
+        <el-button :icon="Refresh" @click="load">{{ t('common.refresh') }}</el-button>
+        <el-button v-if="canManage" type="primary" :icon="Plus" @click="openCreate">{{ t('manage.boards.create') }}</el-button>
       </div>
     </header>
 
     <el-alert
       v-if="!canManage"
-      title="你没有板块管理权限，仅可查看。"
+      :title="t('channel.boardsReadonly')"
       type="info"
       :closable="false"
       show-icon
       class="manage-section__alert"
     />
 
-    <LoadingState v-if="loading && boards.length === 0" :rows="3" tip="正在加载板块…" />
+    <LoadingState v-if="loading && boards.length === 0" :rows="3" :tip="t('channel.loadingBoards')" />
     <ErrorState v-else-if="error && boards.length === 0" :message="error" @retry="load" />
-    <EmptyState v-else-if="boards.length === 0" title="暂无板块" description="创建板块后，帖子可按板块归类。" />
+    <EmptyState v-else-if="boards.length === 0" :title="t('channel.noBoards')" :description="t('channel.noBoardsHint')" />
 
     <div v-else class="board-list">
       <article v-for="board in boards" :key="board.id" class="board-card isles-card">
         <div class="board-card__main">
           <div>
             <strong>{{ board.name }}</strong>
-            <span class="manage-section__tag">排序 {{ board.sortOrder ?? 0 }}</span>
+            <span class="manage-section__tag">{{ t('manage.boards.sortOrder', { n: board.sortOrder ?? 0 }) }}</span>
           </div>
           <p class="muted">{{ boardDescription(board) }}</p>
         </div>
         <div class="board-card__actions">
-          <span class="muted">{{ formatCount(board.postCount ?? 0) }} 帖子</span>
+          <span class="muted">{{ t('manage.boards.postCount', { n: formatCount(board.postCount ?? 0) }) }}</span>
           <template v-if="canManage">
-            <el-button text size="small" @click="openEdit(board)">编辑</el-button>
-            <el-button text size="small" type="danger" @click="remove(board)">删除</el-button>
+            <el-button text size="small" @click="openEdit(board)">{{ t('common.edit') }}</el-button>
+            <el-button text size="small" type="danger" @click="remove(board)">{{ t('common.delete') }}</el-button>
           </template>
         </div>
       </article>
     </div>
 
-    <el-dialog v-model="dialogOpen" :title="editingBoard ? '编辑板块' : '新建板块'" width="440px" append-to-body>
+    <el-dialog v-model="dialogOpen" :title="editingBoard ? t('manage.boards.edit') : t('manage.boards.create')" width="440px" append-to-body>
       <el-alert v-if="formError" :title="formError" type="error" :closable="false" show-icon class="manage-section__alert" />
       <el-form label-position="top" @submit.prevent>
-        <el-form-item label="板块名称" required>
+        <el-form-item :label="t('channel.boardName')" required>
           <el-input v-model="form.name" maxlength="32" show-word-limit />
         </el-form-item>
-        <el-form-item label="板块描述">
+        <el-form-item :label="t('channel.boardDesc')">
           <el-input v-model="form.description" maxlength="200" />
         </el-form-item>
-        <el-form-item label="排序（越小越靠前）">
+        <el-form-item :label="t('channel.boardSort')">
           <el-input-number v-model="form.sort" :min="0" :max="999" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogOpen = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+        <el-button @click="dialogOpen = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="saving" @click="save">{{ t('common.save') }}</el-button>
       </template>
     </el-dialog>
   </section>

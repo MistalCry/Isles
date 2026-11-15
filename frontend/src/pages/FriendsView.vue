@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ChatDotRound, Refresh } from '@element-plus/icons-vue'
 import { dmApi, friendsApi } from '@/api'
@@ -12,8 +13,13 @@ import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
+const { t } = useI18n()
+
 const router = useRouter()
-const activeTab = ref('friends')
+const route = useRoute()
+const TAB_KEYS = ['friends', 'incoming', 'outgoing', 'blocked'] as const
+const initialTab = String(route.query.tab ?? '')
+const activeTab = ref(TAB_KEYS.includes(initialTab as (typeof TAB_KEYS)[number]) ? initialTab : 'friends')
 const friends = ref<FriendItem[]>([])
 const incoming = ref<FriendRequestItem[]>([])
 const outgoing = ref<FriendRequestItem[]>([])
@@ -23,10 +29,10 @@ const error = ref<string | null>(null)
 const actionId = ref('')
 
 const tabs = [
-  { key: 'friends', label: '好友' },
-  { key: 'incoming', label: '收到的申请' },
-  { key: 'outgoing', label: '发出的申请' },
-  { key: 'blocked', label: '黑名单' },
+  { key: 'friends', label: t('dm.share.friends') },
+  { key: 'incoming', label: t('friends.tabIncoming') },
+  { key: 'outgoing', label: t('friends.tabOutgoing') },
+  { key: 'blocked', label: t('friends.tabBlocked') },
 ]
 
 const currentList = computed(() => {
@@ -54,7 +60,7 @@ function requestPeer(request: FriendRequestItem) {
 
 function requestName(request: FriendRequestItem): string {
   const peer = requestPeer(request)
-  return peer?.nickname || peer?.username || '岛民'
+  return peer?.nickname || peer?.username || t('common.islander')
 }
 
 async function loadAll(): Promise<void> {
@@ -72,7 +78,7 @@ async function loadAll(): Promise<void> {
     outgoing.value = outgoingList
     blocked.value = blockedList
   } catch (err) {
-    error.value = resolveErrorMessage(err, '好友数据加载失败')
+    error.value = resolveErrorMessage(err, t('friends.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -89,10 +95,13 @@ async function startChat(friend: FriendItem): Promise<void> {
 
 async function removeFriend(friend: FriendItem): Promise<void> {
   try {
-    await ElMessageBox.confirm(`确认删除好友「${friend.nickname || friend.username}」？`, '删除好友', {
+    await ElMessageBox.confirm(
+      t('friends.removeConfirm', { name: friend.nickname || friend.username }),
+      t('friends.remove'),
+      {
       type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      confirmButtonText: t('common.delete'),
+      cancelButtonText: t('common.cancel'),
     })
   } catch {
     return
@@ -100,7 +109,7 @@ async function removeFriend(friend: FriendItem): Promise<void> {
   try {
     await friendsApi.removeFriend(friend.userId)
     friends.value = friends.value.filter((item) => item.userId !== friend.userId)
-    ElMessage.success('好友已删除')
+    ElMessage.success(t('friends.removed'))
   } catch {
     // 拦截器已提示
   }
@@ -108,10 +117,13 @@ async function removeFriend(friend: FriendItem): Promise<void> {
 
 async function blockFriend(friend: FriendItem): Promise<void> {
   try {
-    await ElMessageBox.confirm(`拉黑后对方将无法向你发起好友申请或私信。确认拉黑「${friend.nickname || friend.username}」？`, '拉黑用户', {
+    await ElMessageBox.confirm(
+      t('friends.blockConfirm', { name: friend.nickname || friend.username }),
+      t('friends.blockTitle'),
+      {
       type: 'warning',
-      confirmButtonText: '拉黑',
-      cancelButtonText: '取消',
+      confirmButtonText: t('friends.block'),
+      cancelButtonText: t('common.cancel'),
     })
   } catch {
     return
@@ -119,7 +131,7 @@ async function blockFriend(friend: FriendItem): Promise<void> {
   try {
     await friendsApi.blockUser(friend.userId)
     friends.value = friends.value.filter((item) => item.userId !== friend.userId)
-    ElMessage.success('已拉黑该用户')
+    ElMessage.success(t('friends.blocked'))
     await loadAll()
   } catch {
     // 拦截器已提示
@@ -130,7 +142,7 @@ async function unblock(friend: FriendItem): Promise<void> {
   try {
     await friendsApi.unblockUser(friend.userId)
     blocked.value = blocked.value.filter((item) => item.userId !== friend.userId)
-    ElMessage.success('已解除拉黑')
+    ElMessage.success(t('friends.unblocked'))
   } catch {
     // 拦截器已提示
   }
@@ -142,10 +154,10 @@ async function handleRequest(request: FriendRequestItem, action: 'accept' | 'rej
   try {
     if (action === 'accept') {
       await friendsApi.acceptFriendRequest(request.id)
-      ElMessage.success('已同意好友申请')
+      ElMessage.success(t('friends.accepted'))
     } else {
       await friendsApi.rejectFriendRequest(request.id)
-      ElMessage.success('已拒绝好友申请')
+      ElMessage.success(t('friends.rejected'))
     }
     incoming.value = incoming.value.filter((item) => item.id !== request.id)
     await loadAll()
@@ -165,22 +177,22 @@ onMounted(() => {
   <div class="page friends-page">
     <header class="page-header">
       <div>
-        <h1 class="page-title">好友</h1>
-        <p class="page-subtitle">双向好友、申请与黑名单管理</p>
+        <h1 class="page-title">{{ t('dm.share.friends') }}</h1>
+        <p class="page-subtitle">{{ t('friends.subtitle') }}</p>
       </div>
-      <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
+      <el-button :icon="Refresh" :loading="loading" @click="loadAll">{{ t('common.refresh') }}</el-button>
     </header>
 
     <el-tabs v-model="activeTab">
       <el-tab-pane v-for="tab in tabs" :key="tab.key" :label="tab.label" :name="tab.key" />
     </el-tabs>
 
-    <LoadingState v-if="loading && currentList.length === 0" :rows="4" tip="正在加载好友数据…" />
+    <LoadingState v-if="loading && currentList.length === 0" :rows="4" :tip="t('friends.loading')" />
     <ErrorState v-else-if="error && currentList.length === 0" :message="error" @retry="loadAll" />
     <EmptyState
       v-else-if="currentList.length === 0"
-      :title="activeTab === 'friends' ? '还没有好友' : activeTab === 'blocked' ? '黑名单为空' : '没有相关申请'"
-      description="在用户卡片中点击「加好友」即可发送好友申请。"
+      :title="activeTab === 'friends' ? t('friends.emptyFriends') : activeTab === 'blocked' ? t('friends.emptyBlocked') : t('friends.emptyRequests')"
+      :description="t('friends.emptyHint')"
     />
 
     <div v-else class="friends-list">
@@ -193,15 +205,15 @@ onMounted(() => {
         <div class="friend-card__meta">
           <strong>{{ item.nickname || item.username }}</strong>
           <small class="muted">@{{ item.username }}<template v-if="item.signature"> · {{ item.signature }}</template></small>
-          <small v-if="item.since" class="muted">成为好友于 {{ formatRelativeTime(item.since) }}</small>
+          <small v-if="item.since" class="muted">{{ t('friends.since', { time: formatRelativeTime(item.since) }) }}</small>
         </div>
         <div class="friend-card__actions">
           <template v-if="activeTab === 'friends'">
-            <el-button type="primary" size="small" :icon="ChatDotRound" @click="startChat(item)">私信</el-button>
-            <el-button size="small" @click="removeFriend(item)">删除好友</el-button>
-            <el-button size="small" type="danger" plain @click="blockFriend(item)">拉黑</el-button>
+            <el-button type="primary" size="small" :icon="ChatDotRound" @click="startChat(item)">{{ t('friends.dm') }}</el-button>
+            <el-button size="small" @click="removeFriend(item)">{{ t('friends.remove') }}</el-button>
+            <el-button size="small" type="danger" plain @click="blockFriend(item)">{{ t('friends.block') }}</el-button>
           </template>
-          <el-button v-else size="small" @click="unblock(item)">解除拉黑</el-button>
+          <el-button v-else size="small" @click="unblock(item)">{{ t('friends.unblock') }}</el-button>
         </div>
       </article>
 
@@ -218,7 +230,7 @@ onMounted(() => {
         <div class="friend-card__meta">
           <strong>{{ requestName(item) }}</strong>
           <small class="muted">@{{ requestPeer(item)?.username || '' }} · {{ formatRelativeTime(item.createdAt) }}</small>
-          <small v-if="item.message" class="muted">留言：{{ item.message }}</small>
+          <small v-if="item.message" class="muted">{{ t('friends.message', { text: item.message }) }}</small>
         </div>
         <div class="friend-card__actions">
           <template v-if="activeTab === 'incoming'">
@@ -228,13 +240,11 @@ onMounted(() => {
               :loading="actionId === item.id"
               @click="handleRequest(item, 'accept')"
             >
-              同意
+              {{ t('friends.accept') }}
             </el-button>
-            <el-button size="small" :disabled="actionId === item.id" @click="handleRequest(item, 'reject')">
-              拒绝
-            </el-button>
+            <el-button size="small" :disabled="actionId === item.id" @click="handleRequest(item, 'reject')">{{ t('channel.invite.reject') }}</el-button>
           </template>
-          <el-tag v-else size="small" effect="plain">等待对方处理</el-tag>
+          <el-tag v-else size="small" effect="plain">{{ t('friends.waiting') }}</el-tag>
         </div>
       </article>
     </div>

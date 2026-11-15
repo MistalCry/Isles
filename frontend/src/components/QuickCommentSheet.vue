@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { formatCount, excerpt } from '@/utils/format'
 import type { Comment, Post } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
 import CommentSection from './CommentSection.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   modelValue: boolean
@@ -24,7 +27,7 @@ const visible = computed({
   set: (value: boolean) => emit('update:modelValue', value),
 })
 
-const authorName = computed(() => props.post.author.nickname || props.post.author.username || '岛民')
+const authorName = computed(() => props.post.author.nickname || props.post.author.username || t('common.islander'))
 const totalComments = computed(() => props.commentCount ?? props.post.commentCount)
 
 function viewAll(): void {
@@ -38,13 +41,13 @@ function handleCreated(comment: Comment): void {
 </script>
 
 <template>
-  <el-dialog v-model="visible" title="评论" width="min(640px, 94vw)" append-to-body>
+  <el-dialog v-model="visible" :title="t('common.comment')" width="min(640px, 94vw)" append-to-body>
     <div class="quick-comment__post">
       <UserAvatar :src="post.author.avatarUrl" :name="authorName" :size="36" />
       <div class="quick-comment__post-body">
         <div class="quick-comment__post-head">
           <strong>{{ authorName }}</strong>
-          <span class="muted">{{ formatCount(totalComments) }} 条评论</span>
+          <span class="muted">{{ t('comment.countSuffix', { n: formatCount(totalComments) }) }}</span>
         </div>
         <p v-if="post.title" class="quick-comment__post-title">{{ post.title }}</p>
         <p class="quick-comment__post-excerpt line-clamp-2">{{ excerpt(post.content, 120) }}</p>
@@ -62,9 +65,9 @@ function handleCreated(comment: Comment): void {
 
     <template #footer>
       <div class="quick-comment__footer">
-        <span class="muted">在完整页面查看更多讨论</span>
+        <span class="muted">{{ t('quickComment.more') }}</span>
         <el-button type="primary" plain @click="viewAll">
-          查看全部 {{ formatCount(totalComments) }} 条评论
+          {{ t('quickComment.viewAll', { n: formatCount(totalComments) }) }}
         </el-button>
       </div>
     </template>

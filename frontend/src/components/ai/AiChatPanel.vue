@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
@@ -27,6 +28,8 @@ import {
 } from '@/api/ai'
 import { AppError, resolveErrorMessage } from '@/api/client'
 import { uploadMedia, validateMediaFile } from '@/api/media'
+
+const { t } = useI18n()
 
 interface PendingImage {
   url: string
@@ -71,7 +74,7 @@ const {
 } = storeToRefs(aiStore)
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
-const assistantDisplayName = computed(() => props.assistantName || (props.scope === 'CHANNEL' ? '频道助手' : '岛问'))
+const assistantDisplayName = computed(() => props.assistantName || (props.scope === 'CHANNEL' ? t('ai.chat.assistant') : t('ai.chat.ask')))
 
 const conversations = ref<AiConversation[]>([])
 const activeConversation = ref<AiConversation | null>(null)
@@ -96,14 +99,14 @@ const fileInput = ref<HTMLInputElement | null>(null)
 
 const examples = computed(() =>
   props.scope === 'CHANNEL'
-    ? ['这个频道最近有什么值得关注的内容？', '帮我总结一下频道近期的热门讨论', '新成员加入频道后可以做什么？']
-    : ['群岛最近大家都在讨论什么？', '帮我总结一下最近的热门话题', '新手应该从哪些频道开始逛？'],
+    ? [t('ai.chat.suggestChannel1'), t('ai.chat.suggestChannel2'), t('ai.chat.suggestChannel3')]
+    : [t('ai.chat.suggestGlobal1'), t('ai.chat.suggestGlobal2'), t('ai.chat.suggestGlobal3')],
 )
 
 const placeholder = computed(() =>
   props.scope === 'CHANNEL'
-    ? `向${assistantDisplayName.value}提问，只会基于本频道内容回答…`
-    : '输入你的问题，岛问会检索全站公开帖子后回答…',
+    ? t('ai.chat.askChannel', { name: assistantDisplayName.value })
+    : t('ai.chat.placeholder'),
 )
 
 const composerDisabled = computed(() => !configured.value || !isAuthenticated.value || uploading.value)
@@ -148,7 +151,7 @@ async function loadConversations(): Promise<void> {
       await selectConversation(target)
     }
   } catch (cause) {
-    conversationError.value = resolveErrorMessage(cause, '历史会话加载失败')
+    conversationError.value = resolveErrorMessage(cause, t('ai.chat.sessionsFailed'))
   } finally {
     conversationLoading.value = false
   }
@@ -183,7 +186,7 @@ async function selectConversation(conversationId: string): Promise<void> {
     nextMessageCursor.value = page.nextCursor
     scrollToBottom()
   } catch (cause) {
-    messageError.value = resolveErrorMessage(cause, '会话消息加载失败')
+    messageError.value = resolveErrorMessage(cause, t('ai.chat.messagesFailed'))
   } finally {
     messageLoading.value = false
   }
@@ -208,7 +211,7 @@ async function createNewConversation(): Promise<void> {
     streamError.value = null
     input.value = ''
   } catch (cause) {
-    ElMessage.error(resolveErrorMessage(cause, '新建会话失败'))
+    ElMessage.error(resolveErrorMessage(cause, t('ai.chat.createFailed')))
   }
 }
 
@@ -218,7 +221,7 @@ async function handleRename(conversationId: string, title: string): Promise<void
     conversations.value = conversations.value.map((item) => (item.id === updated.id ? updated : item))
     if (activeConversation.value?.id === updated.id) activeConversation.value = updated
   } catch (cause) {
-    ElMessage.error(resolveErrorMessage(cause, '重命名失败'))
+    ElMessage.error(resolveErrorMessage(cause, t('ai.chat.renameFailed')))
   }
 }
 
@@ -233,7 +236,7 @@ async function handleDelete(conversationId: string): Promise<void> {
       if (conversations.value.length > 0) await selectConversation(conversations.value[0].id)
     }
   } catch (cause) {
-    ElMessage.error(resolveErrorMessage(cause, '删除会话失败'))
+    ElMessage.error(resolveErrorMessage(cause, t('ai.chat.deleteFailed')))
   }
 }
 
@@ -246,7 +249,7 @@ async function loadOlderMessages(): Promise<void> {
     messages.value = [...page.items, ...messages.value]
     nextMessageCursor.value = page.nextCursor
   } catch (cause) {
-    ElMessage.error(resolveErrorMessage(cause, '更早消息加载失败'))
+    ElMessage.error(resolveErrorMessage(cause, t('ai.chat.earlierFailed')))
   } finally {
     loadingOlder.value = false
   }
@@ -262,7 +265,7 @@ async function send(): Promise<void> {
     return
   }
   if (!configured.value) {
-    ElMessage.warning(aiStatus.value?.message ?? '尚未配置 AI 模型')
+    ElMessage.warning(aiStatus.value?.message ?? t('ai.chat.noModel'))
     return
   }
   if (streaming.value || uploading.value) return
@@ -318,7 +321,7 @@ async function createConversationForSend(): Promise<AiConversation | null> {
     activeConversation.value = conversation
     return conversation
   } catch (cause) {
-    ElMessage.error(resolveErrorMessage(cause, '创建会话失败'))
+    ElMessage.error(resolveErrorMessage(cause, t('ai.chat.conversationFailed')))
     return null
   }
 }
@@ -415,7 +418,7 @@ async function runStream(start: StreamStarter): Promise<void> {
     if (controller.signal.aborted) {
       markStreamingMessage('ABORTED')
     } else {
-      const message = cause instanceof AppError ? cause.message : resolveErrorMessage(cause, 'AI 对话失败，请稍后重试')
+      const message = cause instanceof AppError ? cause.message : resolveErrorMessage(cause, t('ai.chat.failed'))
       streamError.value = message
       ElMessage.error(message)
       markStreamingMessage('FAILED')
@@ -459,7 +462,7 @@ function onKeydown(event: Event): void {
 
 function triggerUpload(): void {
   if (!canVision.value) {
-    ElMessage.info('当前模型不支持图片，请在模型选择中切换支持视觉的模型')
+    ElMessage.info(t('ai.chat.visionUnsupported'))
     return
   }
   fileInput.value?.click()
@@ -471,12 +474,12 @@ async function handleFileChange(event: Event): Promise<void> {
   target.value = ''
   if (files.length === 0) return
   if (pendingImages.value.length + files.length > 4) {
-    ElMessage.warning('最多添加 4 张图片')
+    ElMessage.warning(t('ai.chat.imageLimit'))
     return
   }
   for (const file of files) {
     if (!file.type.startsWith('image/')) {
-      ElMessage.warning('仅支持上传图片')
+      ElMessage.warning(t('ai.chat.imageOnly'))
       continue
     }
     const invalid = validateMediaFile(file)
@@ -489,7 +492,7 @@ async function handleFileChange(event: Event): Promise<void> {
       const media = await uploadMedia(file)
       if (media.url) pendingImages.value = [...pendingImages.value, { url: media.url, name: file.name }]
     } catch (cause) {
-      ElMessage.error(resolveErrorMessage(cause, '图片上传失败'))
+      ElMessage.error(resolveErrorMessage(cause, t('editor.imageUploadFailed')))
     } finally {
       uploading.value = false
     }
@@ -585,24 +588,24 @@ function retryMessages(): void {
         <EmptyState
           v-else-if="!isAuthenticated"
           class="ai-chat__state"
-          title="登录后使用 AI 问答"
-          description="频道问问会基于全站公开内容回答，频道助手只在当前频道内检索；都需要登录后使用。"
+          :title="t('ai.guestTitle')"
+          :description="t('ai.guestHint')"
         >
           <template #action>
-            <el-button type="primary" @click="goLogin">去登录</el-button>
+            <el-button type="primary" @click="goLogin">{{ t('ai.chat.login') }}</el-button>
           </template>
         </EmptyState>
         <EmptyState
           v-else-if="!configured && !aiLoading"
           class="ai-chat__state"
-          title="尚未配置 AI 模型"
-          :description="aiStatus?.message ?? '请联系平台管理员在「平台管理后台 → AI 配置」中配置 LMStudio / OpenAI 兼容模型。'"
+          :title="t('ai.chat.noModel')"
+          :description="aiStatus?.message ?? t('ai.chat.configureHint')"
         />
         <EmptyState
           v-else-if="!hasConversation && messages.length === 0"
           class="ai-chat__state"
-          title="开始你的第一个问题"
-          :description="scope === 'CHANNEL' ? '我会检索本频道的内容来回答。' : '我会检索全站公开帖子，回答时附上来源引用。'"
+          :title="t('ai.startFirst')"
+          :description="scope === 'CHANNEL' ? t('ai.chat.channelScopeHint') : t('ai.chat.globalScopeHint')"
         >
           <template #action>
             <div class="ai-chat__examples">
@@ -629,7 +632,7 @@ function retryMessages(): void {
         />
         <template v-else>
           <div v-if="nextMessageCursor" class="ai-chat__more">
-            <el-button link size="small" :loading="loadingOlder" @click="loadOlderMessages">加载更早消息</el-button>
+            <el-button link size="small" :loading="loadingOlder" @click="loadOlderMessages">{{ t('ai.chat.loadEarlier') }}</el-button>
           </div>
           <AiMessageItem
             v-for="message in messages"
@@ -659,7 +662,7 @@ function retryMessages(): void {
         <div v-if="pendingImages.length > 0" class="ai-chat__attachments">
           <div v-for="(image, index) in pendingImages" :key="image.url" class="attachment">
             <img :src="image.url" :alt="image.name" />
-            <button type="button" class="attachment__remove" aria-label="移除图片" @click="removeImage(index)">
+            <button type="button" class="attachment__remove" :aria-label="t('ai.removeImage')" @click="removeImage(index)">
               <el-icon :size="12"><Delete /></el-icon>
             </button>
           </div>
@@ -682,12 +685,12 @@ function retryMessages(): void {
                 type="button"
                 class="tool-btn"
                 :class="{ 'is-active': canVision }"
-                aria-label="添加图片"
+                :aria-label="t('ai.addImage')"
                 :disabled="!canVision || uploading"
                 @click="triggerUpload"
               >
                 <el-icon :size="16"><Picture /></el-icon>
-                <span v-if="uploading">上传中…</span>
+                <span v-if="uploading">{{ t('common.uploading') }}</span>
               </button>
               <input
                 ref="fileInput"
@@ -702,7 +705,7 @@ function retryMessages(): void {
                 class="composer__model"
                 :model-value="selectedModelId ?? undefined"
                 size="small"
-                placeholder="选择模型"
+                :placeholder="t('ai.pickModel')"
                 @change="onSelectModel"
               >
                 <el-option
@@ -713,16 +716,16 @@ function retryMessages(): void {
                 >
                   <span>{{ model.name }}</span>
                   <span class="model-option">
-                    <el-tag v-if="model.visionEnabled" size="small" effect="plain">视觉</el-tag>
-                    <el-tag v-if="model.reasoningEnabled" size="small" effect="plain" type="warning">思考</el-tag>
+                    <el-tag v-if="model.visionEnabled" size="small" effect="plain">{{ t('ai.chat.visionTag') }}</el-tag>
+                    <el-tag v-if="model.reasoningEnabled" size="small" effect="plain" type="warning">{{ t('ai.chat.thinkingTag') }}</el-tag>
                   </span>
                 </el-option>
               </el-select>
               <label v-if="canDeepThinking" class="composer__switch">
                 <el-switch :model-value="deepThinking" size="small" @change="onToggleDeepThinking" />
-                <span>深度思考</span>
+                <span>{{ t('ai.chat.deepThinking') }}</span>
               </label>
-              <span v-else-if="selectedModel" class="muted composer__switch-hint">当前模型不支持深度思考</span>
+              <span v-else-if="selectedModel" class="muted composer__switch-hint">{{ t('ai.chat.noThinking') }}</span>
             </div>
             <el-button
               v-if="streaming"
@@ -732,7 +735,7 @@ function retryMessages(): void {
               :icon="VideoPause"
               @click="stopStreaming"
             >
-              停止
+              {{ t('ai.chat.stop') }}
             </el-button>
             <el-button
               v-else
@@ -741,15 +744,13 @@ function retryMessages(): void {
               :icon="Promotion"
               :disabled="composerDisabled"
               @click="send"
-            >
-              发送
-            </el-button>
+            >{{ t('common.send') }}</el-button>
           </div>
         </div>
         <p class="ai-chat__hint">
           <el-icon :size="12"><ChatDotRound /></el-icon>
-          AI 生成内容仅供参考，请自行甄别；引用来源可点击查看原帖。
-          <span v-if="selectedModel">当前模型：{{ selectedModel.name }}</span>
+          {{ t('ai.chat.disclaimer') }}
+          <span v-if="selectedModel">{{ t('ai.chat.currentModel', { name: selectedModel.name }) }}</span>
         </p>
       </footer>
     </section>

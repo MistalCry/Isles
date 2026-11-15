@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Picture, Promotion } from '@element-plus/icons-vue'
@@ -10,6 +11,8 @@ import type { SendDmMessagePayload } from '@/api/dm'
 import UserAvatar from '../UserAvatar.vue'
 import MediaViewer from '../MediaViewer.vue'
 import { EMOJI_LIST } from '@/constants/app'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -42,7 +45,7 @@ const scrollRef = ref<HTMLElement | null>(null)
 
 const currentUserId = computed(() => auth.currentUser?.id ?? '')
 const peerName = computed(
-  () => props.conversation.peer.nickname || props.conversation.peer.username || '岛民',
+  () => props.conversation.peer.nickname || props.conversation.peer.username || t('common.islander'),
 )
 
 function isOwn(message: DmMessage): boolean {
@@ -51,7 +54,7 @@ function isOwn(message: DmMessage): boolean {
 
 function senderName(message: DmMessage): string {
   if (message.sender) return message.sender.nickname || message.sender.username || peerName.value
-  return isOwn(message) ? '我' : peerName.value
+  return isOwn(message) ? t('ai.message.me') : peerName.value
 }
 
 async function scrollToBottom(): Promise<void> {
@@ -129,7 +132,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="chat-panel" aria-label="私信会话">
+  <section class="chat-panel" :aria-label="t('dm.list')">
     <header class="chat-panel__head">
       <UserAvatar :src="conversation.peer.avatarUrl" :name="peerName" :size="36" />
       <div class="chat-panel__peer">
@@ -144,18 +147,16 @@ onMounted(() => {
     <div ref="scrollRef" class="chat-panel__messages">
       <div v-if="hasMore" class="chat-panel__load-older">
         <el-button text type="primary" size="small" :loading="loading" @click="$emit('load-older')">
-          加载更早的消息
+          {{ t('dm.chat.loadEarlier') }}
         </el-button>
       </div>
 
-      <div v-if="loading && messages.length === 0" class="chat-panel__state muted">正在加载消息…</div>
+      <div v-if="loading && messages.length === 0" class="chat-panel__state muted">{{ t('dm.chat.loading') }}</div>
       <div v-else-if="error && messages.length === 0" class="chat-panel__state">
         <span class="text-danger">{{ error }}</span>
-        <el-button text type="primary" size="small" @click="$emit('retry')">重试</el-button>
+        <el-button text type="primary" size="small" @click="$emit('retry')">{{ t('common.retry') }}</el-button>
       </div>
-      <div v-else-if="messages.length === 0" class="chat-panel__state muted">
-        还没有消息，发一句问候开始聊天吧。
-      </div>
+      <div v-else-if="messages.length === 0" class="chat-panel__state muted">{{ t('dm.noMessagesHint') }}</div>
 
       <div
         v-for="message in messages"
@@ -175,16 +176,16 @@ onMounted(() => {
           </span>
           <div class="message-bubble" :class="{ 'message-bubble--own': isOwn(message) }">
             <template v-if="message.type === 'IMAGE'">
-              <MediaViewer :media="message.media" compact />
+              <MediaViewer :media="message.media" compact :max-height="220" />
             </template>
             <template v-else-if="message.type === 'POST' && message.post">
               <RouterLink
                 :to="{ name: 'post', params: { id: message.post.postId } }"
                 class="shared-post"
               >
-                <span class="shared-post__label">分享帖子</span>
+                <span class="shared-post__label">{{ t('dm.chat.sharePost') }}</span>
                 <strong class="shared-post__title line-clamp-1">
-                  {{ message.post.title || message.post.summary || '查看帖子' }}
+                  {{ message.post.title || message.post.summary || t('dm.chat.viewPost') }}
                 </strong>
                 <span v-if="message.post.channelName" class="muted shared-post__channel">
                   {{ message.post.channelName }}
@@ -199,7 +200,7 @@ onMounted(() => {
             </template>
           </div>
           <span v-if="isOwn(message)" class="message-status muted">
-            {{ message.read ? '已读' : '未读' }}
+            {{ message.read ? t('dm.chat.read') : t('dm.chat.unread') }}
           </span>
         </div>
       </div>
@@ -212,7 +213,7 @@ onMounted(() => {
         :rows="2"
         maxlength="2000"
         resize="none"
-        placeholder="输入消息，Enter 发送，Shift + Enter 换行"
+        :placeholder="t('dm.inputPlaceholder')"
         @keydown.enter.exact.prevent="sendText"
       />
       <div class="chat-panel__actions">
@@ -226,7 +227,7 @@ onMounted(() => {
             </button>
           </div>
         </el-popover>
-        <el-button text size="small" :icon="Picture" :loading="uploading" @click="triggerFilePick">图片</el-button>
+        <el-button text size="small" :icon="Picture" :loading="uploading" @click="triggerFilePick">{{ t('common.image') }}</el-button>
         <el-button
           class="chat-panel__send"
           type="primary"
@@ -235,16 +236,14 @@ onMounted(() => {
           :loading="sending"
           :disabled="!draft.trim()"
           @click="sendText"
-        >
-          发送
-        </el-button>
+        >{{ t('common.send') }}</el-button>
       </div>
       <input
         ref="fileInput"
         type="file"
         accept="image/*"
         class="visually-hidden"
-        aria-label="选择图片发送"
+        :aria-label="t('dm.pickImage')"
         @change="handleImagePick"
       />
     </footer>

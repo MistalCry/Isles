@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import axios, { type AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 import { pinia } from '@/stores'
@@ -41,20 +42,20 @@ declare module 'axios' {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
-const NETWORK_ERROR_MESSAGE = '无法连接服务器，请确认后端服务已启动后重试'
+const NETWORK_ERROR_MESSAGE = t('error.network')
 const AUTH_ENDPOINTS = ['/auth/login', '/auth/register', '/auth/refresh']
 
 const STATUS_MESSAGES: Record<number, string> = {
-  400: '请求参数有误，请检查后重试',
-  401: '登录状态已失效，请重新登录',
-  403: '没有权限执行该操作',
-  404: '内容不存在或不可见',
-  409: '数据冲突，请刷新后重试',
-  422: '操作不满足业务规则',
-  429: '操作过于频繁，请稍后再试',
-  500: '服务器开小差了，请稍后重试',
-  502: '服务暂时不可用，请稍后重试',
-  503: '服务暂时不可用，请稍后重试',
+  400: t('error.badRequest'),
+  401: t('error.unauthorized'),
+  403: t('error.forbidden'),
+  404: t('error.notFound'),
+  409: t('error.conflict'),
+  422: t('error.businessRule'),
+  429: t('error.tooManyRequests'),
+  500: t('error.server'),
+  502: t('error.unavailable'),
+  503: t('error.unavailable'),
 }
 
 let lastToast = { message: '', at: 0 }
@@ -89,14 +90,14 @@ function toAppError(error: AxiosError<ApiErrorEnvelope>): AppError {
     }
     return new AppError({
       code: `HTTP_${status}`,
-      message: STATUS_MESSAGES[status] ?? `请求失败（HTTP ${status}）`,
+      message: STATUS_MESSAGES[status] ?? t('error.httpStatus', { status }),
       status,
       cause: error,
     })
   }
   return new AppError({
     code: envelope?.code ?? `HTTP_${status}`,
-    message: envelope?.message ?? STATUS_MESSAGES[status] ?? '请求失败，请稍后重试',
+    message: envelope?.message ?? STATUS_MESSAGES[status] ?? t('error.generic'),
     status,
     details: envelope?.details,
     requestId: envelope?.requestId,
@@ -104,7 +105,7 @@ function toAppError(error: AxiosError<ApiErrorEnvelope>): AppError {
   })
 }
 
-export function resolveErrorMessage(error: unknown, fallback = '请求失败，请稍后重试'): string {
+export function resolveErrorMessage(error: unknown, fallback = t('error.generic')): string {
   if (error instanceof AppError) return error.message
   if (error instanceof Error && error.message) return error.message
   return fallback

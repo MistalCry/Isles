@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -7,7 +8,7 @@ export function useRequireLogin() {
   const router = useRouter()
   const auth = useAuthStore()
 
-  function requireLogin(message = '请先登录后再操作'): boolean {
+  function requireLogin(message = t('auth.loginRequired')): boolean {
     if (auth.isAuthenticated) return true
     ElMessage.warning(message)
     const current = router.currentRoute.value

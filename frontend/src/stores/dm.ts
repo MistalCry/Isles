@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { dmApi } from '@/api'
@@ -49,7 +50,7 @@ export const useDmStore = defineStore('dm', () => {
       void refreshUnread()
     } catch (err) {
       if (seq !== conversationSeq) return
-      error.value = resolveErrorMessage(err, '私信会话加载失败')
+      error.value = resolveErrorMessage(err, t('dm.share.loadFailed'))
     } finally {
       if (seq === conversationSeq) loading.value = false
     }
@@ -110,7 +111,7 @@ export const useDmStore = defineStore('dm', () => {
       }
     } catch (err) {
       if (seq !== messageSeq) return
-      messagesError.value = resolveErrorMessage(err, '私信消息加载失败')
+      messagesError.value = resolveErrorMessage(err, t('dm.loadFailed'))
     } finally {
       if (seq === messageSeq) messagesLoading.value = false
     }

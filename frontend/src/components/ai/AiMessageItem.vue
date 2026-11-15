@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, ref } from 'vue'
 import { RefreshRight, EditPen, ArrowDown, ArrowRight } from '@element-plus/icons-vue'
 import type { AiMessage } from '@/api/ai'
 import { formatRelativeTime } from '@/utils/format'
 import UserAvatar from '@/components/UserAvatar.vue'
 import AiSourceList from './AiSourceList.vue'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -19,7 +22,7 @@ const props = withDefaults(
     streaming: false,
     editable: false,
     canRegenerate: false,
-    assistantName: '岛问',
+    assistantName: '',
     assistantAvatarUrl: null,
   },
 )
@@ -64,50 +67,48 @@ function submitEdit(): void {
       v-if="!isUser"
       class="ai-message__avatar"
       :src="assistantAvatarUrl"
-      :name="assistantName || '岛问'"
+      :name="assistantName || t('ai.chat.ask')"
       :size="32"
       square
     />
 
     <div class="ai-message__main">
       <header class="ai-message__head">
-        <span class="ai-message__author">{{ isUser ? '我' : assistantName || '岛问' }}</span>
+        <span class="ai-message__author">{{ isUser ? t('ai.message.me') : assistantName || t('ai.chat.ask') }}</span>
         <span class="ai-message__time">{{ formatRelativeTime(message.createdAt) }}</span>
-        <el-tag v-if="isAborted" size="small" type="warning" effect="plain">已停止</el-tag>
-        <el-tag v-if="isFailed" size="small" type="danger" effect="plain">生成失败</el-tag>
+        <el-tag v-if="isAborted" size="small" type="warning" effect="plain">{{ t('ai.message.stopped') }}</el-tag>
+        <el-tag v-if="isFailed" size="small" type="danger" effect="plain">{{ t('ai.message.failed') }}</el-tag>
         <el-tag v-if="message.model" size="small" effect="plain">{{ message.model }}</el-tag>
       </header>
 
       <div v-if="!isUser && reasoning" class="ai-message__reasoning">
         <button type="button" class="reasoning-toggle" @click="reasoningOpen = !reasoningOpen">
-          <el-icon :size="12"><ArrowDown v-if="reasoningOpen" /><ArrowRight v-else /></el-icon>
-          深度思考过程
-        </button>
+          <el-icon :size="12"><ArrowDown v-if="reasoningOpen" /><ArrowRight v-else /></el-icon>{{ t('ai.thinkingProcess') }}</button>
         <pre v-if="reasoningOpen" class="reasoning-content">{{ reasoning }}</pre>
       </div>
 
       <div v-if="editing" class="ai-message__editor">
         <el-input v-model="draft" type="textarea" :rows="3" maxlength="8000" show-word-limit />
         <div class="ai-message__editor-actions">
-          <el-button size="small" @click="cancelEdit">取消</el-button>
-          <el-button size="small" type="primary" @click="submitEdit">保存并重新提问</el-button>
+          <el-button size="small" @click="cancelEdit">{{ t('common.cancel') }}</el-button>
+          <el-button size="small" type="primary" @click="submitEdit">{{ t('ai.message.saveAndRetry') }}</el-button>
         </div>
       </div>
       <div v-else class="ai-message__bubble">
-        <p v-if="showTyping" class="ai-message__typing" aria-label="AI 正在输入">
+        <p v-if="showTyping" class="ai-message__typing" :aria-label="t('ai.typing')">
           <span /><span /><span />
         </p>
         <p v-else-if="hasContent" class="ai-message__content">{{ message.content }}</p>
-        <p v-else-if="isFailed" class="ai-message__empty">本次回答生成失败，可点击「重新生成」再试。</p>
-        <p v-else-if="isAborted" class="ai-message__empty">已停止生成。</p>
-        <p v-else class="ai-message__empty">无内容</p>
+        <p v-else-if="isFailed" class="ai-message__empty">{{ t('ai.message.failedHint') }}</p>
+        <p v-else-if="isAborted" class="ai-message__empty">{{ t('ai.message.stoppedHint') }}</p>
+        <p v-else class="ai-message__empty">{{ t('ai.message.empty') }}</p>
 
         <div v-if="message.images?.length" class="ai-message__images">
           <img
             v-for="(image, index) in message.images"
             :key="`${message.id}-img-${index}`"
             :src="image"
-            :alt="`附图 ${index + 1}`"
+            :alt="t('ai.attachedImage', { n: index + 1 })"
             class="ai-message__image"
             loading="lazy"
           />
@@ -117,14 +118,12 @@ function submitEdit(): void {
       <AiSourceList v-if="!isUser && message.sources?.length" :sources="message.sources" compact />
 
       <footer v-if="!isUser && !streaming" class="ai-message__actions">
-        <el-button v-if="canRegenerate" link size="small" :icon="RefreshRight" @click="emit('regenerate')">
-          重新生成
-        </el-button>
-        <span v-if="message.tokenOut" class="ai-message__tokens">约 {{ message.tokenOut }} tokens</span>
+        <el-button v-if="canRegenerate" link size="small" :icon="RefreshRight" @click="emit('regenerate')">{{ t('ai.regenerate') }}</el-button>
+        <span v-if="message.tokenOut" class="ai-message__tokens">{{ t('ai.tokenUsage', { n: message.tokenOut }) }}</span>
       </footer>
 
       <footer v-if="isUser && !streaming && editable" class="ai-message__actions ai-message__actions--user">
-        <el-button link size="small" :icon="EditPen" @click="beginEdit">编辑</el-button>
+        <el-button link size="small" :icon="EditPen" @click="beginEdit">{{ t('common.edit') }}</el-button>
       </footer>
     </div>
   </article>

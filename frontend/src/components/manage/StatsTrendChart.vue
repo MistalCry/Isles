@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed } from 'vue'
 import type { TrendPoint } from '@/types/models'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -10,7 +13,7 @@ const props = withDefaults(
   }>(),
   {
     metric: 'visits',
-    label: '趋势',
+    label: '',
   },
 )
 
@@ -19,7 +22,7 @@ const maxValue = computed(() => Math.max(1, ...values.value))
 const bars = computed(() =>
   props.points.map((point, index) => ({
     date: point.date,
-    label: point.date ? point.date.slice(5) : `第 ${index + 1} 天`,
+    label: point.date ? point.date.slice(5) : t('manage.stats.dayN', { n: index + 1 }),
     value: values.value[index] ?? 0,
     height: `${Math.max(3, Math.round(((values.value[index] ?? 0) / maxValue.value) * 100))}%`,
   })),
@@ -29,17 +32,17 @@ const bars = computed(() =>
 <template>
   <div class="trend-chart">
     <div class="trend-chart__head">
-      <strong>{{ label }}</strong>
-      <span class="muted">峰值 {{ maxValue }}</span>
+      <strong>{{ label || t('manage.stats.trend') }}</strong>
+      <span class="muted">{{ t('manage.stats.peak', { value: maxValue }) }}</span>
     </div>
-    <div v-if="points.length > 0" class="trend-chart__bars" role="img" :aria-label="`${label} 趋势图`">
+    <div v-if="points.length > 0" class="trend-chart__bars" role="img" :aria-label="t('common.trendChart', { label: label || t('manage.stats.trend') })">
       <div v-for="bar in bars" :key="bar.label + bar.value" class="trend-chart__bar">
         <span class="trend-chart__value">{{ bar.value }}</span>
         <span class="trend-chart__column" :style="{ height: bar.height }" />
         <span class="trend-chart__label">{{ bar.label }}</span>
       </div>
     </div>
-    <p v-else class="muted trend-chart__empty">暂无趋势数据</p>
+    <p v-else class="muted trend-chart__empty">{{ t('manage.stats.empty') }}</p>
   </div>
 </template>
 

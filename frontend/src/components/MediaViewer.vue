@@ -1,16 +1,22 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ArrowLeft, ArrowRight, Close, VideoPlay } from '@element-plus/icons-vue'
 import type { MediaItem } from '@/types/models'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
     media?: MediaItem[] | null
     compact?: boolean
+    /** 单图最大高度（px）：私信气泡等窄容器传更小的值 */
+    maxHeight?: number
   }>(),
   {
     media: () => [],
     compact: false,
+    maxHeight: 420,
   },
 )
 
@@ -75,16 +81,21 @@ const activeImage = computed(() => images.value[activeImageIndex.value] ?? null)
 </script>
 
 <template>
-  <div v-if="items.length > 0" class="media-viewer" :class="[gridClass, { 'media-viewer--compact': compact }]">
+  <div
+    v-if="items.length > 0"
+    class="media-viewer"
+    :class="[gridClass, { 'media-viewer--compact': compact }]"
+    :style="{ '--media-max-height': `${maxHeight}px` }"
+  >
     <template v-for="(item, index) in items" :key="`${item.url}-${index}`">
       <button
         v-if="item.type === 'IMAGE'"
         type="button"
         class="media-viewer__cell media-viewer__image"
-        :aria-label="`查看第 ${index + 1} 张图片`"
+        :aria-label="t('media.viewer.viewNth', { n: index + 1 })"
         @click="openLightbox(item)"
       >
-        <img :src="item.thumbUrl || item.url" :alt="`帖子图片 ${index + 1}`" loading="lazy" />
+        <img :src="item.thumbUrl || item.url" :alt="t('media.viewer.postPhoto', { n: index + 1 })" loading="lazy" />
       </button>
 
       <div v-else class="media-viewer__cell media-viewer__video">
@@ -97,14 +108,10 @@ const activeImage = computed(() => images.value[activeImageIndex.value] ?? null)
           loop
           playsinline
           preload="metadata"
-          :aria-label="`帖子视频 ${index + 1}`"
-        >
-          您的浏览器不支持视频播放。
-        </video>
+          :aria-label="t('media.viewer.postVideo', { n: index + 1 })"
+        >{{ t('media.viewer.unsupported') }}</video>
         <span class="media-viewer__video-tip" aria-hidden="true">
-          <el-icon><VideoPlay /></el-icon>
-          静音播放中
-        </span>
+          <el-icon><VideoPlay /></el-icon>{{ t('media.viewer.mutedPlaying') }}</span>
       </div>
     </template>
   </div>
@@ -115,10 +122,10 @@ const activeImage = computed(() => images.value[activeImageIndex.value] ?? null)
       class="media-lightbox"
       role="dialog"
       aria-modal="true"
-      aria-label="图片预览"
+      :aria-label="t('media.viewer.preview')"
       @click.self="closeLightbox"
     >
-      <button type="button" class="media-lightbox__close" aria-label="关闭预览" @click="closeLightbox">
+      <button type="button" class="media-lightbox__close" :aria-label="t('media.viewer.close')" @click="closeLightbox">
         <el-icon :size="22"><Close /></el-icon>
       </button>
 
@@ -126,19 +133,19 @@ const activeImage = computed(() => images.value[activeImageIndex.value] ?? null)
         v-if="images.length > 1"
         type="button"
         class="media-lightbox__nav media-lightbox__nav--prev"
-        aria-label="上一张"
+        :aria-label="t('media.viewer.prev')"
         @click="showPrevious"
       >
         <el-icon :size="24"><ArrowLeft /></el-icon>
       </button>
 
-      <img class="media-lightbox__image" :src="activeImage.url" :alt="`图片 ${activeImageIndex + 1}`" />
+      <img class="media-lightbox__image" :src="activeImage.url" :alt="t('media.viewer.photo', { n: activeImageIndex + 1 })" />
 
       <button
         v-if="images.length > 1"
         type="button"
         class="media-lightbox__nav media-lightbox__nav--next"
-        aria-label="下一张"
+        :aria-label="t('media.viewer.next')"
         @click="showNext"
       >
         <el-icon :size="24"><ArrowRight /></el-icon>
@@ -183,7 +190,7 @@ const activeImage = computed(() => images.value[activeImageIndex.value] ?? null)
 }
 
 .media-viewer--single .media-viewer__cell {
-  max-height: 420px;
+  max-height: var(--media-max-height, 420px);
 }
 
 .media-viewer--grid .media-viewer__cell,

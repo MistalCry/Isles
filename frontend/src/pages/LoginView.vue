@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
@@ -7,6 +8,8 @@ import { resolveErrorMessage } from '@/api/client'
 import { validateUsername } from '@/utils/validators'
 import { APP_NAME } from '@/constants/app'
 import AuthLayout from '@/layouts/AuthLayout.vue'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
@@ -28,7 +31,7 @@ const redirectTarget = computed(() => {
 
 const rules: FormRules = {
   username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { required: true, message: t('auth.login.usernameRequired'), trigger: 'blur' },
     {
       validator: (_rule, value, callback) => {
         const message = validateUsername(String(value ?? ''))
@@ -38,7 +41,7 @@ const rules: FormRules = {
       trigger: 'blur',
     },
   ],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+  password: [{ required: true, message: t('auth.login.passwordRequired'), trigger: 'blur' }],
 }
 
 async function handleSubmit(): Promise<void> {
@@ -49,10 +52,10 @@ async function handleSubmit(): Promise<void> {
   errorMessage.value = ''
   try {
     await auth.login({ username: form.username.trim(), password: form.password })
-    ElMessage.success('欢迎回来')
+    ElMessage.success(t('auth.login.welcome'))
     await router.replace(redirectTarget.value)
   } catch (err) {
-    errorMessage.value = resolveErrorMessage(err, '登录失败，请检查用户名和密码')
+    errorMessage.value = resolveErrorMessage(err, t('auth.login.failed'))
   } finally {
     submitting.value = false
   }
@@ -63,8 +66,8 @@ async function handleSubmit(): Promise<void> {
   <AuthLayout>
     <div class="auth-card">
       <header class="auth-card__header">
-        <h1>登录{{ APP_NAME }}</h1>
-        <p>回到你的岛屿，看看岛民们的新动态。</p>
+        <h1>{{ t('auth.login.title', { app: APP_NAME }) }}</h1>
+        <p>{{ t('auth.login.subtitle') }}</p>
       </header>
 
       <el-alert
@@ -77,30 +80,28 @@ async function handleSubmit(): Promise<void> {
       />
 
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent="handleSubmit">
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="form.username" placeholder="请输入用户名" autocomplete="username" />
+        <el-form-item :label="t('common.username')" prop="username">
+          <el-input v-model="form.username" :placeholder="t('auth.login.usernameRequired')" autocomplete="username" />
         </el-form-item>
-        <el-form-item label="密码" prop="password">
+        <el-form-item :label="t('common.password')" prop="password">
           <el-input
             v-model="form.password"
             type="password"
             show-password
-            placeholder="请输入密码"
+            :placeholder="t('auth.login.passwordRequired')"
             autocomplete="current-password"
             @keyup.enter="handleSubmit"
           />
         </el-form-item>
 
-        <el-button type="primary" class="auth-card__submit" :loading="submitting" @click="handleSubmit">
-          登录
-        </el-button>
+        <el-button type="primary" class="auth-card__submit" :loading="submitting" @click="handleSubmit">{{ t('common.login') }}</el-button>
       </el-form>
 
       <p class="auth-card__switch">
-        还没有账号？
-        <RouterLink :to="{ name: 'register', query: route.query }" class="link">立即注册</RouterLink>
+        {{ t('auth.login.noAccount') }}
+        <RouterLink :to="{ name: 'register', query: route.query }" class="link">{{ t('auth.login.registerNow') }}</RouterLink>
       </p>
-      <RouterLink to="/feed" class="auth-card__back">先随便逛逛 →</RouterLink>
+      <RouterLink to="/feed" class="auth-card__back">{{ t('auth.login.browse') }}</RouterLink>
     </div>
   </AuthLayout>
 </template>

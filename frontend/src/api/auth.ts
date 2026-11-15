@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import axios from 'axios'
 import type { AuthResponse, CurrentUser, LoginPayload, RegisterPayload } from '@/types/models'
 import { API_BASE_URL, http } from './client'
@@ -30,7 +31,7 @@ export async function register(payload: RegisterPayload): Promise<CurrentUser> {
 export async function refreshAccessToken(): Promise<string> {
   const { data } = await refreshClient.post('/auth/refresh')
   if (!data?.accessToken) {
-    throw new Error('刷新登录态失败')
+    throw new Error(t('auth.refreshFailed'))
   }
   return data.accessToken
 }

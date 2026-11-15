@@ -1,5 +1,7 @@
+import { t } from '@/i18n'
 import { MAX_IMAGE_SIZE_MB, MAX_VIDEO_SIZE_MB } from '@/constants/app'
 import type { MediaItem, MediaType } from '@/types/models'
+import { toMediaItem } from './adapters'
 import { http } from './client'
 
 export function detectMediaType(file: File): MediaType | null {
@@ -10,10 +12,13 @@ export function detectMediaType(file: File): MediaType | null {
 
 export function validateMediaFile(file: File): string | null {
   const mediaType = detectMediaType(file)
-  if (!mediaType) return '仅支持图片（JPG/PNG/WebP/GIF）或视频（MP4/WebM）文件'
+  if (!mediaType) return t('media.uploadTypeInvalid')
   const maxMb = mediaType === 'VIDEO' ? MAX_VIDEO_SIZE_MB : MAX_IMAGE_SIZE_MB
   if (file.size > maxMb * 1024 * 1024) {
-    return `${mediaType === 'VIDEO' ? '视频' : '图片'}大小不能超过 ${maxMb}MB`
+    return t('media.sizeLimit', {
+      type: mediaType === 'VIDEO' ? t('common.video') : t('common.image'),
+      max: maxMb,
+    })
   }
   return null
 }
@@ -23,7 +28,7 @@ export async function uploadMedia(file: File, onProgress?: (percent: number) => 
   formData.append('file', file)
   formData.append('type', detectMediaType(file) === 'VIDEO' ? 'video' : 'image')
 
-  const { data } = await http.post<MediaItem>('/media/upload', formData, {
+  const { data } = await http.post<unknown>('/media/upload', formData, {
     timeout: 120000,
     onUploadProgress: (event) => {
       if (event.total && onProgress) {
@@ -31,5 +36,5 @@ export async function uploadMedia(file: File, onProgress?: (percent: number) => 
       }
     },
   })
-  return data
+  return toMediaItem(data)
 }

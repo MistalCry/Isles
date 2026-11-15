@@ -1,6 +1,8 @@
+import { t } from '@/i18n'
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { pinia } from '@/stores'
+import { useSiteStore } from '@/stores/site'
 import { aiRoutes } from './ai.routes'
 
 declare module 'vue-router' {
@@ -24,91 +26,91 @@ const routes: RouteRecordRaw[] = [
     path: '/feed',
     name: 'feed',
     component: () => import('@/pages/FeedView.vue'),
-    meta: { title: '频道动态' },
+    meta: { title: t('nav.feed') },
   },
   {
     path: '/hot',
     name: 'hot',
     component: () => import('@/pages/HotView.vue'),
-    meta: { title: '热门讨论' },
+    meta: { title: t('nav.hot') },
   },
   {
     path: '/ai',
     name: 'ai',
     component: () => import('@/pages/AiView.vue'),
-    meta: { title: '频道问问' },
+    meta: { title: t('nav.ai') },
   },
   {
     path: '/channels/:id',
     name: 'channel',
     component: () => import('@/pages/ChannelView.vue'),
-    meta: { title: '频道' },
+    meta: { title: t('common.channel') },
   },
   {
     path: '/posts/:id',
     name: 'post',
     component: () => import('@/pages/PostDetailView.vue'),
-    meta: { title: '帖子详情' },
+    meta: { title: t('router.postDetail') },
   },
   {
     path: '/search',
     name: 'search',
     component: () => import('@/pages/SearchView.vue'),
-    meta: { title: '搜索' },
+    meta: { title: t('common.search') },
   },
   {
     path: '/my-channels',
     name: 'my-channels',
     component: () => import('@/pages/MyChannelsView.vue'),
-    meta: { title: '我的频道', requiresAuth: true },
+    meta: { title: t('nav.myChannels'), requiresAuth: true },
   },
   {
     path: '/messages',
     name: 'messages',
     component: () => import('@/pages/MessagesView.vue'),
-    meta: { title: '我的私信', requiresAuth: true },
+    meta: { title: t('nav.messages'), requiresAuth: true },
   },
   {
     path: '/messages/:id',
     name: 'message-detail',
     component: () => import('@/pages/MessagesView.vue'),
-    meta: { title: '私信', requiresAuth: true },
+    meta: { title: t('friends.dm'), requiresAuth: true },
   },
   {
     path: '/notifications',
     name: 'notifications',
     component: () => import('@/pages/NotificationsView.vue'),
-    meta: { title: '通知', requiresAuth: true },
+    meta: { title: t('nav.notifications'), requiresAuth: true },
   },
   {
     path: '/friends',
     name: 'friends',
     component: () => import('@/pages/FriendsView.vue'),
-    meta: { title: '好友', requiresAuth: true },
+    meta: { title: t('dm.share.friends'), requiresAuth: true },
   },
   {
     path: '/invites/:token',
     name: 'invite-accept',
     component: () => import('@/pages/InviteAcceptView.vue'),
-    meta: { title: '邀请加入频道', requiresAuth: true },
+    meta: { title: t('router.inviteAccept'), requiresAuth: true },
   },
   {
     path: '/manage/:channelId/:pathMatch(.*)*',
     name: 'manage',
     component: () => import('@/pages/ManageView.vue'),
-    meta: { title: '频道管理中心', requiresAuth: true },
+    meta: { title: t('manage.title'), requiresAuth: true },
   },
   {
     path: '/login',
     name: 'login',
     component: () => import('@/pages/LoginView.vue'),
-    meta: { title: '登录', guestOnly: true, authLayout: true },
+    meta: { title: t('common.login'), guestOnly: true, authLayout: true },
   },
   {
     path: '/register',
     name: 'register',
     component: () => import('@/pages/RegisterView.vue'),
-    meta: { title: '注册', guestOnly: true, authLayout: true },
+    meta: { title: t('common.register'), guestOnly: true, authLayout: true },
   },
   // 平台管理后台（WP6）：AdminLayout + 子路由，未命中的 /admin/* 回落到概览
   ...aiRoutes,
@@ -120,7 +122,7 @@ const routes: RouteRecordRaw[] = [
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/pages/NotFoundView.vue'),
-    meta: { title: '页面不存在' },
+    meta: { title: t('router.notFound') },
   },
 ]
 
@@ -147,7 +149,8 @@ router.beforeEach(async (to) => {
 })
 
 router.afterEach((to) => {
-  document.title = to.meta.title ? `${to.meta.title} · 群岛 Isles` : '群岛 Isles'
+  const siteName = useSiteStore(pinia).config.name || t('router.appTitle')
+  document.title = to.meta.title ? `${to.meta.title} · ${siteName}` : siteName
 })
 
 export default router

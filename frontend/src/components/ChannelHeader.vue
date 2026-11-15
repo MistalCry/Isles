@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Bell, Search, Setting } from '@element-plus/icons-vue'
 import { formatCount } from '@/utils/format'
 import type { Channel } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -45,7 +48,7 @@ const coverStyle = computed(() =>
   props.channel.coverUrl ? { backgroundImage: `url(${props.channel.coverUrl})` } : undefined,
 )
 const channelNo = computed(() =>
-  props.channel.channelNo ? `#${props.channel.channelNo}` : '未分配频道号',
+  props.channel.channelNo ? `#${props.channel.channelNo}` : t('channel.noChannelNo'),
 )
 const isPrivate = computed(() => props.channel.type === 'PRIVATE')
 </script>
@@ -67,12 +70,12 @@ const isPrivate = computed(() => props.channel.type === 'PRIVATE')
       <div class="channel-header__info">
         <div class="channel-header__title-row">
           <h1 class="channel-header__name">{{ channel.name }}</h1>
-          <el-tag v-if="isPrivate" size="small" type="info" effect="plain">私密</el-tag>
+          <el-tag v-if="isPrivate" size="small" type="info" effect="plain">{{ t('channel.private') }}</el-tag>
         </div>
         <p class="channel-header__meta">
           <span>{{ channelNo }}</span>
-          <span>{{ formatCount(channel.memberCount) }} 成员</span>
-          <span>{{ formatCount(channel.postCount) }} 帖子</span>
+          <span>{{ t('common.memberSuffix', { n: formatCount(channel.memberCount) }) }}</span>
+          <span>{{ t('common.postSuffix', { n: formatCount(channel.postCount) }) }}</span>
         </p>
         <p v-if="channel.description" class="channel-header__description line-clamp-2">
           {{ channel.description }}
@@ -80,13 +83,13 @@ const isPrivate = computed(() => props.channel.type === 'PRIVATE')
       </div>
 
       <div class="channel-header__actions">
-        <el-button circle aria-label="搜索频道内容" @click="$emit('search')">
+        <el-button circle :aria-label="t('channel.searchContent')" @click="$emit('search')">
           <el-icon><Search /></el-icon>
         </el-button>
-        <el-button circle aria-label="频道消息" @click="$emit('messages')">
+        <el-button circle :aria-label="t('channel.messages')" @click="$emit('messages')">
           <el-icon><Bell /></el-icon>
         </el-button>
-        <el-button v-if="showSettings" circle aria-label="频道设置" @click="$emit('settings')">
+        <el-button v-if="showSettings" circle :aria-label="t('channel.settingsLabel')" @click="$emit('settings')">
           <el-icon><Setting /></el-icon>
         </el-button>
         <el-button
@@ -94,10 +97,8 @@ const isPrivate = computed(() => props.channel.type === 'PRIVATE')
           type="primary"
           :loading="joining"
           @click="$emit('join')"
-        >
-          加入频道
-        </el-button>
-        <el-tag v-else type="success" effect="plain" round>已加入</el-tag>
+        >{{ t('userCard.joinChannel') }}</el-button>
+        <el-tag v-else type="success" effect="plain" round>{{ t('channel.joined') }}</el-tag>
       </div>
     </div>
   </header>

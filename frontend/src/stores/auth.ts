@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { authApi } from '@/api'
@@ -16,7 +17,7 @@ export const useAuthStore = defineStore('auth', () => {
   let bootstrapTask: Promise<void> | null = null
 
   const isAuthenticated = computed(() => Boolean(accessToken.value && currentUser.value))
-  const displayName = computed(() => currentUser.value?.nickname || currentUser.value?.username || '游客')
+  const displayName = computed(() => currentUser.value?.nickname || currentUser.value?.username || t('auth.guest'))
 
   function applyToken(token: string | null): void {
     accessToken.value = token

@@ -129,6 +129,8 @@ export interface Comment {
   author: UserSummary
   content: string
   media?: MediaItem[]
+  /** 表情（unicode 字符），与媒体一样可单独构成一条评论 */
+  emoji?: string[]
   likeCount: number
   isLiked?: boolean
   parentId?: Id | null
@@ -190,6 +192,7 @@ export interface CreateCommentPayload {
   parentId?: string | null
   replyToUserId?: string | null
   media?: MediaItem[]
+  emoji?: string[]
 }
 
 export interface LikeResult {

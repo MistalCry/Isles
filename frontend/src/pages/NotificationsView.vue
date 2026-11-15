@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
@@ -13,6 +14,8 @@ import ErrorState from '@/components/ErrorState.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 
+const { t } = useI18n()
+
 const route = useRoute()
 const router = useRouter()
 const store = useNotificationStore()
@@ -24,11 +27,11 @@ const typeFilter = ref('')
 const unreadOnly = ref(false)
 
 const typeOptions = [
-  { value: '', label: '全部类型' },
-  { value: 'POST_LIKED', label: '点赞' },
-  { value: 'POST_COMMENTED', label: '帖子评论' },
-  { value: 'COMMENT_REPLIED', label: '评论回复' },
-  { value: 'SYSTEM', label: '系统消息' },
+  { value: '', label: t('notifications.allTypes') },
+  { value: 'POST_LIKED', label: t('notifications.like') },
+  { value: 'POST_COMMENTED', label: t('notifications.postComment') },
+  { value: 'COMMENT_REPLIED', label: t('notifications.reply') },
+  { value: 'SYSTEM', label: t('notifications.system') },
 ]
 
 function currentQuery() {
@@ -61,6 +64,15 @@ function clearChannelFilter(): void {
   void router.replace({ name: 'notifications' })
 }
 
+/** 好友类通知（申请/通过/拒绝）没有 postId/channelId，按标题判断后跳好友页对应标签 */
+function friendTabOf(item: NotificationItem): string | null {
+  const title = item.title ?? ''
+  if (title.includes(t('notifications.friendRequest')) && !title.includes(t('channel.invite.approve')) && !title.includes(t('channel.invite.reject'))) return 'incoming'
+  if (title.includes(t('channel.invite.approve'))) return 'friends'
+  if (title.includes(t('channel.invite.reject'))) return 'outgoing'
+  return null
+}
+
 async function handleItemClick(item: NotificationItem): Promise<void> {
   await store.markRead(item.id)
   if (item.postId) {
@@ -69,14 +81,21 @@ async function handleItemClick(item: NotificationItem): Promise<void> {
       params: { id: item.postId },
       query: item.commentId ? { commentId: item.commentId } : undefined,
     })
-  } else if (item.channelId) {
+    return
+  }
+  const friendTab = friendTabOf(item)
+  if (friendTab) {
+    void router.push({ name: 'friends', query: { tab: friendTab } })
+    return
+  }
+  if (item.channelId) {
     void router.push({ name: 'channel', params: { id: item.channelId } })
   }
 }
 
 async function markAll(): Promise<void> {
   await store.markAllRead()
-  ElMessage.success('已全部标记为已读')
+  ElMessage.success(t('notifications.allRead'))
 }
 
 function notificationIcon(type: string) {
@@ -89,13 +108,13 @@ function notificationTitle(item: NotificationItem): string {
   if (item.title) return item.title
   switch (item.type) {
     case 'POST_LIKED':
-      return '你的帖子收到了点赞'
+      return t('notifications.likeTitle')
     case 'POST_COMMENTED':
-      return '你的帖子有新评论'
+      return t('notifications.commentTitle')
     case 'COMMENT_REPLIED':
-      return '你的评论收到回复'
+      return t('notifications.replyTitle')
     default:
-      return '系统通知'
+      return t('notifications.systemTitle')
   }
 }
 
@@ -120,15 +139,13 @@ onMounted(() => {
   <div class="page notifications-page">
     <header class="page-header">
       <div>
-        <h1 class="page-title">
-          通知
-          <el-badge v-if="unreadCount > 0" :value="unreadCount" :max="99" class="notifications-badge" />
+        <h1 class="page-title">{{ t('nav.notifications') }}<el-badge v-if="unreadCount > 0" :value="unreadCount" :max="99" class="notifications-badge" />
         </h1>
-        <p class="page-subtitle">频道互动与系统消息</p>
+        <p class="page-subtitle">{{ t('notifications.subtitle') }}</p>
       </div>
       <div class="notifications-actions">
-        <el-switch v-model="unreadOnly" active-text="只看未读" />
-        <el-button :disabled="unreadCount === 0" @click="markAll">全部已读</el-button>
+        <el-switch v-model="unreadOnly" :active-text="t('dm.page.unreadOnly')" />
+        <el-button :disabled="unreadCount === 0" @click="markAll">{{ t('notifications.markAll') }}</el-button>
       </div>
     </header>
 
@@ -138,18 +155,18 @@ onMounted(() => {
       </el-select>
       <div v-if="channelId" class="notifications-channel-filter">
         <el-tag closable effect="plain" @close="clearChannelFilter">
-          仅显示频道：{{ channelName || channelId }}
+          {{ t('notifications.channelOnly', { name: channelName || channelId }) }}
         </el-tag>
       </div>
-      <el-button text type="primary" @click="load">刷新</el-button>
+      <el-button text type="primary" @click="load">{{ t('common.refresh') }}</el-button>
     </div>
 
-    <LoadingState v-if="loading && items.length === 0" :rows="4" tip="正在加载通知…" />
+    <LoadingState v-if="loading && items.length === 0" :rows="4" :tip="t('notifications.loading')" />
     <ErrorState v-else-if="error && items.length === 0" :message="error" @retry="load" />
     <EmptyState
       v-else-if="items.length === 0"
-      title="暂无通知"
-      description="频道互动、系统消息与好友申请会出现在这里。"
+      :title="t('notifications.empty')"
+      :description="t('notifications.emptyHint')"
     />
 
     <div v-else class="notification-list">
@@ -179,7 +196,7 @@ onMounted(() => {
           <span v-if="item.content" class="notification-item__content">{{ item.content }}</span>
           <span class="muted notification-item__meta">
             {{ item.actorNickname ? `${item.actorNickname} · ` : '' }}{{ formatDateTime(item.createdAt) }}
-            <span v-if="!item.read" class="notification-item__dot">未读</span>
+            <span v-if="!item.read" class="notification-item__dot">{{ t('dm.chat.unread') }}</span>
           </span>
         </span>
         <el-icon class="notification-item__arrow" :size="16"><View /></el-icon>
@@ -187,9 +204,9 @@ onMounted(() => {
 
       <div class="notifications-more">
         <el-button v-if="hasMore" text type="primary" :loading="loading" @click="store.loadMore()">
-          加载更多通知
+          {{ t('notifications.loadMore') }}
         </el-button>
-        <span v-else class="muted">已经到底啦</span>
+        <span v-else class="muted">{{ t('hot.end') }}</span>
       </div>
     </div>
   </div>

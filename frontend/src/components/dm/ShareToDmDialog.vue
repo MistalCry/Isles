@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { CopyDocument, Promotion, Search } from '@element-plus/icons-vue'
@@ -12,6 +13,8 @@ import type { DmConversation, FriendItem, Post } from '@/types/models'
 import UserAvatar from '../UserAvatar.vue'
 import LoadingState from '../LoadingState.vue'
 import EmptyState from '../EmptyState.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   modelValue: boolean
@@ -69,7 +72,7 @@ function targetForConversation(conversation: DmConversation): Target {
     key: `conversation:${conversation.id}`,
     kind: 'conversation',
     conversationId: conversation.id,
-    name: conversation.peer.nickname || conversation.peer.username || '岛民',
+    name: conversation.peer.nickname || conversation.peer.username || t('common.islander'),
     avatarUrl: conversation.peer.avatarUrl,
   }
 }
@@ -79,7 +82,7 @@ function targetForFriend(friend: FriendItem): Target {
     key: `friend:${friend.userId}`,
     kind: 'friend',
     userId: friend.userId,
-    name: friend.nickname || friend.username || '岛民',
+    name: friend.nickname || friend.username || t('common.islander'),
     avatarUrl: friend.avatarUrl,
   }
 }
@@ -92,7 +95,7 @@ async function load(): Promise<void> {
     friends.value = await friendsApi.getFriends().catch(() => [])
     conversations.value = [...dm.conversations]
   } catch (err) {
-    error.value = resolveErrorMessage(err, '私信会话加载失败')
+    error.value = resolveErrorMessage(err, t('dm.share.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -101,9 +104,9 @@ async function load(): Promise<void> {
 async function copyLink(): Promise<void> {
   const copied = await copyText(absoluteUrl(`/posts/${props.post.id}`))
   if (copied) {
-    ElMessage.success('帖子链接已复制')
+    ElMessage.success(t('dm.share.copied'))
   } else {
-    ElMessage.warning('复制失败，请手动复制地址栏链接')
+    ElMessage.warning(t('dm.share.copyFailed'))
   }
   try {
     await postsApi.countPostShare(props.post.id)
@@ -117,11 +120,11 @@ async function send(): Promise<void> {
     (item) => item.key === selectedKey.value,
   )
   if (!target) {
-    ElMessage.warning('请选择要分享的好友或会话')
+    ElMessage.warning(t('dm.share.pickTarget'))
     return
   }
   if (!auth.isAuthenticated) {
-    ElMessage.warning('请先登录')
+    ElMessage.warning(t('dm.share.loginRequired'))
     return
   }
   sending.value = true
@@ -132,7 +135,7 @@ async function send(): Promise<void> {
       conversationId = conversation.id
     }
     if (!conversationId) {
-      throw new Error('无法创建私信会话')
+      throw new Error(t('dm.share.createFailed'))
     }
     await dm.sendMessage(conversationId, {
       type: 'POST',
@@ -144,11 +147,11 @@ async function send(): Promise<void> {
     } catch {
       // 分享计数失败不打断
     }
-    ElMessage.success(`已分享给 ${target.name}`)
+    ElMessage.success(t('dm.share.sentTo', { name: target.name }))
     emit('sent')
     visible.value = false
   } catch (err) {
-    ElMessage.error(resolveErrorMessage(err, '分享失败，请稍后重试'))
+    ElMessage.error(resolveErrorMessage(err, t('dm.share.failed')))
   } finally {
     sending.value = false
   }
@@ -164,22 +167,22 @@ watch(visible, (open) => {
 </script>
 
 <template>
-  <el-dialog v-model="visible" title="分享帖子" width="min(520px, 94vw)" append-to-body>
+  <el-dialog v-model="visible" :title="t('dm.chat.sharePost')" width="min(520px, 94vw)" append-to-body>
     <div class="share-post isles-card">
       <strong class="line-clamp-1">{{ post.title || post.content.slice(0, 40) }}</strong>
       <p class="muted line-clamp-2">{{ post.content.slice(0, 100) }}</p>
-      <el-button :icon="CopyDocument" size="small" @click="copyLink">复制链接</el-button>
+      <el-button :icon="CopyDocument" size="small" @click="copyLink">{{ t('dm.share.copyLink') }}</el-button>
     </div>
 
     <div class="share-search">
-      <el-input v-model="keyword" :prefix-icon="Search" placeholder="搜索好友或会话" clearable />
+      <el-input v-model="keyword" :prefix-icon="Search" :placeholder="t('dm.searchFriend')" clearable />
     </div>
 
     <LoadingState v-if="loading" :rows="2" />
 
     <div v-else class="share-lists">
       <section v-if="filteredConversations.length > 0" class="share-group">
-        <h4>最近会话</h4>
+        <h4>{{ t('dm.share.recent') }}</h4>
         <button
           v-for="conversation in filteredConversations"
           :key="conversation.id"
@@ -194,12 +197,12 @@ watch(visible, (open) => {
             :size="30"
           />
           <span>{{ conversation.peer.nickname || conversation.peer.username }}</span>
-          <span v-if="selectedKey === targetForConversation(conversation).key" class="share-target__check">已选择</span>
+          <span v-if="selectedKey === targetForConversation(conversation).key" class="share-target__check">{{ t('dm.share.selected') }}</span>
         </button>
       </section>
 
       <section v-if="filteredFriends.length > 0" class="share-group">
-        <h4>好友</h4>
+        <h4>{{ t('dm.share.friends') }}</h4>
         <button
           v-for="friend in filteredFriends"
           :key="friend.userId"
@@ -210,25 +213,23 @@ watch(visible, (open) => {
         >
           <UserAvatar :src="friend.avatarUrl" :name="friend.nickname || friend.username" :size="30" />
           <span>{{ friend.nickname || friend.username }}</span>
-          <span v-if="selectedKey === targetForFriend(friend).key" class="share-target__check">已选择</span>
+          <span v-if="selectedKey === targetForFriend(friend).key" class="share-target__check">{{ t('dm.share.selected') }}</span>
         </button>
       </section>
 
       <EmptyState
         v-if="filteredConversations.length === 0 && filteredFriends.length === 0"
         compact
-        title="没有可分享的对象"
-        description="添加好友或先发起私信，也可以直接复制帖子链接。"
+        :title="t('dm.noTargets')"
+        :description="t('dm.noTargetsHint')"
       />
     </div>
 
     <p v-if="error" class="text-danger share-error">{{ error }}</p>
 
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :icon="Promotion" :loading="sending" :disabled="!selectedKey" @click="send">
-        发送
-      </el-button>
+      <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
+      <el-button type="primary" :icon="Promotion" :loading="sending" :disabled="!selectedKey" @click="send">{{ t('common.send') }}</el-button>
     </template>
   </el-dialog>
 </template>

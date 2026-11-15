@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { manageApi } from '@/api'
 import { resolveErrorMessage } from '@/api/client'
 import { PERMISSION_POINTS } from '@/utils/channelPermissions'
 import type { Board, ChannelRoleItem } from '@/types/models'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -77,7 +80,7 @@ function handlePermissionChange(code: string, checked: boolean | string | number
 
 async function save(): Promise<void> {
   if (!form.name.trim()) {
-    errorMessage.value = '请输入身份组名称'
+    errorMessage.value = t('manage.role.nameRequired')
     return
   }
   saving.value = true
@@ -92,11 +95,11 @@ async function save(): Promise<void> {
     const saved = props.role
       ? await manageApi.updateRole(props.channelId, props.role.id, payload)
       : await manageApi.createRole(props.channelId, payload)
-    ElMessage.success(isEdit.value ? '身份组已更新' : '身份组已创建')
+    ElMessage.success(isEdit.value ? t('channel.member.roleUpdated') : t('manage.role.created'))
     emit('saved', saved)
     visible.value = false
   } catch (err) {
-    errorMessage.value = resolveErrorMessage(err, '保存身份组失败')
+    errorMessage.value = resolveErrorMessage(err, t('manage.role.saveFailed'))
   } finally {
     saving.value = false
   }
@@ -104,21 +107,21 @@ async function save(): Promise<void> {
 </script>
 
 <template>
-  <el-dialog v-model="visible" :title="isEdit ? '编辑身份组' : '新建身份组'" width="min(680px, 94vw)" append-to-body>
+  <el-dialog v-model="visible" :title="isEdit ? t('manage.role.edit') : t('manage.role.create')" width="min(680px, 94vw)" append-to-body>
     <el-alert v-if="errorMessage" :title="errorMessage" type="error" :closable="false" show-icon class="role-editor__alert" />
     <el-form label-position="top" @submit.prevent>
-      <el-form-item label="身份组名称" required>
-        <el-input v-model="form.name" maxlength="32" show-word-limit placeholder="例如：活动管理员" />
+      <el-form-item :label="t('channel.roleName')" required>
+        <el-input v-model="form.name" maxlength="32" show-word-limit :placeholder="t('channel.roleNamePlaceholder')" />
       </el-form-item>
-      <el-form-item label="描述">
-        <el-input v-model="form.description" maxlength="200" placeholder="这个身份组负责什么？" />
+      <el-form-item :label="t('common.description')">
+        <el-input v-model="form.description" maxlength="200" :placeholder="t('channel.roleDescPlaceholder')" />
       </el-form-item>
-      <el-form-item v-if="boards.length > 0" label="子板块范围（可选）">
-        <el-select v-model="form.scopeBoardId" clearable placeholder="不限定板块">
+      <el-form-item v-if="boards.length > 0" :label="t('channel.roleBoards')">
+        <el-select v-model="form.scopeBoardId" clearable :placeholder="t('channel.roleAllBoards')">
           <el-option v-for="board in boards" :key="board.id" :label="board.name" :value="board.id" />
         </el-select>
       </el-form-item>
-      <el-form-item label="权限点">
+      <el-form-item :label="t('channel.rolePermissions')">
         <div class="role-editor__groups">
           <section v-for="group in permissionGroups" :key="group.group" class="role-editor__group">
             <h4>{{ group.group }}</h4>
@@ -135,8 +138,8 @@ async function save(): Promise<void> {
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+      <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
+      <el-button type="primary" :loading="saving" @click="save">{{ t('common.save') }}</el-button>
     </template>
   </el-dialog>
 </template>

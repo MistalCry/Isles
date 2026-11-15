@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, ChatDotRound, EditPen, Share, Star, StarFilled, View } from '@element-plus/icons-vue'
@@ -9,7 +10,7 @@ import { useRequireLogin } from '@/composables/useRequireLogin'
 import { useAuthStore } from '@/stores/auth'
 import { formatCount, formatDateTime, sortMedia } from '@/utils/format'
 import { renderContent } from '@/utils/sanitize'
-import type { Post } from '@/types/models'
+import type { Comment, Post } from '@/types/models'
 import UserAvatar from '@/components/UserAvatar.vue'
 import UserCardPopover from '@/components/UserCardPopover.vue'
 import MediaViewer from '@/components/MediaViewer.vue'
@@ -19,6 +20,8 @@ import ReportDialog from '@/components/ReportDialog.vue'
 import ShareToDmDialog from '@/components/dm/ShareToDmDialog.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
@@ -45,12 +48,12 @@ const liking = ref(false)
 
 const authorName = computed(() => {
   const author = post.value?.author
-  return author ? author.nickname || author.username || '岛民' : '岛民'
+  return author ? author.nickname || author.username || t('common.islander') : t('common.islander')
 })
 const roleName = computed(
   () => post.value?.author.channelRole?.name ?? post.value?.author.roles?.[0]?.name ?? '',
 )
-const channelName = computed(() => post.value?.channel?.name ?? '频道')
+const channelName = computed(() => post.value?.channel?.name ?? t('common.channel'))
 const safeHtml = computed(() =>
   post.value ? renderContent(post.value.content, post.value.contentFormat) : '',
 )
@@ -80,7 +83,7 @@ async function saveEdit(): Promise<void> {
   if (!post.value) return
   const plain = editForm.content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
   if (!plain) {
-    ElMessage.warning('正文不能为空')
+    ElMessage.warning(t('post.detail.emptyContent'))
     return
   }
   editSaving.value = true
@@ -92,9 +95,9 @@ async function saveEdit(): Promise<void> {
     })
     post.value = updated
     editOpen.value = false
-    ElMessage.success('帖子已更新')
+    ElMessage.success(t('post.detail.updated'))
   } catch (err) {
-    ElMessage.error(resolveErrorMessage(err, '保存失败，请稍后重试'))
+    ElMessage.error(resolveErrorMessage(err, t('channel.profile.saveFailed')))
   } finally {
     editSaving.value = false
   }
@@ -118,7 +121,7 @@ async function loadPost(): Promise<void> {
     post.value = null
     const status = err instanceof AppError ? err.status : 0
     errorStatus.value = status
-    errorMessage.value = status === 404 ? '帖子不存在或已被删除' : resolveErrorMessage(err, '帖子加载失败，请稍后重试')
+    errorMessage.value = status === 404 ? t('post.detail.notFound') : resolveErrorMessage(err, t('post.detail.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -157,7 +160,7 @@ watch(
 
 async function toggleLike(): Promise<void> {
   if (!post.value) return
-  if (!requireLogin('登录后可点赞')) return
+  if (!requireLogin(t('post.likeLoginRequired'))) return
   if (liking.value) return
   liking.value = true
   try {
@@ -181,8 +184,16 @@ function handleCommentCreated(): void {
   commentCount.value += 1
 }
 
+/** 删除评论后同步计数（含被删评论的楼中楼数量） */
+function handleCommentDeleted(comment: Comment): void {
+  commentCount.value = Math.max(0, commentCount.value - 1 - (comment.replies?.length ?? 0))
+  if (post.value) {
+    post.value.commentCount = commentCount.value
+  }
+}
+
 function openReport(): void {
-  if (!requireLogin('登录后可举报')) return
+  if (!requireLogin(t('post.detail.reportLoginRequired'))) return
   reportOpen.value = true
 }
 
@@ -202,19 +213,19 @@ function goBack(): void {
 <template>
   <div class="page post-detail-page">
     <div class="post-detail-page__topbar">
-      <el-button text :icon="ArrowLeft" @click="goBack">返回</el-button>
+      <el-button text :icon="ArrowLeft" @click="goBack">{{ t('common.back') }}</el-button>
     </div>
 
-    <LoadingState v-if="loading" :rows="6" tip="正在加载帖子…" />
+    <LoadingState v-if="loading" :rows="6" :tip="t('common.loadingPosts')" />
 
     <ErrorState
       v-else-if="errorMessage"
       :message="errorMessage"
-      retry-text="重新加载帖子"
+      :retry-text="t('post.detail.reload')"
       @retry="loadPost"
     >
       <template #action>
-        <el-button @click="$router.push('/feed')">回到频道动态</el-button>
+        <el-button @click="$router.push('/feed')">{{ t('channel.page.backToFeed') }}</el-button>
       </template>
     </ErrorState>
 
@@ -222,7 +233,7 @@ function goBack(): void {
       <article class="post-detail isles-card">
         <header class="post-detail__head">
           <UserCardPopover :user="post.author" :channel-id="post.channelId">
-            <button type="button" class="post-detail__author" :aria-label="`查看 ${authorName} 的用户卡片`">
+            <button type="button" class="post-detail__author" :aria-label="t('post.userCardOf', { name: authorName })">
               <UserAvatar :src="post.author.avatarUrl" :name="authorName" :size="42" />
               <span class="post-detail__author-meta">
                 <strong>{{ authorName }}</strong>
@@ -235,12 +246,12 @@ function goBack(): void {
           </UserCardPopover>
 
           <el-tag v-if="roleName" size="small" effect="plain" type="info">{{ roleName }}</el-tag>
-          <el-tag v-if="post.isPinned" size="small" type="danger" effect="plain">置顶</el-tag>
-          <el-tag v-if="post.isEssence" size="small" type="warning" effect="plain">精华</el-tag>
+          <el-tag v-if="post.isPinned" size="small" type="danger" effect="plain">{{ t('post.pinned') }}</el-tag>
+          <el-tag v-if="post.isEssence" size="small" type="warning" effect="plain">{{ t('post.essence') }}</el-tag>
 
           <div class="post-detail__head-actions">
-            <el-button v-if="isAuthor" text size="small" :icon="EditPen" @click="openEdit">编辑</el-button>
-            <el-button text size="small" @click="openReport">举报</el-button>
+            <el-button v-if="isAuthor" text size="small" :icon="EditPen" @click="openEdit">{{ t('common.edit') }}</el-button>
+            <el-button text size="small" @click="openReport">{{ t('post.detail.report') }}</el-button>
           </div>
         </header>
 
@@ -250,14 +261,26 @@ function goBack(): void {
           <RouterLink :to="{ name: 'channel', params: { id: post.channelId } }" class="link">
             {{ channelName }}
           </RouterLink>
-          <span v-if="post.board">板块：{{ post.board.name }}</span>
+          <span v-if="post.board">{{ t('post.detail.board', { name: post.board.name }) }}</span>
           <span class="post-detail__views">
             <el-icon :size="14"><View /></el-icon>
-            {{ formatCount(post.viewCount) }} 浏览
+            {{ t('post.detail.views', { n: formatCount(post.viewCount) }) }}
           </span>
         </div>
 
         <!-- 正文可能为 HTML：renderContent 内部已通过 DOMPurify 白名单净化 -->
+        <el-image
+          v-if="post.coverUrl"
+          class="post-detail__cover"
+          :src="post.coverUrl"
+          :preview-src-list="[post.coverUrl]"
+          :initial-index="0"
+          fit="cover"
+          preview-teleported
+          hide-on-click-modal
+          :alt="post.title || t('post.cover')"
+        />
+
         <div class="post-detail__content" v-html="safeHtml" />
 
         <MediaViewer :media="media" />
@@ -272,15 +295,15 @@ function goBack(): void {
             @click="toggleLike"
           >
             <el-icon :size="18"><StarFilled v-if="liked" /><Star v-else /></el-icon>
-            <span>{{ formatCount(likeCount) }} 点赞</span>
+            <span>{{ t('post.detail.likes', { n: formatCount(likeCount) }) }}</span>
           </button>
           <button type="button" class="detail-action" @click="scrollToComments">
             <el-icon :size="18"><ChatDotRound /></el-icon>
-            <span>{{ formatCount(commentCount) }} 评论</span>
+            <span>{{ t('post.detail.comments', { n: formatCount(commentCount) }) }}</span>
           </button>
           <button type="button" class="detail-action" @click="shareOpen = true">
             <el-icon :size="18"><Share /></el-icon>
-            <span>分享帖子</span>
+            <span>{{ t('dm.chat.sharePost') }}</span>
           </button>
           <span class="detail-action detail-action--static">
             <el-icon :size="16"><View /></el-icon>
@@ -297,18 +320,19 @@ function goBack(): void {
           :comment-count="commentCount"
           :can-comment="canComment"
           @created="handleCommentCreated"
+          @deleted="handleCommentDeleted"
         />
       </section>
 
-      <el-dialog v-model="editOpen" title="编辑帖子" width="min(680px, 96vw)" top="6vh" append-to-body>
-        <el-input v-model="editForm.title" maxlength="200" show-word-limit placeholder="标题（选填）" />
+      <el-dialog v-model="editOpen" :title="t('post.detail.edit')" width="min(680px, 96vw)" top="6vh" append-to-body>
+        <el-input v-model="editForm.title" maxlength="200" show-word-limit :placeholder="t('common.optionalTitle')" />
         <div class="post-detail__edit-body">
           <RichTextEditor v-if="isRichText" v-model="editForm.content" :min-height="240" />
           <el-input v-else v-model="editForm.content" type="textarea" :rows="8" maxlength="5000" show-word-limit />
         </div>
         <template #footer>
-          <el-button @click="editOpen = false">取消</el-button>
-          <el-button type="primary" :loading="editSaving" @click="saveEdit">保存</el-button>
+          <el-button @click="editOpen = false">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" :loading="editSaving" @click="saveEdit">{{ t('common.save') }}</el-button>
         </template>
       </el-dialog>
 
@@ -386,6 +410,17 @@ function goBack(): void {
   display: inline-flex;
   gap: 4px;
   align-items: center;
+}
+
+.post-detail__cover {
+  display: block;
+  width: 100%;
+  margin: var(--isles-space-3) 0;
+  overflow: hidden;
+  background: var(--isles-surface-muted);
+  border-radius: var(--isles-radius-lg);
+  aspect-ratio: 16 / 9;
+  cursor: zoom-in;
 }
 
 .post-detail__content {

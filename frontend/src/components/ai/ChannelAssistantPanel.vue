@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft, Close } from '@element-plus/icons-vue'
@@ -8,6 +9,8 @@ import EmptyState from '@/components/EmptyState.vue'
 import { useAuthStore } from '@/stores/auth'
 import { getAssistantInfo, type AssistantInfo } from '@/api/ai'
 import { resolveErrorMessage } from '@/api/client'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -30,7 +33,7 @@ const error = ref<string | null>(null)
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const available = computed(() => info.value?.configured === true && info.value?.enabled === true)
-const assistantName = computed(() => info.value?.nickname || '频道助手')
+const assistantName = computed(() => info.value?.nickname || t('ai.chat.assistant'))
 const assistantAvatar = computed(() => info.value?.avatarUrl ?? null)
 
 async function loadInfo(): Promise<void> {
@@ -40,7 +43,7 @@ async function loadInfo(): Promise<void> {
   try {
     info.value = await getAssistantInfo(props.channelId)
   } catch (cause) {
-    error.value = resolveErrorMessage(cause, '频道助手信息加载失败')
+    error.value = resolveErrorMessage(cause, t('ai.assistant.infoFailed'))
   } finally {
     loading.value = false
   }
@@ -66,21 +69,21 @@ watch(
 </script>
 
 <template>
-  <section class="channel-assistant" aria-label="频道助手">
+  <section class="channel-assistant" :aria-label="t('ai.chat.assistant')">
     <header class="channel-assistant__head">
       <div class="channel-assistant__identity">
         <UserAvatar :src="assistantAvatar" :name="assistantName" :size="28" square />
         <div class="channel-assistant__meta">
           <strong>{{ assistantName }}</strong>
-          <small>{{ info?.bio || '基于本频道内容回答' }}</small>
+          <small>{{ info?.bio || t('ai.assistant.scopeHint') }}</small>
         </div>
-        <el-tag v-if="available" size="small" type="success" effect="plain">在线</el-tag>
+        <el-tag v-if="available" size="small" type="success" effect="plain">{{ t('ai.assistant.online') }}</el-tag>
       </div>
       <div class="channel-assistant__actions">
-        <button type="button" class="icon-btn" aria-label="返回频道" @click="close">
+        <button type="button" class="icon-btn" :aria-label="t('ai.backToChannel')" @click="close">
           <el-icon :size="15"><ArrowLeft /></el-icon>
         </button>
-        <button type="button" class="icon-btn" aria-label="关闭频道助手" @click="close">
+        <button type="button" class="icon-btn" :aria-label="t('ai.closeAssistant')" @click="close">
           <el-icon :size="15"><Close /></el-icon>
         </button>
       </div>
@@ -91,22 +94,22 @@ watch(
       <EmptyState
         v-else-if="!isAuthenticated"
         compact
-        title="登录后使用频道助手"
-        description="频道助手基于本频道内容回答问题。"
+        :title="t('ai.assistantGuest')"
+        :description="t('ai.assistantHint')"
       >
         <template #action>
-          <el-button type="primary" size="small" @click="goLogin">去登录</el-button>
+          <el-button type="primary" size="small" @click="goLogin">{{ t('ai.chat.login') }}</el-button>
         </template>
       </EmptyState>
-      <EmptyState v-else-if="error" compact title="频道助手暂不可用" :description="error" />
+      <EmptyState v-else-if="error" compact :title="t('ai.assistantUnavailable')" :description="error" />
       <EmptyState
         v-else-if="!available"
         compact
-        title="频道主还没有开启频道助手"
+        :title="t('ai.assistantDisabledTitle')"
         :description="
           info?.configured
-            ? '频道助手已创建但处于关闭状态，频道主可在管理中心的「频道助手」中开启。'
-            : '频道主可在管理中心的「频道助手」中配置助手身份与自动任务。'
+            ? t('ai.assistant.disabled')
+            : t('ai.assistant.notConfigured')
         "
       />
       <AiChatPanel

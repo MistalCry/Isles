@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 withDefaults(
   defineProps<{
     title?: string
@@ -6,7 +9,7 @@ withDefaults(
     compact?: boolean
   }>(),
   {
-    title: '这里还没有内容',
+    title: '',
     description: '',
     compact: false,
   },
@@ -19,7 +22,7 @@ withDefaults(
       <span class="empty-state__island" />
       <span class="empty-state__wave" />
     </div>
-    <h3 class="empty-state__title">{{ title }}</h3>
+    <h3 class="empty-state__title">{{ title || t('empty.defaultTitle') }}</h3>
     <p v-if="description" class="empty-state__description">{{ description }}</p>
     <div v-if="$slots.action" class="empty-state__action">
       <slot name="action" />

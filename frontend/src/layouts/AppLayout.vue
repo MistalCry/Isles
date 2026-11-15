@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
@@ -10,6 +11,9 @@ import { useNotificationStore } from '@/stores/notifications'
 import { useDmStore } from '@/stores/dm'
 import { useRealtimeStore } from '@/stores/realtime'
 import { APP_NAME } from '@/constants/app'
+
+const { t } = useI18n()
+
 
 const route = useRoute()
 const router = useRouter()
@@ -75,7 +79,7 @@ watch(
 
 <template>
   <div class="app-layout">
-    <aside class="app-layout__sidebar" aria-label="侧边栏导航">
+    <aside class="app-layout__sidebar" :aria-label="t('layout.sidebarLabel')">
       <Sidebar />
     </aside>
 
@@ -85,17 +89,17 @@ watch(
 
     <div class="app-layout__main">
       <header class="mobile-topbar">
-        <button type="button" class="mobile-topbar__icon" aria-label="打开导航菜单" @click="mobileNavOpen = true">
+        <button type="button" class="mobile-topbar__icon" :aria-label="t('layout.openMenu')" @click="mobileNavOpen = true">
           <el-icon :size="20"><Menu /></el-icon>
         </button>
         <RouterLink to="/feed" class="mobile-topbar__brand">{{ APP_NAME }}</RouterLink>
         <div class="mobile-topbar__actions">
-          <button type="button" class="mobile-topbar__icon" aria-label="通知" @click="goNotifications">
+          <button type="button" class="mobile-topbar__icon" :aria-label="t('nav.notifications')" @click="goNotifications">
             <el-badge :value="unreadCount" :max="99" :hidden="unreadCount === 0">
               <el-icon :size="20"><Bell /></el-icon>
             </el-badge>
           </button>
-          <button type="button" class="mobile-topbar__icon" aria-label="搜索" @click="goSearch">
+          <button type="button" class="mobile-topbar__icon" :aria-label="t('common.search')" @click="goSearch">
             <el-icon :size="20"><Search /></el-icon>
           </button>
         </div>

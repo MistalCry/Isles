@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { RouteRecordRaw } from 'vue-router'
 
 /**
@@ -14,38 +15,38 @@ export const aiRoutes: RouteRecordRaw[] = [
   {
     path: '/admin',
     component: () => import('@/pages/admin/AdminLayout.vue'),
-    meta: { title: '平台管理后台', requiresAuth: true },
+    meta: { title: t('admin.layout.title'), requiresAuth: true },
     children: [
       { path: '', redirect: '/admin/overview' },
       {
         path: 'overview',
         name: 'admin-overview',
         component: () => import('@/pages/admin/AdminOverviewView.vue'),
-        meta: { title: '平台数据', requiresAuth: true },
+        meta: { title: t('admin.layout.overview'), requiresAuth: true },
       },
       {
         path: 'ai-models',
         name: 'admin-ai-models',
         component: () => import('@/pages/admin/AdminAiModelsView.vue'),
-        meta: { title: 'AI 配置', requiresAuth: true },
+        meta: { title: t('admin.layout.ai'), requiresAuth: true },
       },
       {
         path: 'reports',
         name: 'admin-reports',
         component: () => import('@/pages/admin/AdminReportsView.vue'),
-        meta: { title: '举报处置', requiresAuth: true },
+        meta: { title: t('admin.layout.reports'), requiresAuth: true },
       },
       {
         path: 'users',
         name: 'admin-users',
         component: () => import('@/pages/admin/AdminUsersView.vue'),
-        meta: { title: '用户管理', requiresAuth: true },
+        meta: { title: t('admin.layout.users'), requiresAuth: true },
       },
       {
         path: 'channels',
         name: 'admin-channels',
         component: () => import('@/pages/admin/AdminChannelsView.vue'),
-        meta: { title: '频道管理', requiresAuth: true },
+        meta: { title: t('admin.channels.title'), requiresAuth: true },
       },
     ],
   },

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -24,6 +25,8 @@ import { formatCount } from '@/utils/format'
 import type { ChannelSummary } from '@/types/models'
 import CreateChannelDialog from '../CreateChannelDialog.vue'
 import UserAvatar from '../UserAvatar.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   channelId: string
@@ -51,16 +54,16 @@ interface NavItem {
 }
 
 const navItems = computed<NavItem[]>(() => [
-  { key: 'home', label: '首页概览', icon: HomeFilled, allowed: true },
+  { key: 'home', label: t('manage.nav.overview'), icon: HomeFilled, allowed: true },
   {
     key: 'profile',
-    label: '频道资料',
+    label: t('channel.settings.tabProfile'),
     icon: Setting,
     allowed: hasChannelPermission(props.permissions, CHANNEL_PERMISSIONS.CHANNEL_SETTINGS),
   },
   {
     key: 'content',
-    label: '内容管理',
+    label: t('manage.nav.content'),
     icon: Document,
     allowed:
       hasChannelPermission(props.permissions, CHANNEL_PERMISSIONS.CONTENT_MANAGE) ||
@@ -70,7 +73,7 @@ const navItems = computed<NavItem[]>(() => [
   },
   {
     key: 'members',
-    label: '成员与身份组',
+    label: t('manage.nav.members'),
     icon: User,
     allowed:
       hasChannelPermission(props.permissions, CHANNEL_PERMISSIONS.MEMBER_REMOVE) ||
@@ -80,31 +83,31 @@ const navItems = computed<NavItem[]>(() => [
   },
   {
     key: 'boards',
-    label: '板块管理',
+    label: t('manage.nav.boards'),
     icon: Files,
     allowed: hasChannelPermission(props.permissions, CHANNEL_PERMISSIONS.BOARD_MANAGE),
   },
   {
     key: 'data',
-    label: '数据中心',
+    label: t('manage.nav.data'),
     icon: DataAnalysis,
     allowed: hasChannelPermission(props.permissions, CHANNEL_PERMISSIONS.DATA_VIEW),
   },
   {
     key: 'logs',
-    label: '管理日志',
+    label: t('manage.nav.logs'),
     icon: MessageBox,
     allowed: hasChannelPermission(props.permissions, CHANNEL_PERMISSIONS.LOG_VIEW),
   },
   {
     key: 'reports',
-    label: '举报处理',
+    label: t('manage.nav.reports'),
     icon: Warning,
     allowed: hasChannelPermission(props.permissions, CHANNEL_PERMISSIONS.CONTENT_MANAGE),
   },
   {
     key: 'assistant',
-    label: '频道助手设置',
+    label: t('manage.nav.assistant'),
     icon: MagicStick,
     allowed: hasChannelPermission(props.permissions, CHANNEL_PERMISSIONS.AI_MANAGE),
   },
@@ -130,7 +133,7 @@ function handleSwitch(value: string | number | boolean | object): void {
 }
 
 function openCreate(): void {
-  if (!requireLogin('登录后可创建频道')) return
+  if (!requireLogin(t('nav.loginToCreateChannel'))) return
   createDialogVisible.value = true
 }
 
@@ -142,17 +145,15 @@ function handleCreated(channel: { id: string }): void {
 </script>
 
 <template>
-  <aside class="manage-sidebar" aria-label="频道管理导航">
+  <aside class="manage-sidebar" :aria-label="t('channel.manageNav')">
     <div class="manage-sidebar__top">
       <RouterLink :to="{ name: 'channel', params: { id: channelId } }" class="manage-sidebar__back">
-        <el-icon><ArrowLeft /></el-icon>
-        返回频道
-      </RouterLink>
+        <el-icon><ArrowLeft /></el-icon>{{ t('ai.backToChannel') }}</RouterLink>
 
       <el-select
         :model-value="channelId"
         class="manage-sidebar__select"
-        placeholder="选择管理的频道"
+        :placeholder="t('channel.managePick')"
         @change="handleSwitch"
       >
         <el-option
@@ -166,20 +167,24 @@ function handleCreated(channel: { id: string }): void {
       <div class="manage-sidebar__channel">
         <UserAvatar
           :src="manageableChannels.find((item) => item.id === channelId)?.avatarUrl"
-          :name="channelName || manageableChannels.find((item) => item.id === channelId)?.name || '频道'"
+          :name="channelName || manageableChannels.find((item) => item.id === channelId)?.name || t('common.channel')"
           :size="38"
           square
         />
         <div class="manage-sidebar__channel-meta">
-          <strong>{{ channelName || '频道管理中心' }}</strong>
+          <strong>{{ channelName || t('manage.title') }}</strong>
           <small>
-            {{ formatCount(manageableChannels.find((item) => item.id === channelId)?.memberCount) }} 成员
+            {{
+              t('manage.sidebar.memberCount', {
+                n: formatCount(manageableChannels.find((item) => item.id === channelId)?.memberCount),
+              })
+            }}
           </small>
         </div>
       </div>
     </div>
 
-    <nav class="manage-sidebar__nav" aria-label="管理功能">
+    <nav class="manage-sidebar__nav" :aria-label="t('channel.manageFeatures')">
       <button
         v-for="item in navItems.filter((entry) => entry.allowed)"
         :key="item.key"
@@ -194,10 +199,10 @@ function handleCreated(channel: { id: string }): void {
     </nav>
 
     <div class="manage-sidebar__footer">
-      <el-button class="manage-sidebar__create" :icon="Plus" @click="openCreate">创建频道</el-button>
+      <el-button class="manage-sidebar__create" :icon="Plus" @click="openCreate">{{ t('manage.nav.createChannel') }}</el-button>
       <button type="button" class="manage-sidebar__home" @click="goChannel">
         <el-icon><HomeFilled /></el-icon>
-        频道主页
+        {{ t('manage.sidebar.channelHome') }}
       </button>
     </div>
 

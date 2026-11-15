@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ArrowRight } from '@element-plus/icons-vue'
 import type { AiSource } from '@/api/ai'
 
 withDefaults(defineProps<{ sources: AiSource[]; compact?: boolean }>(), { compact: false })
 
 const router = useRouter()
+const { t } = useI18n()
 
 function openSource(source: AiSource): void {
   if (!source.url) return
@@ -15,7 +17,7 @@ function openSource(source: AiSource): void {
 
 <template>
   <section v-if="sources.length > 0" class="ai-sources" :class="{ 'ai-sources--compact': compact }">
-    <p class="ai-sources__title">来源引用（{{ sources.length }}）</p>
+    <p class="ai-sources__title">{{ t('ai.sources', { n: sources.length }) }}</p>
     <ol class="ai-sources__list">
       <li v-for="(source, index) in sources" :key="source.id" class="ai-source" @click="openSource(source)">
         <span class="ai-source__index">{{ index + 1 }}</span>

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { notificationsApi } from '@/api'
@@ -41,7 +42,7 @@ export const useNotificationStore = defineStore('notifications', () => {
       void refreshUnread()
     } catch (err) {
       if (seq !== requestSeq) return
-      error.value = resolveErrorMessage(err, '通知加载失败')
+      error.value = resolveErrorMessage(err, t('notification.loadFailed'))
     } finally {
       if (seq === requestSeq) loading.value = false
     }

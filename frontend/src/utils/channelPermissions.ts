@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { Channel, ChannelSummary } from '@/types/models'
 
 /**
@@ -44,27 +45,27 @@ export interface PermissionPointMeta {
 
 /** 身份组编辑器使用的权限点清单（中文名与后端权限点一一对应）。 */
 export const PERMISSION_POINTS: PermissionPointMeta[] = [
-  { code: CHANNEL_PERMISSIONS.POST_CREATE, name: '发帖', group: '内容' },
-  { code: CHANNEL_PERMISSIONS.COMMENT_CREATE, name: '评论与回复', group: '内容' },
-  { code: CHANNEL_PERMISSIONS.POST_DELETE, name: '删除帖子', group: '内容管理' },
-  { code: CHANNEL_PERMISSIONS.COMMENT_DELETE, name: '删除评论', group: '内容管理' },
-  { code: CHANNEL_PERMISSIONS.POST_PIN, name: '置顶帖子', group: '内容管理' },
-  { code: CHANNEL_PERMISSIONS.POST_ESSENCE, name: '设置精华', group: '内容管理' },
-  { code: CHANNEL_PERMISSIONS.CONTENT_MANAGE, name: '内容管理', group: '内容管理' },
-  { code: CHANNEL_PERMISSIONS.BOARD_MANAGE, name: '板块管理', group: '内容管理' },
-  { code: CHANNEL_PERMISSIONS.CHANNEL_SETTINGS, name: '修改频道资料', group: '频道' },
-  { code: CHANNEL_PERMISSIONS.VISIBILITY, name: '修改可见性', group: '频道' },
-  { code: CHANNEL_PERMISSIONS.DISSOLVE, name: '解散频道', group: '频道' },
-  { code: CHANNEL_PERMISSIONS.MEMBER_INVITE, name: '邀请成员', group: '成员' },
-  { code: CHANNEL_PERMISSIONS.MEMBER_REMOVE, name: '移除成员', group: '成员' },
-  { code: CHANNEL_PERMISSIONS.MEMBER_MUTE, name: '禁言成员', group: '成员' },
-  { code: CHANNEL_PERMISSIONS.MUTE_ALL, name: '全员禁言', group: '成员' },
-  { code: CHANNEL_PERMISSIONS.INVITE_CREATE, name: '创建邀请链接', group: '成员' },
-  { code: CHANNEL_PERMISSIONS.INVITE_APPROVE, name: '审批加入申请', group: '成员' },
-  { code: CHANNEL_PERMISSIONS.ROLE_MANAGE, name: '身份组管理', group: '成员' },
-  { code: CHANNEL_PERMISSIONS.LOG_VIEW, name: '查看管理日志', group: '运营' },
-  { code: CHANNEL_PERMISSIONS.DATA_VIEW, name: '查看数据中心', group: '运营' },
-  { code: CHANNEL_PERMISSIONS.AI_MANAGE, name: '频道助手设置', group: '运营' },
+  { code: CHANNEL_PERMISSIONS.POST_CREATE, name: t('manage.logs.actionPostCreate'), group: t('permission.content') },
+  { code: CHANNEL_PERMISSIONS.COMMENT_CREATE, name: t('permission.comment'), group: t('permission.content') },
+  { code: CHANNEL_PERMISSIONS.POST_DELETE, name: t('manage.content.deleteTitle'), group: t('manage.nav.content') },
+  { code: CHANNEL_PERMISSIONS.COMMENT_DELETE, name: t('comment.deleteTitle'), group: t('manage.nav.content') },
+  { code: CHANNEL_PERMISSIONS.POST_PIN, name: t('permission.pinPost'), group: t('manage.nav.content') },
+  { code: CHANNEL_PERMISSIONS.POST_ESSENCE, name: t('permission.featurePost'), group: t('manage.nav.content') },
+  { code: CHANNEL_PERMISSIONS.CONTENT_MANAGE, name: t('manage.nav.content'), group: t('manage.nav.content') },
+  { code: CHANNEL_PERMISSIONS.BOARD_MANAGE, name: t('manage.nav.boards'), group: t('manage.nav.content') },
+  { code: CHANNEL_PERMISSIONS.CHANNEL_SETTINGS, name: t('permission.editProfile'), group: t('common.channel') },
+  { code: CHANNEL_PERMISSIONS.VISIBILITY, name: t('permission.editVisibility'), group: t('common.channel') },
+  { code: CHANNEL_PERMISSIONS.DISSOLVE, name: t('channel.settings.dissolve'), group: t('common.channel') },
+  { code: CHANNEL_PERMISSIONS.MEMBER_INVITE, name: t('permission.inviteMember'), group: t('common.member') },
+  { code: CHANNEL_PERMISSIONS.MEMBER_REMOVE, name: t('channel.member.remove'), group: t('common.member') },
+  { code: CHANNEL_PERMISSIONS.MEMBER_MUTE, name: t('manage.logs.actionMute'), group: t('common.member') },
+  { code: CHANNEL_PERMISSIONS.MUTE_ALL, name: t('channel.settings.tabMuteAll'), group: t('common.member') },
+  { code: CHANNEL_PERMISSIONS.INVITE_CREATE, name: t('permission.createInvite'), group: t('common.member') },
+  { code: CHANNEL_PERMISSIONS.INVITE_APPROVE, name: t('permission.approveJoin'), group: t('common.member') },
+  { code: CHANNEL_PERMISSIONS.ROLE_MANAGE, name: t('permission.manageRole'), group: t('common.member') },
+  { code: CHANNEL_PERMISSIONS.LOG_VIEW, name: t('permission.viewLogs'), group: t('permission.operations') },
+  { code: CHANNEL_PERMISSIONS.DATA_VIEW, name: t('permission.viewStats'), group: t('permission.operations') },
+  { code: CHANNEL_PERMISSIONS.AI_MANAGE, name: t('manage.nav.assistant'), group: t('permission.operations') },
 ]
 
 export function permissionLabel(code: string): string {
@@ -75,17 +76,17 @@ export function permissionLabel(code: string): string {
 export function isChannelOwner(channel: Channel | null | undefined, userId?: string | null): boolean {
   if (!channel || !userId) return false
   if (channel.ownerId) return channel.ownerId === userId
-  return channel.myRoleName === '频道主'
+  return channel.myRoleName === t('channel.role.owner')
 }
 
 /** 系统身份组的默认权限兜底（后端未下发 myPermissions 时使用）。 */
 function fallbackPermissionsByRole(roleName?: string | null): string[] {
   switch (roleName) {
-    case '频道主':
+    case t('channel.role.owner'):
       return [...ALL_CHANNEL_PERMISSIONS]
-    case '超级管理员':
+    case t('channel.page.superAdmin'):
       return ALL_CHANNEL_PERMISSIONS.filter((code) => code !== CHANNEL_PERMISSIONS.DISSOLVE)
-    case '子板块管理员':
+    case t('permission.boardAdmin'):
       return [
         CHANNEL_PERMISSIONS.POST_CREATE,
         CHANNEL_PERMISSIONS.COMMENT_CREATE,
@@ -95,7 +96,7 @@ function fallbackPermissionsByRole(roleName?: string | null): string[] {
         CHANNEL_PERMISSIONS.COMMENT_DELETE,
         CHANNEL_PERMISSIONS.CONTENT_MANAGE,
       ]
-    case '普通成员':
+    case t('permission.member'):
       return [CHANNEL_PERMISSIONS.POST_CREATE, CHANNEL_PERMISSIONS.COMMENT_CREATE]
     default:
       return []
@@ -152,5 +153,5 @@ export function canManageChannelSummary(channel: ChannelSummary, userId?: string
   if (channel.myPermissions?.length) {
     return canManageChannel(new Set(channel.myPermissions))
   }
-  return channel.myRoleName === '频道主' || channel.myRoleName === '超级管理员'
+  return channel.myRoleName === t('channel.role.owner') || channel.myRoleName === t('channel.page.superAdmin')
 }

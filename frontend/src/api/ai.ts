@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { AppError, API_BASE_URL, http } from './client'
 import { getAccessToken } from './token'
 
@@ -372,7 +373,10 @@ export async function listAssistantTaskLogs(
 }
 
 export async function runAssistantTask(channelId: string, taskType: AiTaskType): Promise<AiTaskLog> {
-  const { data } = await http.post<AiTaskLog>(`/channels/${encodeURIComponent(channelId)}/ai/tasks/run`, { taskType })
+  // 同步等待模型生成，小模型也可能要 1–2 分钟，默认 30s 超时会误报失败
+  const { data } = await http.post<AiTaskLog>(`/channels/${encodeURIComponent(channelId)}/ai/tasks/run`, { taskType }, {
+    timeout: 240000,
+  })
   return data
 }
 
@@ -499,7 +503,7 @@ function dispatchEvent(event: StreamEvent, handlers: StreamHandlers): void {
 
 async function toStreamError(response: Response): Promise<AppError> {
   let code = `HTTP_${response.status}`
-  let message = response.status === 401 ? '登录状态已失效，请刷新页面后重试' : 'AI 对话请求失败，请稍后重试'
+  let message = response.status === 401 ? t('ai.sessionExpired') : t('ai.requestFailed')
   try {
     const data = (await response.json()) as { error?: { code?: string; message?: string } }
     if (data?.error) {

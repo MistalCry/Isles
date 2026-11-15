@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onMounted, ref, watch } from 'vue'
 import { manageApi } from '@/api'
 import { resolveErrorMessage } from '@/api/client'
@@ -7,6 +8,8 @@ import type { Channel, ManageStats } from '@/types/models'
 import StatsTrendChart from '@/components/manage/StatsTrendChart.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   channel: Channel
@@ -45,7 +48,7 @@ async function load(): Promise<void> {
   try {
     stats.value = await manageApi.getManageStats(props.channelId, days.value)
   } catch (err) {
-    error.value = resolveErrorMessage(err, '数据中心加载失败')
+    error.value = resolveErrorMessage(err, t('manage.data.loadFailed'))
     stats.value = null
   } finally {
     loading.value = false
@@ -65,54 +68,54 @@ onMounted(() => {
   <section class="manage-section">
     <header class="manage-section__header">
       <div>
-        <h2>数据中心</h2>
-        <p class="muted">概览、趋势、内容与成员分析（指标口径见 docs/03 §8）</p>
+        <h2>{{ t('manage.nav.data') }}</h2>
+        <p class="muted">{{ t('manage.data.subtitle') }}</p>
       </div>
       <el-radio-group v-model="days" size="small">
-        <el-radio-button :value="7">近 7 天</el-radio-button>
-        <el-radio-button :value="30">近 30 天</el-radio-button>
+        <el-radio-button :value="7">{{ t('manage.data.last7') }}</el-radio-button>
+        <el-radio-button :value="30">{{ t('manage.data.last30') }}</el-radio-button>
       </el-radio-group>
     </header>
 
-    <LoadingState v-if="loading && !stats" :rows="5" tip="正在加载统计数据…" />
+    <LoadingState v-if="loading && !stats" :rows="5" :tip="t('manage.data.loading')" />
     <ErrorState v-else-if="error && !stats" :message="error" @retry="load" />
 
     <template v-else>
       <div class="stat-cards">
         <div class="stat-card isles-card">
-          <span class="muted">成员数</span>
+          <span class="muted">{{ t('common.memberCount') }}</span>
           <strong>{{ formatCount(memberCount) }}</strong>
         </div>
         <div class="stat-card isles-card">
-          <span class="muted">帖子数</span>
+          <span class="muted">{{ t('common.postCount') }}</span>
           <strong>{{ formatCount(postCount) }}</strong>
         </div>
         <div class="stat-card isles-card">
-          <span class="muted">昨日访问人数</span>
+          <span class="muted">{{ t('common.yesterdayVisitors') }}</span>
           <strong>{{ formatCount(overview?.yesterdayVisitors) }}</strong>
         </div>
         <div class="stat-card isles-card">
-          <span class="muted">活跃率</span>
+          <span class="muted">{{ t('common.activeRate') }}</span>
           <strong>{{ activeRate }}</strong>
         </div>
         <div class="stat-card isles-card">
-          <span class="muted">互动总量</span>
+          <span class="muted">{{ t('manage.data.totalInteractions') }}</span>
           <strong>{{ formatCount(overview?.totalInteractions) }}</strong>
         </div>
       </div>
 
       <div class="data-grid">
         <div class="isles-card data-panel">
-          <StatsTrendChart :points="stats?.trend ?? []" metric="visits" label="访问人数趋势" />
+          <StatsTrendChart :points="stats?.trend ?? []" metric="visits" :label="t('manage.data.visitorTrend')" />
         </div>
         <div class="isles-card data-panel">
-          <StatsTrendChart :points="stats?.trend ?? []" metric="posts" label="发帖趋势" />
+          <StatsTrendChart :points="stats?.trend ?? []" metric="posts" :label="t('manage.data.postTrend')" />
         </div>
       </div>
 
       <div class="data-grid">
         <div class="isles-card data-panel">
-          <h3 class="data-panel__title">板块分布</h3>
+          <h3 class="data-panel__title">{{ t('manage.data.boardDist') }}</h3>
           <div v-if="stats?.boardDistribution?.length" class="distribution">
             <div v-for="item in stats.boardDistribution" :key="item.name" class="distribution__row">
               <span class="distribution__name">{{ item.name }}</span>
@@ -120,11 +123,11 @@ onMounted(() => {
               <span class="distribution__value">{{ item.value }}</span>
             </div>
           </div>
-          <p v-else class="muted data-panel__empty">暂无板块分布数据</p>
+          <p v-else class="muted data-panel__empty">{{ t('manage.data.boardEmpty') }}</p>
         </div>
 
         <div class="isles-card data-panel">
-          <h3 class="data-panel__title">身份组分布</h3>
+          <h3 class="data-panel__title">{{ t('manage.data.roleDist') }}</h3>
           <div v-if="stats?.roleDistribution?.length" class="distribution">
             <div v-for="item in stats.roleDistribution" :key="item.name" class="distribution__row">
               <span class="distribution__name">{{ item.name }}</span>
@@ -132,21 +135,28 @@ onMounted(() => {
               <span class="distribution__value">{{ item.value }}</span>
             </div>
           </div>
-          <p v-else class="muted data-panel__empty">暂无成员分布数据</p>
+          <p v-else class="muted data-panel__empty">{{ t('manage.data.roleEmpty') }}</p>
         </div>
       </div>
 
       <div class="isles-card data-panel">
-        <h3 class="data-panel__title">热门帖子</h3>
+        <h3 class="data-panel__title">{{ t('manage.data.topPosts') }}</h3>
         <ul v-if="stats?.topPosts?.length" class="top-posts">
           <li v-for="post in stats.topPosts" :key="post.id">
             <RouterLink :to="{ name: 'post', params: { id: post.id } }" class="top-posts__link line-clamp-1">
               {{ post.title || post.content.slice(0, 50) }}
             </RouterLink>
-            <span class="muted">{{ formatCount(post.viewCount) }} 浏览 · {{ formatCount(post.likeCount) }} 赞</span>
+            <span class="muted">
+              {{
+                t('manage.content.viewsLikes', {
+                  views: formatCount(post.viewCount),
+                  likes: formatCount(post.likeCount),
+                })
+              }}
+            </span>
           </li>
         </ul>
-        <p v-else class="muted data-panel__empty">暂无热门帖子数据</p>
+        <p v-else class="muted data-panel__empty">{{ t('manage.data.topPostsEmpty') }}</p>
       </div>
     </template>
   </section>

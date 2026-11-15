@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Picture, Promotion } from '@element-plus/icons-vue'
@@ -11,6 +12,10 @@ import type { Board, MediaItem, Post } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
 import RichTextEditor from './RichTextEditor.vue'
 import ImageCropUpload from './media/ImageCropUpload.vue'
+import MentionPicker from './MentionPicker.vue'
+import { mentionToken } from '@/utils/mention'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -42,6 +47,7 @@ const mediaItems = ref<MediaItem[]>([])
 const coverUrl = ref<string | null>(null)
 const uploading = ref(false)
 const submitting = ref(false)
+const editorRef = ref<{ insertText: (text: string) => void } | null>(null)
 const errorMessage = ref<string | null>(null)
 const fileInputRef = ref<HTMLInputElement>()
 
@@ -64,7 +70,7 @@ function appendEmoji(emoji: string): void {
 }
 
 function triggerFilePicker(): void {
-  if (!requireLogin('登录后可上传图片或视频')) return
+  if (!requireLogin(t('comment.uploadLoginRequired'))) return
   fileInputRef.value?.click()
 }
 
@@ -75,7 +81,7 @@ async function handleFiles(event: Event): Promise<void> {
   if (files.length === 0) return
   const remaining = MAX_MEDIA_COUNT - mediaItems.value.length
   if (remaining <= 0) {
-    ElMessage.warning(`最多添加 ${MAX_MEDIA_COUNT} 个媒体文件`)
+    ElMessage.warning(t('comment.mediaLimit', { n: MAX_MEDIA_COUNT }))
     return
   }
   for (const file of files.slice(0, remaining)) {
@@ -90,7 +96,7 @@ async function handleFiles(event: Event): Promise<void> {
       const uploaded = await mediaApi.uploadMedia(file)
       mediaItems.value.push(uploaded)
     } catch (err) {
-      errorMessage.value = resolveErrorMessage(err, '媒体上传失败，请稍后重试')
+      errorMessage.value = resolveErrorMessage(err, t('comment.mediaUploadFailed'))
     } finally {
       uploading.value = false
     }
@@ -110,17 +116,17 @@ function reset(): void {
 }
 
 async function submit(): Promise<void> {
-  if (!requireLogin('登录后可发帖')) return
+  if (!requireLogin(t('post.publishLoginRequired'))) return
   if (!plainText.value) {
-    ElMessage.warning('写点什么再发布吧')
+    ElMessage.warning(t('post.emptyContent'))
     return
   }
   if (boardId.value === '') {
-    ElMessage.warning('请先选择要发布到的板块')
+    ElMessage.warning(t('post.boardRequired'))
     return
   }
   if (!props.channelId) {
-    ElMessage.warning('缺少频道信息，暂时无法发帖')
+    ElMessage.warning(t('post.channelMissing'))
     return
   }
   submitting.value = true
@@ -135,22 +141,28 @@ async function submit(): Promise<void> {
       coverUrl: isFull.value ? coverUrl.value : undefined,
       media: mediaItems.value,
     })
-    ElMessage.success('发布成功')
+    ElMessage.success(t('post.published'))
     reset()
     emit('published', post)
   } catch (err) {
-    errorMessage.value = resolveErrorMessage(err, '发布失败，请稍后重试')
+    errorMessage.value = resolveErrorMessage(err, t('post.publishFailed'))
   } finally {
     submitting.value = false
   }
+}
+function insertMention(payload: { id: string; name: string }): void {
+  const token = `${mentionToken(payload.id, payload.name)} `
+  if (isFull.value && editorRef.value) {
+    editorRef.value.insertText(token)
+    return
+  }
+  content.value = content.value ? `${content.value} ${token}` : token
 }
 </script>
 
 <template>
   <div class="post-composer" :class="`post-composer--${mode}`">
-    <p v-if="!auth.isAuthenticated" class="post-composer__guest-hint">
-      登录后即可在本频道发帖、评论与点赞。
-    </p>
+    <p v-if="!auth.isAuthenticated" class="post-composer__guest-hint">{{ t('post.composerGuestHint') }}</p>
 
     <el-alert
       v-if="errorMessage"
@@ -162,8 +174,13 @@ async function submit(): Promise<void> {
     />
 
     <template v-if="isFull">
-      <el-input v-model="title" maxlength="100" show-word-limit placeholder="标题（选填）" class="post-composer__title" />
-      <RichTextEditor v-model="content" :min-height="240" placeholder="写下你想分享的内容…（支持标题、加粗、列表、引用、链接与图片）" />
+      <el-input v-model="title" maxlength="100" show-word-limit :placeholder="t('common.optionalTitle')" class="post-composer__title" />
+      <RichTextEditor
+        ref="editorRef"
+        v-model="content"
+        :min-height="240"
+        :placeholder="t('post.longContentHint')"
+      />
     </template>
 
     <div v-else class="post-composer__quick-row">
@@ -173,22 +190,22 @@ async function submit(): Promise<void> {
         :name="auth.displayName"
         :size="34"
       />
-      <UserAvatar v-else name="游" :size="34" />
+      <UserAvatar v-else :name="t('common.visitor')" :size="34" />
       <el-input
         v-model="content"
         class="post-composer__quick-input"
         maxlength="2000"
-        placeholder="说点什么，和频道里的岛民聊聊…"
-        aria-label="快捷发帖内容"
+        :placeholder="t('post.placeholderQuick')"
+        :aria-label="t('post.quickLabel')"
         @keyup.enter="submit"
       />
     </div>
 
     <div v-if="mediaItems.length > 0" class="post-composer__media">
       <div v-for="(item, index) in mediaItems" :key="`${item.url}-${index}`" class="post-composer__media-item">
-        <img v-if="item.type === 'IMAGE'" :src="item.thumbUrl || item.url" :alt="`已选择图片 ${index + 1}`" />
+        <img v-if="item.type === 'IMAGE'" :src="item.thumbUrl || item.url" :alt="t('media.selectedImage', { n: index + 1 })" />
         <video v-else :src="item.url" muted playsinline preload="metadata" />
-        <button type="button" class="post-composer__media-remove" aria-label="移除该媒体" @click="removeMedia(index)">
+        <button type="button" class="post-composer__media-remove" :aria-label="t('media.crop.removeMedia')" @click="removeMedia(index)">
           ×
         </button>
       </div>
@@ -197,7 +214,7 @@ async function submit(): Promise<void> {
     <div class="post-composer__toolbar">
       <el-popover trigger="click" :width="220" placement="top-start">
         <template #reference>
-          <button type="button" class="composer-btn" aria-label="插入 emoji">😊 emoji</button>
+          <button type="button" class="composer-btn" :aria-label="t('media.crop.insertEmoji')">😊 emoji</button>
         </template>
         <div class="emoji-panel">
           <button v-for="emoji in EMOJI_LIST" :key="emoji" type="button" class="emoji-btn" @click="appendEmoji(emoji)">
@@ -206,52 +223,56 @@ async function submit(): Promise<void> {
         </div>
       </el-popover>
 
-      <button type="button" class="composer-btn" :disabled="uploading" aria-label="上传图片或视频" @click="triggerFilePicker">
+      <button type="button" class="composer-btn" :disabled="uploading" :aria-label="t('media.uploadMedia')" @click="triggerFilePicker">
         <el-icon><Picture /></el-icon>
-        {{ uploading ? '上传中…' : '图片/视频' }}
+        {{ uploading ? t('common.uploading') : t('post.mediaLabel') }}
       </button>
 
       <span v-if="mediaItems.length > 0" class="muted post-composer__count">
         {{ mediaItems.length }} / {{ MAX_MEDIA_COUNT }}
       </span>
 
-      <button v-if="!isFull" type="button" class="composer-btn composer-btn--text" @click="$emit('request-full')">
-        发长文
-      </button>
+      <MentionPicker :channel-id="channelId" :label="t('post.mentionLabel')" :disabled="!auth.isAuthenticated" @select="insertMention" />
+
+      <button v-if="!isFull" type="button" class="composer-btn composer-btn--text" @click="$emit('request-full')">{{ t('channel.publishLongBtn') }}</button>
 
       <div class="post-composer__spacer" />
 
-      <el-button v-if="isFull" @click="$emit('cancel')">取消</el-button>
-      <el-button type="primary" :icon="Promotion" :loading="submitting" :disabled="!canSubmit" @click="submit">
-        发布
-      </el-button>
+      <el-button v-if="isFull" @click="$emit('cancel')">{{ t('common.cancel') }}</el-button>
+      <el-button type="primary" :icon="Promotion" :loading="submitting" :disabled="!canSubmit" @click="submit">{{ t('common.publish') }}</el-button>
     </div>
 
     <div v-if="isFull" class="post-composer__cover">
-      <span class="muted">封面（选填，展示在卡片顶部）</span>
+      <span class="muted">{{ t('post.coverHint') }}</span>
       <ImageCropUpload
         v-model="coverUrl"
         :aspect-ratio="16 / 9"
-        :output-width="960"
+        :max-output-width="0"
         :box-width="320"
-        label="上传封面"
-        hint="长条图，16:9"
+        :label="t('media.crop.coverLabel')"
+        :hint="t('media.crop.coverHint')"
       />
     </div>
 
     <div v-if="isFull" class="post-composer__full-row">
       <el-select
         v-model="boardId"
-        placeholder="选择板块"
+        :placeholder="t('post.boardPick')"
         class="post-composer__board"
         :disabled="boards.length === 0"
       >
         <el-option v-for="board in boards" :key="board.id" :label="board.name" :value="board.id" />
       </el-select>
       <span class="muted">
-        {{ boards.length === 0 ? '该频道暂无板块信息' : `将发布到 ${boards.find((board) => board.id === boardId)?.name ?? '默认板块'}` }}
+        {{
+          boards.length === 0
+            ? t('post.noBoards')
+            : t('post.publishToBoard', {
+                name: boards.find((board) => board.id === boardId)?.name ?? t('post.defaultBoard'),
+              })
+        }}
       </span>
-      <span class="muted post-composer__hint">富文本编辑器（封面/视频排序）将在 M2 补齐</span>
+      <span class="muted post-composer__hint">{{ t('post.editorHint') }}</span>
     </div>
 
     <input
@@ -260,7 +281,7 @@ async function submit(): Promise<void> {
       accept="image/*,video/*"
       multiple
       class="visually-hidden"
-      aria-label="选择图片或视频文件"
+      :aria-label="t('media.pickFile')"
       @change="handleFiles"
     />
   </div>

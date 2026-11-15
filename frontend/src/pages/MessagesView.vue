@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
@@ -11,6 +12,8 @@ import UserAvatar from '@/components/UserAvatar.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import EmptyState from '@/components/EmptyState.vue'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
@@ -45,15 +48,15 @@ const filteredConversations = computed(() => {
 })
 
 function peerName(conversation: DmConversation): string {
-  return conversation.peer.nickname || conversation.peer.username || '岛民'
+  return conversation.peer.nickname || conversation.peer.username || t('common.islander')
 }
 
 function lastMessagePreview(conversation: DmConversation): string {
   const message = conversation.lastMessage
-  if (!message) return '还没有消息'
-  if (message.type === 'IMAGE') return '[图片]'
-  if (message.type === 'POST') return `[帖子] ${message.post?.title || ''}`.trim()
-  if (message.type === 'SYSTEM') return '[系统消息]'
+  if (!message) return t('dm.page.empty')
+  if (message.type === 'IMAGE') return t('dm.page.image')
+  if (message.type === 'POST') return t('dm.page.post', { title: message.post?.title || '' }).trim()
+  if (message.type === 'SYSTEM') return t('dm.page.system')
   return message.content || ''
 }
 
@@ -112,22 +115,22 @@ onMounted(() => {
   <div class="page messages-page">
     <header class="page-header">
       <div>
-        <h1 class="page-title">我的私信</h1>
-        <p class="page-subtitle">和岛民一对一聊天，支持图片与帖子分享</p>
+        <h1 class="page-title">{{ t('nav.messages') }}</h1>
+        <p class="page-subtitle">{{ t('dm.page.subtitle') }}</p>
       </div>
-      <el-button :icon="UserFilled" @click="goFriends">好友管理</el-button>
+      <el-button :icon="UserFilled" @click="goFriends">{{ t('dm.page.friends') }}</el-button>
     </header>
 
     <button v-if="selectedId" type="button" class="dm-back" @click="backToList">
       <el-icon><ArrowLeft /></el-icon>
-      返回会话列表
+      {{ t('dm.page.backToList') }}
     </button>
 
     <div class="dm-layout" :class="{ 'dm-layout--chat-open': Boolean(selectedId) }">
-      <aside class="dm-conversations isles-card" aria-label="私信会话列表">
+      <aside class="dm-conversations isles-card" :aria-label="t('dm.list')">
         <div class="dm-conversations__toolbar">
-          <el-input v-model="keyword" :prefix-icon="Search" placeholder="搜索会话" clearable />
-          <el-switch v-model="unreadOnly" active-text="只看未读" />
+          <el-input v-model="keyword" :prefix-icon="Search" :placeholder="t('dm.searchChats')" clearable />
+          <el-switch v-model="unreadOnly" :active-text="t('dm.page.unreadOnly')" />
         </div>
 
         <LoadingState v-if="loading && conversations.length === 0" :rows="4" />
@@ -135,8 +138,8 @@ onMounted(() => {
         <EmptyState
           v-else-if="filteredConversations.length === 0"
           compact
-          title="暂无会话"
-          description="到用户卡片点击「私信」即可发起会话。"
+          :title="t('dm.noChats')"
+          :description="t('dm.noChatsHint')"
         />
 
         <ul v-else class="dm-conversation-list">
@@ -172,7 +175,7 @@ onMounted(() => {
 
         <div v-if="dm.hasMore" class="dm-conversations__more">
           <el-button text type="primary" :loading="loading" @click="dm.loadMoreConversations()">
-            加载更多会话
+            {{ t('dm.page.loadMore') }}
           </el-button>
         </div>
       </aside>
@@ -192,11 +195,11 @@ onMounted(() => {
         />
         <EmptyState
           v-else
-          title="选择一个会话开始聊天"
-          description="或者到用户卡片中点击「私信」发起新会话。"
+          :title="t('dm.pickChat')"
+          :description="t('dm.pickChatHint')"
         >
           <template #action>
-            <el-button :icon="UserFilled" @click="goFriends">查看好友</el-button>
+            <el-button :icon="UserFilled" @click="goFriends">{{ t('dm.page.viewFriends') }}</el-button>
           </template>
         </EmptyState>
       </main>

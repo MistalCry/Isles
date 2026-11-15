@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
@@ -15,6 +16,8 @@ import {
 } from './adminApi'
 import { resolveErrorMessage } from '@/api/client'
 import { formatCount, formatDateTime } from '@/utils/format'
+
+const { t } = useI18n()
 
 const keyword = ref('')
 const status = ref('')
@@ -35,7 +38,7 @@ async function load(): Promise<void> {
       size: size.value,
     })
   } catch (cause) {
-    error.value = resolveErrorMessage(cause, '频道列表加载失败')
+    error.value = resolveErrorMessage(cause, t('admin.channels.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -49,22 +52,24 @@ function search(): void {
 async function toggleStatus(channel: AdminChannel): Promise<void> {
   const banned = channel.status === 'BANNED'
   const confirmed = await ElMessageBox.confirm(
-    banned ? `确定解禁频道「${channel.name}」？` : `确定封禁频道「${channel.name}」？封禁后频道内容将不可见。`,
-    banned ? '解禁频道' : '封禁频道',
+    banned
+      ? t('admin.channels.unbanConfirm', { name: channel.name })
+      : t('admin.channels.banConfirm', { name: channel.name }),
+    banned ? t('admin.channels.unbanTitle') : t('admin.channels.banTitle'),
     { type: 'warning' },
   ).catch(() => false)
   if (!confirmed) return
   try {
     if (banned) {
       await unbanAdminChannel(channel.id)
-      ElMessage.success('已解禁')
+      ElMessage.success(t('admin.channels.unbanned'))
     } else {
       await banAdminChannel(channel.id)
-      ElMessage.success('已封禁')
+      ElMessage.success(t('admin.channels.banned'))
     }
     await load()
   } catch (cause) {
-    ElMessage.error(resolveErrorMessage(cause, '操作失败'))
+    ElMessage.error(resolveErrorMessage(cause, t('admin.channels.actionFailed')))
   }
 }
 
@@ -75,64 +80,64 @@ onMounted(load)
   <section class="admin-channels">
     <header class="admin-section-head">
       <div>
-        <h2 class="admin-section-title">频道管理</h2>
-        <p class="admin-section-subtitle">封禁/解禁频道；封禁后频道对外不可见（status=BANNED）</p>
+        <h2 class="admin-section-title">{{ t('admin.channels.title') }}</h2>
+        <p class="admin-section-subtitle">{{ t('admin.channels.subtitle') }}</p>
       </div>
-      <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
+      <el-button :icon="Refresh" :loading="loading" @click="load">{{ t('common.refresh') }}</el-button>
     </header>
 
     <div class="admin-filters">
       <el-input
         v-model="keyword"
-        placeholder="搜索频道名称 / 频道号"
+        :placeholder="t('admin.models.search')"
         clearable
         class="admin-filters__keyword"
         @keydown.enter="search"
       />
-      <el-select v-model="status" placeholder="全部状态" clearable class="admin-filters__select" @change="search">
-        <el-option label="运营中" value="ACTIVE" />
-        <el-option label="已封禁" value="BANNED" />
-        <el-option label="已解散" value="DISSOLVED" />
+      <el-select v-model="status" :placeholder="t('common.allStatus')" clearable class="admin-filters__select" @change="search">
+        <el-option :label="t('admin.channels.active')" value="ACTIVE" />
+        <el-option :label="t('admin.channels.banned')" value="BANNED" />
+        <el-option :label="t('admin.channels.dissolved')" value="DISSOLVED" />
       </el-select>
-      <el-button type="primary" :icon="Search" @click="search">查询</el-button>
+      <el-button type="primary" :icon="Search" @click="search">{{ t('common.query') }}</el-button>
     </div>
 
     <LoadingState v-if="loading && !data" :rows="3" />
     <ErrorState v-else-if="error" :message="error" @retry="load" />
     <EmptyState
       v-else-if="!data || data.items.length === 0"
-      title="没有匹配的频道"
-      description="调整筛选条件后重试。"
+      :title="t('admin.channels.noMatch')"
+      :description="t('common.retryHint')"
     />
     <template v-else>
       <el-table :data="data.items" class="admin-table" row-key="id">
-        <el-table-column label="频道" min-width="220">
+        <el-table-column :label="t('common.channel')" min-width="220">
           <template #default="{ row }">
             <div class="channel-cell">
               <UserAvatar :src="row.avatarUrl" :name="row.name" :size="32" square />
               <div class="channel-cell__meta">
                 <p class="channel-cell__name">{{ row.name }}</p>
-                <p class="channel-cell__sub">频道号 {{ row.channelNo ?? '—' }}</p>
+                <p class="channel-cell__sub">{{ t('admin.channels.channelNo', { no: row.channelNo ?? '—' }) }}</p>
               </div>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="成员 / 帖子" width="140">
+        <el-table-column :label="t('admin.channels.membersPosts')" width="140">
           <template #default="{ row }">
             {{ formatCount(row.memberCount) }} / {{ formatCount(row.postCount) }}
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="110">
+        <el-table-column :label="t('common.status')" width="110">
           <template #default="{ row }">
             <el-tag size="small" :type="row.status === 'ACTIVE' ? 'success' : 'danger'" effect="plain">
               {{ row.status }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="创建时间" width="160">
+        <el-table-column :label="t('admin.channels.createdAt')" width="160">
           <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="120" align="right">
+        <el-table-column :label="t('common.actions')" width="120" align="right">
           <template #default="{ row }">
             <el-button
               size="small"
@@ -140,13 +145,13 @@ onMounted(load)
               :type="row.status === 'BANNED' ? 'primary' : 'danger'"
               @click="toggleStatus(row as AdminChannel)"
             >
-              {{ row.status === 'BANNED' ? '解禁' : '封禁' }}
+              {{ row.status === 'BANNED' ? t('admin.channels.unban') : t('admin.channels.ban') }}
             </el-button>
           </template>
         </el-table-column>
       </el-table>
       <footer class="admin-pager">
-        <span>共 {{ data.total }} 条</span>
+        <span>{{ t('common.totalCount', { n: data.total }) }}</span>
         <el-pagination
           v-model:current-page="page"
           :page-size="size"

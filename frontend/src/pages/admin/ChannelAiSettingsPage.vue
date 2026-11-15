@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, UserFilled } from '@element-plus/icons-vue'
@@ -21,6 +22,8 @@ import {
 import { resolveErrorMessage } from '@/api/client'
 import { formatDateTime } from '@/utils/format'
 
+const { t } = useI18n()
+
 const props = withDefaults(
   defineProps<{
     channelId: string
@@ -30,12 +33,12 @@ const props = withDefaults(
 )
 
 const taskOptions: Array<{ type: AiTaskType; label: string }> = [
-  { type: 'DAILY_SUMMARY', label: '日报' },
-  { type: 'WEEKLY_SUMMARY', label: '周报' },
-  { type: 'MONTHLY_CONTRIBUTORS', label: '月度贡献榜' },
-  { type: 'AUTO_POST', label: '自动发帖' },
-  { type: 'AUTO_COMMENT', label: '自动评论' },
-  { type: 'AUTO_LIKE', label: '自动点赞' },
+  { type: 'DAILY_SUMMARY', label: t('assistant.page.dailyShort') },
+  { type: 'WEEKLY_SUMMARY', label: t('assistant.page.weeklyShort') },
+  { type: 'MONTHLY_CONTRIBUTORS', label: t('assistant.page.monthly') },
+  { type: 'AUTO_POST', label: t('assistant.page.autoPost') },
+  { type: 'AUTO_COMMENT', label: t('assistant.page.autoComment') },
+  { type: 'AUTO_LIKE', label: t('assistant.page.autoLike') },
 ]
 
 const loading = ref(false)
@@ -55,11 +58,11 @@ const runningTask = ref<AiTaskType | null>(null)
 const creatingAccount = ref(false)
 
 const assistantConfigured = computed(() => Boolean(settings.value?.assistantUserId))
-const assistantName = computed(() => form.value.nickname || '频道助手')
+const assistantName = computed(() => form.value.nickname || t('ai.chat.assistant'))
 
 function emptyForm(): AssistantSettingsPayload {
   return {
-    nickname: '频道助手',
+    nickname: t('ai.chat.assistant'),
     avatarUrl: '',
     coverUrl: '',
     bio: '',
@@ -86,7 +89,7 @@ async function load(): Promise<void> {
     const data = await getAssistantSettings(props.channelId)
     settings.value = data
     form.value = {
-      nickname: data.nickname || '频道助手',
+      nickname: data.nickname || t('ai.chat.assistant'),
       avatarUrl: data.avatarUrl ?? '',
       coverUrl: data.coverUrl ?? '',
       bio: data.bio ?? '',
@@ -106,7 +109,7 @@ async function load(): Promise<void> {
     }
     await loadLogs()
   } catch (cause) {
-    error.value = resolveErrorMessage(cause, '频道助手设置加载失败（需要频道主/超级管理员权限）')
+    error.value = resolveErrorMessage(cause, t('assistant.page.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -117,17 +120,17 @@ async function save(): Promise<void> {
   try {
     const data = await saveAssistantSettings(props.channelId, {
       ...form.value,
-      nickname: form.value.nickname?.trim() || '频道助手',
+      nickname: form.value.nickname?.trim() || t('ai.chat.assistant'),
       avatarUrl: form.value.avatarUrl?.trim() || null,
       coverUrl: form.value.coverUrl?.trim() || null,
       bio: form.value.bio?.trim() || null,
       persona: form.value.persona?.trim() || null,
     })
     settings.value = data
-    ElMessage.success('频道助手设置已保存')
+    ElMessage.success(t('assistant.page.saved'))
     await loadLogs()
   } catch (cause) {
-    ElMessage.error(resolveErrorMessage(cause, '保存失败'))
+    ElMessage.error(resolveErrorMessage(cause, t('profile.saveFailed')))
   } finally {
     saving.value = false
   }
@@ -138,11 +141,11 @@ async function createAssistantAccount(): Promise<void> {
   try {
     const info = await ensureAssistantAccount(props.channelId)
     if (info.assistantUserId) {
-      ElMessage.success('助手账号已就绪，可以开始自动运营')
+      ElMessage.success(t('assistant.page.accountReady'))
       await load()
     }
   } catch (cause) {
-    ElMessage.error(resolveErrorMessage(cause, '助手账号创建失败'))
+    ElMessage.error(resolveErrorMessage(cause, t('assistant.page.accountFailed')))
   } finally {
     creatingAccount.value = false
   }
@@ -151,8 +154,8 @@ async function createAssistantAccount(): Promise<void> {
 async function runTask(taskType: AiTaskType): Promise<void> {
   const label = taskOptions.find((item) => item.type === taskType)?.label ?? taskType
   const confirmed = await ElMessageBox.confirm(
-    `确定立即执行「${label}」任务？任务会调用已配置的 AI 模型，并按开关与频率上限校验。`,
-    '执行任务',
+    t('assistant.page.runConfirm', { label }),
+    t('assistant.page.runTask'),
     { type: 'info' },
   ).catch(() => false)
   if (!confirmed) return
@@ -160,15 +163,15 @@ async function runTask(taskType: AiTaskType): Promise<void> {
   try {
     const taskLog = await runAssistantTask(props.channelId, taskType)
     if (taskLog.status === 'SUCCESS') {
-      ElMessage.success(taskLog.resultText || '任务执行成功')
+      ElMessage.success(taskLog.resultText || t('assistant.page.runSuccess'))
     } else if (taskLog.status === 'SKIPPED') {
-      ElMessage.warning(taskLog.resultText || '任务已跳过')
+      ElMessage.warning(taskLog.resultText || t('assistant.page.runSkipped'))
     } else {
-      ElMessage.error(taskLog.errorMessage || '任务执行失败')
+      ElMessage.error(taskLog.errorMessage || t('assistant.page.runFailed'))
     }
     await loadLogs()
   } catch (cause) {
-    ElMessage.error(resolveErrorMessage(cause, '任务触发失败'))
+    ElMessage.error(resolveErrorMessage(cause, t('assistant.page.runTriggerFailed')))
   } finally {
     runningTask.value = null
   }
@@ -186,7 +189,7 @@ async function loadLogs(): Promise<void> {
     logs.value = data.items
     logsTotal.value = data.total
   } catch (cause) {
-    logsError.value = resolveErrorMessage(cause, '执行日志加载失败')
+    logsError.value = resolveErrorMessage(cause, t('assistant.page.logsFailed'))
   } finally {
     logsLoading.value = false
   }
@@ -201,17 +204,18 @@ function taskStatusType(status: AiTaskLog['status']): 'success' | 'warning' | 'd
 
 function taskStatusLabel(status: AiTaskLog['status']): string {
   const labels: Record<AiTaskLog['status'], string> = {
-    RUNNING: '执行中',
-    SUCCESS: '成功',
-    SKIPPED: '已跳过',
-    FAILED: '失败',
+    RUNNING: t('assistant.page.running'),
+    SUCCESS: t('assistant.page.success'),
+    SKIPPED: t('assistant.page.skipped'),
+    FAILED: t('assistant.page.failed'),
   }
   return labels[status] ?? status
 }
 
 /** 被动接话不是可手动触发的任务，只出现在日志里 */
 const EXTRA_TASK_LABELS: Record<string, string> = {
-  REPLY_COMMENT: '被动接话',
+  REPLY_COMMENT: t('assistant.page.autoReply'),
+  REPLY_MENTION: t('assistant.page.replyMention'),
 }
 
 function taskTypeLabel(type: AiTaskType): string {
@@ -225,18 +229,22 @@ onMounted(load)
   <section class="channel-ai-settings">
     <header class="channel-ai-settings__head">
       <div>
-        <h2 class="channel-ai-settings__title">频道助手设置</h2>
+        <h2 class="channel-ai-settings__title">{{ t('manage.nav.assistant') }}</h2>
         <p class="channel-ai-settings__subtitle">
-          配置助手身份与自动运营任务{{ channelName ? `（频道：${channelName}）` : '' }}
+          {{
+            channelName
+              ? t('assistant.page.subtitleOf', { name: channelName })
+              : t('assistant.page.subtitle')
+          }}
         </p>
       </div>
       <div class="channel-ai-settings__actions">
-        <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存设置</el-button>
+        <el-button :icon="Refresh" :loading="loading" @click="load">{{ t('common.refresh') }}</el-button>
+        <el-button type="primary" :loading="saving" @click="save">{{ t('assistant.page.save') }}</el-button>
       </div>
     </header>
 
-    <LoadingState v-if="loading && !settings" :rows="5" tip="正在加载频道助手设置…" />
+    <LoadingState v-if="loading && !settings" :rows="5" :tip="t('assistant.page.loading')" />
     <ErrorState v-else-if="error" :message="error" @retry="load" />
     <template v-else>
       <el-alert
@@ -245,18 +253,18 @@ onMounted(load)
         type="info"
         show-icon
         :closable="false"
-        title="尚未创建助手虚拟账号"
-        description="保存设置后点击「创建/修复助手账号」，助手将以普通成员身份加入频道，用于自动发帖、评论与点赞。"
+        :title="t('assistant.page.noAccount')"
+        :description="t('assistant.page.noAccountHint')"
       />
 
       <div class="settings-grid">
         <section class="settings-card">
-          <h3 class="settings-card__title">助手身份</h3>
+          <h3 class="settings-card__title">{{ t('assistant.page.identity') }}</h3>
           <div class="assistant-preview">
             <UserAvatar :src="form.avatarUrl || null" :name="assistantName" :size="48" square />
             <div>
               <p class="assistant-preview__name">{{ assistantName }}</p>
-              <p class="assistant-preview__bio">{{ form.bio || '还没有填写简介' }}</p>
+              <p class="assistant-preview__bio">{{ form.bio || t('assistant.page.noBio') }}</p>
             </div>
             <el-button
               size="small"
@@ -264,120 +272,138 @@ onMounted(load)
               :loading="creatingAccount"
               @click="createAssistantAccount"
             >
-              {{ assistantConfigured ? '修复助手账号' : '创建助手账号' }}
+              {{ assistantConfigured ? t('assistant.page.fixAccount') : t('assistant.page.createAccount') }}
             </el-button>
           </div>
           <el-form label-position="top">
             <div class="form-grid">
-              <el-form-item label="助手昵称">
+              <el-form-item :label="t('assistant.page.nickname')">
                 <el-input v-model="form.nickname" maxlength="32" />
               </el-form-item>
-              <el-form-item label="助手头像" class="assistant-avatar-item">
+              <el-form-item :label="t('assistant.page.avatar')" class="assistant-avatar-item">
                 <ImageCropUpload
                   v-model="form.avatarUrl"
                   :aspect-ratio="1"
-                  :output-width="256"
+                  :max-output-width="1024"
                   :box-width="200"
                   :preview-width="72"
                   shape="circle"
-                  label="上传头像"
-                  hint="建议正方形，1:1"
+                  :label="t('media.crop.avatarLabel')"
+                  :hint="t('media.crop.squareHint')"
                 />
               </el-form-item>
             </div>
-            <el-form-item label="助手简介">
+            <el-form-item :label="t('assistant.page.bio')">
               <el-input v-model="form.bio" maxlength="500" show-word-limit />
             </el-form-item>
-            <el-form-item label="助手设定（persona，用于生成内容的语气与角色）">
+            <el-form-item :label="t('assistant.page.persona')">
               <el-input v-model="form.persona" type="textarea" :rows="4" maxlength="2000" show-word-limit />
             </el-form-item>
-            <el-form-item label="频道助手总开关">
+            <el-form-item :label="t('assistant.page.master')">
               <el-switch v-model="form.enabled" />
-              <span class="form-hint">关闭后频道页面板与自动任务都会停用（已生成内容不受影响）。</span>
+              <span class="form-hint">{{ t('assistant.page.masterHint') }}</span>
             </el-form-item>
           </el-form>
         </section>
 
         <section class="settings-card">
-          <h3 class="settings-card__title">自动运营任务</h3>
+          <h3 class="settings-card__title">{{ t('assistant.page.tasks') }}</h3>
           <div class="task-switch">
             <el-switch v-model="form.summaryDailyEnabled" />
             <div class="task-switch__meta">
-              <p>每日总结（日报）</p>
-              <small>每天 {{ form.dailySummaryHour }}:00（UTC）生成频道日报帖子</small>
+              <p>{{ t('assistant.page.daily') }}</p>
+              <small>{{ t('assistant.page.dailyHourHint', { hour: form.dailySummaryHour }) }}</small>
             </div>
           </div>
           <div class="task-switch">
             <el-switch v-model="form.summaryWeeklyEnabled" />
             <div class="task-switch__meta">
-              <p>每周总结（周报）</p>
-              <small>每周一生成频道周报帖子</small>
+              <p>{{ t('assistant.page.weekly') }}</p>
+              <small>{{ t('assistant.page.weeklyHint') }}</small>
             </div>
           </div>
           <div class="task-switch">
             <el-switch v-model="form.monthlyContributorsEnabled" />
             <div class="task-switch__meta">
-              <p>月度贡献榜</p>
-              <small>每月 1 日生成月度贡献者榜单帖子</small>
+              <p>{{ t('assistant.page.monthly') }}</p>
+              <small>{{ t('assistant.page.monthlyHint') }}</small>
             </div>
           </div>
           <div class="task-switch">
             <el-switch v-model="form.autoPostEnabled" />
             <div class="task-switch__meta">
-              <p>自动发帖</p>
-              <small>基于近期热门话题生成互动帖</small>
+              <p>{{ t('assistant.page.autoPost') }}</p>
+              <small>{{ t('assistant.page.autoPostHint') }}</small>
             </div>
           </div>
           <div class="task-switch">
             <el-switch v-model="form.autoCommentEnabled" />
             <div class="task-switch__meta">
-              <p>自动评论</p>
-              <small>以助手身份参与近期帖子讨论（AI 生成标识）</small>
+              <p>{{ t('assistant.page.autoComment') }}</p>
+              <small>{{ t('assistant.page.autoCommentHint') }}</small>
             </div>
           </div>
           <div class="task-switch">
             <el-switch v-model="form.autoLikeEnabled" />
             <div class="task-switch__meta">
-              <p>自动点赞</p>
-              <small>为近期优质帖子点赞</small>
+              <p>{{ t('assistant.page.autoLike') }}</p>
+              <small>{{ t('assistant.page.autoLikeHint') }}</small>
             </div>
           </div>
           <div class="task-switch">
             <el-switch v-model="form.autoReplyEnabled" />
             <div class="task-switch__meta">
-              <p>被动接话</p>
-              <small>有人回复助手的评论时，助手自动接着回复（计入每日评论限额）</small>
+              <p>{{ t('assistant.page.autoReply') }}</p>
+              <small>{{ t('assistant.page.autoReplyHint') }}</small>
             </div>
           </div>
 
-          <h4 class="settings-card__subtitle">频率与限额</h4>
+          <el-alert
+            class="task-conditions"
+            type="info"
+            :closable="false"
+            show-icon
+            :title="t('assistant.page.conditions')"
+          >
+            <template #default>
+              <ul class="task-conditions__list">
+                <li>{{ t('assistant.page.cond1') }}</li>
+                <li>{{ t('assistant.page.cond2') }}</li>
+                <li>{{ t('assistant.page.cond3') }}</li>
+                <li>{{ t('assistant.page.cond4') }}</li>
+                <li>{{ t('assistant.page.cond5') }}</li>
+              </ul>
+            </template>
+          </el-alert>
+
+          <h4 class="settings-card__subtitle">{{ t('assistant.page.limits') }}</h4>
           <el-form label-position="top" class="frequency-form" @submit.prevent>
             <div class="form-grid">
-              <el-form-item label="日报执行小时（UTC）">
+              <el-form-item :label="t('assistant.page.hour')">
                 <el-input-number v-model="form.dailySummaryHour" :min="0" :max="23" controls-position="right" />
               </el-form-item>
-              <el-form-item label="自动发帖 / 天">
+              <el-form-item :label="t('assistant.page.postPerDay')">
                 <el-input-number v-model="form.autoPostPerDay" :min="0" :max="50" controls-position="right" />
               </el-form-item>
-              <el-form-item label="自动评论 / 天">
+              <el-form-item :label="t('assistant.page.commentPerDay')">
                 <el-input-number v-model="form.autoCommentPerDay" :min="0" :max="100" controls-position="right" />
               </el-form-item>
-              <el-form-item label="自动点赞 / 天">
+              <el-form-item :label="t('assistant.page.likePerDay')">
                 <el-input-number v-model="form.autoLikePerDay" :min="0" :max="200" controls-position="right" />
               </el-form-item>
             </div>
           </el-form>
-          <p class="form-hint frequency-form__hint">限额按 UTC 自然日统计；调度每小时检查一次，达到上限当天不再执行。</p>
+          <p class="form-hint frequency-form__hint">{{ t('assistant.page.limitsHint') }}</p>
         </section>
       </div>
 
       <section class="settings-card settings-card--logs">
         <div class="logs-head">
           <div>
-            <h3 class="settings-card__title">手动试运行与执行日志</h3>
-            <p class="settings-card__desc">任务执行结果落库（ai_task_logs）；同一周期任务幂等，未配置模型时会明确跳过。</p>
+            <h3 class="settings-card__title">{{ t('assistant.page.logs') }}</h3>
+            <p class="settings-card__desc">{{ t('assistant.page.logsHint') }}</p>
           </div>
-          <el-select v-model="logTaskType" size="small" placeholder="全部任务" clearable @change="loadLogs">
+          <el-select v-model="logTaskType" size="small" :placeholder="t('assistant.page.allTasks')" clearable @change="loadLogs">
             <el-option v-for="item in taskOptions" :key="item.type" :label="item.label" :value="item.type" />
           </el-select>
         </div>
@@ -388,9 +414,14 @@ onMounted(load)
             :key="item.type"
             size="small"
             :loading="runningTask === item.type"
+            :disabled="Boolean(runningTask) && runningTask !== item.type"
             @click="runTask(item.type)"
           >
-            立即执行：{{ item.label }}
+            {{
+              runningTask === item.type
+                ? t('assistant.page.generating')
+                : t('assistant.page.runNow', { label: item.label })
+            }}
           </el-button>
         </div>
 
@@ -399,29 +430,29 @@ onMounted(load)
         <EmptyState
           v-else-if="logs.length === 0"
           compact
-          title="还没有执行记录"
-          description="任务按设定时间自动执行，也可以点击上方按钮立即试运行。"
+          :title="t('assistant.page.noLogs')"
+          :description="t('assistant.page.noLogsHint')"
         />
         <el-table v-else :data="logs" class="logs-table" row-key="id">
-          <el-table-column label="任务" width="120">
+          <el-table-column :label="t('assistant.page.task')" width="120">
             <template #default="{ row }">{{ taskTypeLabel(row.taskType) }}</template>
           </el-table-column>
-          <el-table-column label="状态" width="100">
+          <el-table-column :label="t('common.status')" width="100">
             <template #default="{ row }">
               <el-tag size="small" :type="taskStatusType(row.status)" effect="plain">
                 {{ taskStatusLabel(row.status) }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="结果 / 错误" min-width="240">
+          <el-table-column :label="t('assistant.page.result')" min-width="240">
             <template #default="{ row }">
               <p v-if="row.resultText">{{ row.resultText }}</p>
               <p v-if="row.errorMessage" class="text-danger">{{ row.errorMessage }}</p>
               <p v-if="!row.resultText && !row.errorMessage" class="muted">—</p>
             </template>
           </el-table-column>
-          <el-table-column label="周期键" width="140" prop="frequencyKey" />
-          <el-table-column label="时间" width="160">
+          <el-table-column :label="t('assistant.page.periodKey')" width="140" prop="frequencyKey" />
+          <el-table-column :label="t('common.time')" width="160">
             <template #default="{ row }">{{ formatDateTime(row.finishedAt || row.createdAt) }}</template>
           </el-table-column>
         </el-table>
@@ -522,6 +553,17 @@ onMounted(load)
 
 .assistant-preview .el-button {
   margin-left: auto;
+}
+
+.task-conditions {
+  margin-bottom: var(--isles-space-3);
+}
+
+.task-conditions__list {
+  padding-left: 18px;
+  margin: 4px 0 0;
+  font-size: var(--isles-font-xs);
+  line-height: 1.7;
 }
 
 .frequency-form :deep(.el-input-number) {

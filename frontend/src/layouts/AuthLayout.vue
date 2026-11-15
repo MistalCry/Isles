@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { APP_NAME, APP_NAME_EN, APP_SLOGAN } from '@/constants/app'
+import { useI18n } from 'vue-i18n'
+import { APP_NAME, APP_NAME_EN, appSlogan } from '@/constants/app'
+
+const { t } = useI18n()
 
 const highlights = [
-  '频道即圈子：帖子、评论与互动沉淀在属于你们的岛上',
-  '发现同频的人：频道动态、热门讨论与搜索',
-  '媒体友好：图片灯箱与静音自动播放的视频',
+  t('auth.layout.tagline1'),
+  t('auth.layout.tagline2'),
+  t('auth.layout.tagline3'),
 ]
 </script>
 
 <template>
   <div class="auth-layout">
-    <section class="auth-layout__brand" aria-label="产品介绍">
+    <section class="auth-layout__brand" :aria-label="t('auth.productIntro')">
       <RouterLink to="/feed" class="auth-layout__logo">
         <svg viewBox="0 0 64 64" aria-hidden="true">
           <rect width="64" height="64" rx="16" fill="#ffffff" opacity="0.16" />
@@ -25,7 +28,7 @@ const highlights = [
       </RouterLink>
 
       <div class="auth-layout__pitch">
-        <h1>{{ APP_SLOGAN }}</h1>
+        <h1>{{ appSlogan() }}</h1>
         <ul>
           <li v-for="item in highlights" :key="item">{{ item }}</li>
         </ul>

@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, ref, watch } from 'vue'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -10,7 +13,7 @@ const props = withDefaults(
     square?: boolean
   }>(),
   {
-    name: '岛',
+    name: '',
     src: null,
     size: 40,
     alt: '',
@@ -22,7 +25,7 @@ const failed = ref(false)
 
 const initial = computed(() => {
   const name = (props.name ?? '').trim()
-  return name ? name.slice(0, 1).toUpperCase() : '岛'
+  return name ? name.slice(0, 1).toUpperCase() : t('channel.create.island')
 })
 
 const wrapperStyle = computed(() => ({
@@ -32,7 +35,7 @@ const wrapperStyle = computed(() => ({
   borderRadius: props.square ? 'var(--isles-radius-md)' : '50%',
 }))
 
-const imageAlt = computed(() => props.alt || `${props.name ?? '用户'}的头像`)
+const imageAlt = computed(() => props.alt || t('avatar.altOf', { name: props.name ?? t('avatar.user') }))
 
 watch(
   () => props.src,

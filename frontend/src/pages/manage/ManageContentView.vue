@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
@@ -15,6 +16,8 @@ import type { Board, Channel, Post } from '@/types/models'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import EmptyState from '@/components/EmptyState.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   channel: Channel
@@ -60,7 +63,7 @@ async function load(reset = false): Promise<void> {
     posts.value = result.items
     total.value = result.total ?? result.items.length
   } catch (err) {
-    error.value = resolveErrorMessage(err, '内容列表加载失败')
+    error.value = resolveErrorMessage(err, t('manage.content.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -96,7 +99,7 @@ async function togglePin(raw: unknown): Promise<void> {
   try {
     await manageApi.pinPost(props.channelId, post.id, !post.isPinned)
     post.isPinned = !post.isPinned
-    ElMessage.success(post.isPinned ? '已置顶' : '已取消置顶')
+    ElMessage.success(post.isPinned ? t('manage.content.pinned') : t('manage.content.unpinned'))
   } catch {
     // 拦截器已提示
   }
@@ -107,7 +110,7 @@ async function toggleEssence(raw: unknown): Promise<void> {
   try {
     await manageApi.essencePost(props.channelId, post.id, !post.isEssence)
     post.isEssence = !post.isEssence
-    ElMessage.success(post.isEssence ? '已加精' : '已取消精华')
+    ElMessage.success(post.isEssence ? t('manage.content.featured') : t('manage.content.unfeatured'))
   } catch {
     // 拦截器已提示
   }
@@ -116,10 +119,10 @@ async function toggleEssence(raw: unknown): Promise<void> {
 async function removePost(raw: unknown): Promise<void> {
   const post = raw as Post
   try {
-    await ElMessageBox.confirm('删除后帖子将进入系统消息通知作者，确认删除？', '删除帖子', {
+    await ElMessageBox.confirm(t('manage.content.deleteConfirm'), t('manage.content.deleteTitle'), {
       type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      confirmButtonText: t('common.delete'),
+      cancelButtonText: t('common.cancel'),
     })
   } catch {
     return
@@ -128,7 +131,7 @@ async function removePost(raw: unknown): Promise<void> {
     await manageApi.deletePost(props.channelId, post.id)
     posts.value = posts.value.filter((item) => item.id !== post.id)
     total.value = Math.max(0, total.value - 1)
-    ElMessage.success('帖子已删除')
+    ElMessage.success(t('manage.content.deleted'))
   } catch {
     // 拦截器已提示
   }
@@ -136,15 +139,18 @@ async function removePost(raw: unknown): Promise<void> {
 
 async function runBatch(action: 'DELETE' | 'PIN' | 'UNPIN' | 'ESSENCE' | 'UNESSENCE'): Promise<void> {
   if (selectedIds.value.length === 0) {
-    ElMessage.warning('请先选择要操作的帖子')
+    ElMessage.warning(t('manage.content.selectFirst'))
     return
   }
   if (action === 'DELETE') {
     try {
-      await ElMessageBox.confirm(`确认批量删除选中的 ${selectedIds.value.length} 条帖子？`, '批量删除', {
+      await ElMessageBox.confirm(
+        t('manage.content.deleteSelected', { n: selectedIds.value.length }),
+        t('manage.content.bulkDelete'),
+        {
         type: 'warning',
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
+        confirmButtonText: t('common.delete'),
+        cancelButtonText: t('common.cancel'),
       })
     } catch {
       return
@@ -153,7 +159,7 @@ async function runBatch(action: 'DELETE' | 'PIN' | 'UNPIN' | 'ESSENCE' | 'UNESSE
   batchLoading.value = true
   try {
     await manageApi.batchPostAction(props.channelId, { action, postIds: selectedIds.value })
-    ElMessage.success('批量操作已完成')
+    ElMessage.success(t('manage.content.bulkDone'))
     selectedIds.value = []
     await load()
   } catch {
@@ -173,58 +179,58 @@ onMounted(() => {
   <section class="manage-section">
     <header class="manage-section__header">
       <div>
-        <h2>内容管理</h2>
-        <p class="muted">筛选、置顶、精华、删除与批量操作（FR-MGR-05）</p>
+        <h2>{{ t('manage.nav.content') }}</h2>
+        <p class="muted">{{ t('manage.content.subtitle') }}</p>
       </div>
-      <el-button :icon="Refresh" @click="load(true)">刷新</el-button>
+      <el-button :icon="Refresh" @click="load(true)">{{ t('common.refresh') }}</el-button>
     </header>
 
     <div class="isles-card content-filters">
       <el-input
         v-model="filters.keyword"
-        placeholder="搜索标题 / 正文关键词"
+        :placeholder="t('manage.content.search')"
         clearable
         class="content-filters__input"
         @keyup.enter="load(true)"
       />
-      <el-select v-model="filters.boardId" placeholder="板块" clearable class="content-filters__select">
+      <el-select v-model="filters.boardId" :placeholder="t('channel.page.boards')" clearable class="content-filters__select">
         <el-option v-for="board in boards" :key="board.id" :label="board.name" :value="board.id" />
       </el-select>
-      <el-select v-model="filters.status" placeholder="状态" clearable class="content-filters__select">
-        <el-option label="已发布" value="PUBLISHED" />
-        <el-option label="已删除" value="DELETED" />
-        <el-option label="已隐藏" value="HIDDEN" />
+      <el-select v-model="filters.status" :placeholder="t('common.status')" clearable class="content-filters__select">
+        <el-option :label="t('manage.content.published')" value="PUBLISHED" />
+        <el-option :label="t('admin.aiModels.deleted')" value="DELETED" />
+        <el-option :label="t('manage.content.hidden')" value="HIDDEN" />
       </el-select>
       <el-date-picker
         v-model="filters.dateRange"
         type="daterange"
         value-format="YYYY-MM-DD"
-        start-placeholder="开始日期"
-        end-placeholder="结束日期"
+        :start-placeholder="t('common.startDate')"
+        :end-placeholder="t('common.endDate')"
         class="content-filters__date"
       />
-      <el-button type="primary" :icon="Search" @click="load(true)">查询</el-button>
-      <el-button @click="resetFilters">重置</el-button>
+      <el-button type="primary" :icon="Search" @click="load(true)">{{ t('common.query') }}</el-button>
+      <el-button @click="resetFilters">{{ t('common.reset') }}</el-button>
     </div>
 
     <div v-if="selectedIds.length > 0 || canPin || canEssence || canDelete" class="content-batch">
-      <span class="muted">已选择 {{ selectedIds.length }} 条</span>
-      <el-button v-if="canPin" size="small" :disabled="batchLoading || selectedIds.length === 0" @click="runBatch('PIN')">批量置顶</el-button>
-      <el-button v-if="canPin" size="small" :disabled="batchLoading || selectedIds.length === 0" @click="runBatch('UNPIN')">取消置顶</el-button>
-      <el-button v-if="canEssence" size="small" :disabled="batchLoading || selectedIds.length === 0" @click="runBatch('ESSENCE')">批量加精</el-button>
-      <el-button v-if="canEssence" size="small" :disabled="batchLoading || selectedIds.length === 0" @click="runBatch('UNESSENCE')">取消精华</el-button>
-      <el-button v-if="canDelete" size="small" type="danger" :disabled="batchLoading || selectedIds.length === 0" @click="runBatch('DELETE')">批量删除</el-button>
+      <span class="muted">{{ t('manage.content.selectedCount', { n: selectedIds.length }) }}</span>
+      <el-button v-if="canPin" size="small" :disabled="batchLoading || selectedIds.length === 0" @click="runBatch('PIN')">{{ t('manage.content.bulkPin') }}</el-button>
+      <el-button v-if="canPin" size="small" :disabled="batchLoading || selectedIds.length === 0" @click="runBatch('UNPIN')">{{ t('manage.content.unpin') }}</el-button>
+      <el-button v-if="canEssence" size="small" :disabled="batchLoading || selectedIds.length === 0" @click="runBatch('ESSENCE')">{{ t('manage.content.bulkFeature') }}</el-button>
+      <el-button v-if="canEssence" size="small" :disabled="batchLoading || selectedIds.length === 0" @click="runBatch('UNESSENCE')">{{ t('manage.content.unfeature') }}</el-button>
+      <el-button v-if="canDelete" size="small" type="danger" :disabled="batchLoading || selectedIds.length === 0" @click="runBatch('DELETE')">{{ t('manage.content.bulkDelete') }}</el-button>
     </div>
 
-    <LoadingState v-if="loading && posts.length === 0" :rows="4" tip="正在加载内容…" />
+    <LoadingState v-if="loading && posts.length === 0" :rows="4" :tip="t('manage.content.loading')" />
     <ErrorState v-else-if="error && posts.length === 0" :message="error" @retry="load(true)" />
-    <EmptyState v-else-if="posts.length === 0" title="没有匹配的内容" description="调整筛选条件后重试。" />
+    <EmptyState v-else-if="posts.length === 0" :title="t('manage.content.noMatch')" :description="t('common.retryHint')" />
 
     <template v-else>
       <div class="isles-card content-table">
         <el-table :data="posts" row-key="id" @selection-change="handleSelectionChange">
           <el-table-column type="selection" width="44" />
-          <el-table-column label="内容" min-width="260">
+          <el-table-column :label="t('permission.content')" min-width="260">
             <template #default="{ row }">
               <div class="content-cell">
                 <RouterLink :to="{ name: 'post', params: { id: row.id } }" class="content-cell__title line-clamp-1">
@@ -232,41 +238,48 @@ onMounted(() => {
                 </RouterLink>
                 <p class="muted content-cell__excerpt line-clamp-2">{{ excerpt(row.content, 120) }}</p>
                 <span class="muted content-cell__meta">
-                  {{ row.media?.length ? `${row.media.length} 个媒体 · ` : '' }}{{ row.channel?.name || channel.name }}
+                  {{ row.media?.length ? t('manage.content.mediaPrefix', { n: row.media.length }) : '' }}{{ row.channel?.name || channel.name }}
                 </span>
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="作者" width="130">
+          <el-table-column :label="t('comment.authorBadge')" width="130">
             <template #default="{ row }">{{ row.author.nickname || row.author.username }}</template>
           </el-table-column>
-          <el-table-column label="板块" width="120">
+          <el-table-column :label="t('channel.page.boards')" width="120">
             <template #default="{ row }">{{ row.board?.name || '-' }}</template>
           </el-table-column>
-          <el-table-column label="互动" width="150">
+          <el-table-column :label="t('manage.content.interactions')" width="150">
             <template #default="{ row }">
-              <span class="muted">{{ formatCount(row.viewCount) }} 浏览 · {{ formatCount(row.likeCount) }} 赞</span>
+              <span class="muted">
+                {{
+                  t('manage.content.viewsLikes', {
+                    views: formatCount(row.viewCount),
+                    likes: formatCount(row.likeCount),
+                  })
+                }}
+              </span>
             </template>
           </el-table-column>
-          <el-table-column label="时间" width="160">
+          <el-table-column :label="t('common.time')" width="160">
             <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
           </el-table-column>
-          <el-table-column label="状态标识" width="130">
+          <el-table-column :label="t('manage.content.statusFlags')" width="130">
             <template #default="{ row }">
-              <el-tag v-if="row.isPinned" size="small" type="danger" effect="plain">置顶</el-tag>
-              <el-tag v-if="row.isEssence" size="small" type="warning" effect="plain" class="content-tag">精华</el-tag>
+              <el-tag v-if="row.isPinned" size="small" type="danger" effect="plain">{{ t('post.pinned') }}</el-tag>
+              <el-tag v-if="row.isEssence" size="small" type="warning" effect="plain" class="content-tag">{{ t('post.essence') }}</el-tag>
               <span v-if="!row.isPinned && !row.isEssence" class="muted">—</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="200" fixed="right">
+          <el-table-column :label="t('common.actions')" width="200" fixed="right">
             <template #default="{ row }">
               <el-button v-if="canPin" text size="small" @click="togglePin(row)">
-                {{ row.isPinned ? '取消置顶' : '置顶' }}
+                {{ row.isPinned ? t('manage.content.unpin') : t('post.pinned') }}
               </el-button>
               <el-button v-if="canEssence" text size="small" @click="toggleEssence(row)">
-                {{ row.isEssence ? '取消精华' : '加精' }}
+                {{ row.isEssence ? t('manage.content.unfeature') : t('post.feature') }}
               </el-button>
-              <el-button v-if="canDelete" text size="small" type="danger" @click="removePost(row)">删除</el-button>
+              <el-button v-if="canDelete" text size="small" type="danger" @click="removePost(row)">{{ t('common.delete') }}</el-button>
             </template>
           </el-table-column>
         </el-table>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { onMounted, reactive, ref } from 'vue'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { manageApi } from '@/api'
@@ -9,29 +10,31 @@ import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
+const { t } = useI18n()
+
 const props = defineProps<{
   channel: Channel
   channelId: string
 }>()
 
 const actionOptions = [
-  { value: 'POST_CREATE', label: '发帖' },
-  { value: 'POST_DELETE', label: '删除帖子' },
-  { value: 'POST_PIN', label: '置顶' },
-  { value: 'POST_UNPIN', label: '取消置顶' },
-  { value: 'POST_ESSENCE', label: '加精' },
-  { value: 'POST_UNESSENCE', label: '取消精华' },
-  { value: 'COMMENT_DELETE', label: '删除评论' },
-  { value: 'MEMBER_JOIN', label: '成员加入' },
-  { value: 'MEMBER_LEAVE', label: '成员退出' },
-  { value: 'MEMBER_REMOVE', label: '移除成员' },
-  { value: 'MEMBER_MUTE', label: '禁言成员' },
-  { value: 'MEMBER_UNMUTE', label: '解除禁言' },
-  { value: 'MUTE_ALL', label: '全员禁言' },
-  { value: 'ROLE_UPDATE', label: '身份组变更' },
-  { value: 'PROFILE_UPDATE', label: '频道资料修改' },
-  { value: 'JOIN_APPROVE', label: '通过加入申请' },
-  { value: 'JOIN_REJECT', label: '拒绝加入申请' },
+  { value: 'POST_CREATE', label: t('manage.logs.actionPostCreate') },
+  { value: 'POST_DELETE', label: t('manage.content.deleteTitle') },
+  { value: 'POST_PIN', label: t('post.pinned') },
+  { value: 'POST_UNPIN', label: t('manage.content.unpin') },
+  { value: 'POST_ESSENCE', label: t('post.feature') },
+  { value: 'POST_UNESSENCE', label: t('manage.content.unfeature') },
+  { value: 'COMMENT_DELETE', label: t('comment.deleteTitle') },
+  { value: 'MEMBER_JOIN', label: t('manage.logs.actionMemberJoin') },
+  { value: 'MEMBER_LEAVE', label: t('manage.logs.actionMemberLeave') },
+  { value: 'MEMBER_REMOVE', label: t('channel.member.remove') },
+  { value: 'MEMBER_MUTE', label: t('manage.logs.actionMute') },
+  { value: 'MEMBER_UNMUTE', label: t('channel.member.unmute') },
+  { value: 'MUTE_ALL', label: t('channel.settings.tabMuteAll') },
+  { value: 'ROLE_UPDATE', label: t('manage.logs.actionRoleChange') },
+  { value: 'PROFILE_UPDATE', label: t('manage.logs.actionProfileUpdate') },
+  { value: 'JOIN_APPROVE', label: t('manage.logs.actionJoinApprove') },
+  { value: 'JOIN_REJECT', label: t('manage.logs.actionJoinReject') },
 ]
 
 const filters = reactive({
@@ -66,7 +69,7 @@ async function load(reset = false): Promise<void> {
     logs.value = result.items
     total.value = result.total ?? result.items.length
   } catch (err) {
-    error.value = resolveErrorMessage(err, '管理日志加载失败')
+    error.value = resolveErrorMessage(err, t('manage.logs.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -93,58 +96,58 @@ onMounted(() => {
   <section class="manage-section">
     <header class="manage-section__header">
       <div>
-        <h2>管理日志</h2>
-        <p class="muted">频道内全部写操作与管理操作审计（docs/03 §4.14 FR-MGR-07）</p>
+        <h2>{{ t('manage.nav.logs') }}</h2>
+        <p class="muted">{{ t('manage.logs.subtitle') }}</p>
       </div>
-      <el-button :icon="Refresh" @click="load(true)">刷新</el-button>
+      <el-button :icon="Refresh" @click="load(true)">{{ t('common.refresh') }}</el-button>
     </header>
 
     <div class="isles-card log-filters">
-      <el-input v-model="filters.actorId" placeholder="操作人用户 ID" clearable class="log-filters__input" />
-      <el-select v-model="filters.action" placeholder="操作类型" clearable class="log-filters__select">
+      <el-input v-model="filters.actorId" :placeholder="t('manage.logs.operatorId')" clearable class="log-filters__input" />
+      <el-select v-model="filters.action" :placeholder="t('manage.logs.actionType')" clearable class="log-filters__select">
         <el-option v-for="option in actionOptions" :key="option.value" :label="option.label" :value="option.value" />
       </el-select>
       <el-date-picker
         v-model="filters.dateRange"
         type="daterange"
         value-format="YYYY-MM-DD"
-        start-placeholder="开始日期"
-        end-placeholder="结束日期"
+        :start-placeholder="t('common.startDate')"
+        :end-placeholder="t('common.endDate')"
         class="log-filters__date"
       />
-      <el-button type="primary" :icon="Search" @click="load(true)">查询</el-button>
-      <el-button @click="resetFilters">重置</el-button>
+      <el-button type="primary" :icon="Search" @click="load(true)">{{ t('common.query') }}</el-button>
+      <el-button @click="resetFilters">{{ t('common.reset') }}</el-button>
     </div>
 
-    <LoadingState v-if="loading && logs.length === 0" :rows="4" tip="正在加载管理日志…" />
+    <LoadingState v-if="loading && logs.length === 0" :rows="4" :tip="t('manage.logs.loading')" />
     <ErrorState v-else-if="error && logs.length === 0" :message="error" @retry="load(true)" />
-    <EmptyState v-else-if="logs.length === 0" title="暂无管理日志" description="频道内的操作记录会显示在这里。" />
+    <EmptyState v-else-if="logs.length === 0" :title="t('manage.logs.empty')" :description="t('manage.logs.emptyHint')" />
 
     <template v-else>
       <div class="isles-card log-table">
         <el-table :data="logs" style="width: 100%">
-          <el-table-column prop="actorNickname" label="操作人" min-width="120">
+          <el-table-column prop="actorNickname" :label="t('manage.logs.operator')" min-width="120">
             <template #default="{ row }">
-              {{ row.actorNickname || row.actorId || '系统' }}
+              {{ row.actorNickname || row.actorId || t('common.system') }}
             </template>
           </el-table-column>
-          <el-table-column prop="action" label="操作" min-width="120">
+          <el-table-column prop="action" :label="t('common.actions')" min-width="120">
             <template #default="{ row }">
               <el-tag size="small" effect="plain">{{ actionLabel(row.action) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="targetId" label="对象" min-width="140">
+          <el-table-column prop="targetId" :label="t('manage.logs.target')" min-width="140">
             <template #default="{ row }">
               <span class="muted">{{ row.targetType || '-' }} {{ row.targetId || '' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="detail" label="详情" min-width="200">
+          <el-table-column prop="detail" :label="t('manage.logs.detail')" min-width="200">
             <template #default="{ row }">
               <span class="log-detail">{{ row.detail || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="ip" label="IP" width="130" />
-          <el-table-column prop="createdAt" label="时间" width="170">
+          <el-table-column prop="createdAt" :label="t('common.time')" width="170">
             <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
           </el-table-column>
         </el-table>

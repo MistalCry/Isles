@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onMounted, ref, type Component, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { channelsApi } from '@/api'
@@ -19,6 +20,8 @@ import ManageReportsView from './manage/ManageReportsView.vue'
 import ManageAssistantView from './manage/ManageAssistantView.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
@@ -73,7 +76,7 @@ async function loadChannel(): Promise<void> {
     channel.value = null
     const status = err instanceof AppError ? err.status : 0
     errorStatus.value = status
-    error.value = status === 404 ? '频道不存在或不可访问' : resolveErrorMessage(err, '频道信息加载失败')
+    error.value = status === 404 ? t('manage.page.notFound') : resolveErrorMessage(err, t('manage.page.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -109,31 +112,31 @@ onMounted(() => {
 
 <template>
   <div class="page manage-page">
-    <LoadingState v-if="loading" :rows="6" tip="正在加载频道管理中心…" />
+    <LoadingState v-if="loading" :rows="6" :tip="t('manage.loading')" />
 
-    <ErrorState v-else-if="error" :message="error" retry-text="重新加载" @retry="loadChannel">
+    <ErrorState v-else-if="error" :message="error" :retry-text="t('error.reload')" @retry="loadChannel">
       <template #action>
-        <el-button @click="$router.push({ name: 'channel', params: { id: channelId } })">返回频道页</el-button>
+        <el-button @click="$router.push({ name: 'channel', params: { id: channelId } })">{{ t('manage.page.back') }}</el-button>
       </template>
     </ErrorState>
 
     <ErrorState
       v-else-if="!canAccess"
-      message="你没有访问该频道管理中心的权限。只有频道主、超级管理员或具备管理权限的身份组可以进入。"
+      :message="t('channel.ownerOnlyManage')"
       :show-retry="false"
     >
       <template #action>
-        <el-button type="primary" @click="$router.push({ name: 'channel', params: { id: channelId } })">返回频道页</el-button>
+        <el-button type="primary" @click="$router.push({ name: 'channel', params: { id: channelId } })">{{ t('manage.page.back') }}</el-button>
       </template>
     </ErrorState>
 
     <template v-else-if="channel">
       <header class="manage-page__header">
         <div>
-          <h1 class="page-title">频道管理中心</h1>
-          <p class="page-subtitle">{{ channel.name }} · 权限由身份组与服务端共同校验</p>
+          <h1 class="page-title">{{ t('manage.title') }}</h1>
+          <p class="page-subtitle">{{ t('manage.subtitle', { name: channel.name }) }}</p>
         </div>
-        <el-tag size="small" effect="plain">{{ channel.myRoleName || '管理员' }}</el-tag>
+        <el-tag size="small" effect="plain">{{ channel.myRoleName || t('channel.role.admin') }}</el-tag>
       </header>
 
       <div class="manage-layout">
@@ -146,7 +149,7 @@ onMounted(() => {
           @switch-channel="handleSwitchChannel"
         />
 
-        <main class="manage-content" :aria-label="`管理中心内容：${activeSection}`">
+        <main class="manage-content" :aria-label="t('manage.contentLabel', { section: activeSection })">
           <component
             :is="sectionComponent"
             :channel="channel"
@@ -158,8 +161,8 @@ onMounted(() => {
     </template>
 
     <div v-else class="manage-page__empty">
-      <el-empty description="频道信息不可用" />
-      <el-button type="primary" @click="router.push(sectionPath('home'))">重试</el-button>
+      <el-empty :description="t('channel.infoUnavailable')" />
+      <el-button type="primary" @click="router.push(sectionPath('home'))">{{ t('common.retry') }}</el-button>
     </div>
   </div>
 </template>

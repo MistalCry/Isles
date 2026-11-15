@@ -41,6 +41,7 @@ declare module 'vue' {
     ElForm: typeof import('element-plus/es')['ElForm']
     ElFormItem: typeof import('element-plus/es')['ElFormItem']
     ElIcon: typeof import('element-plus/es')['ElIcon']
+    ElImage: typeof import('element-plus/es')['ElImage']
     ElInput: typeof import('element-plus/es')['ElInput']
     ElInputNumber: typeof import('element-plus/es')['ElInputNumber']
     ElOption: typeof import('element-plus/es')['ElOption']
@@ -65,6 +66,7 @@ declare module 'vue' {
     LoadingState: typeof import('./components/LoadingState.vue')['default']
     ManageSidebar: typeof import('./components/manage/ManageSidebar.vue')['default']
     MediaViewer: typeof import('./components/MediaViewer.vue')['default']
+    MentionPicker: typeof import('./components/MentionPicker.vue')['default']
     PostCard: typeof import('./components/PostCard.vue')['default']
     PostComposer: typeof import('./components/PostComposer.vue')['default']
     ProfileEditDialog: typeof import('./components/ProfileEditDialog.vue')['default']
@@ -80,5 +82,8 @@ declare module 'vue' {
     StatsTrendChart: typeof import('./components/manage/StatsTrendChart.vue')['default']
     UserAvatar: typeof import('./components/UserAvatar.vue')['default']
     UserCardPopover: typeof import('./components/UserCardPopover.vue')['default']
+  }
+  export interface GlobalDirectives {
+    vLoading: typeof import('element-plus/es')['ElLoadingDirective']
   }
 }

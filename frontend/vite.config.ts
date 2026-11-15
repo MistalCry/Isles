@@ -11,6 +11,13 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 const apiTarget = process.env.VITE_API_TARGET || 'http://127.0.0.1:8080'
 
 /**
+ * 是否监听所有网卡。默认只监听 127.0.0.1（更安全）；
+ * 手机/平板通过局域网或电脑热点访问时用 ISLES_LAN=1 启动（isles.bat lan 已封装）。
+ */
+const lanMode = process.env.ISLES_LAN === '1'
+const devHost = lanMode ? true : '127.0.0.1'
+
+/**
  * 预构建 Element Plus 的按需样式入口。
  *
  * <p>ElementPlusResolver 在转换阶段才注入 `element-plus/es/components/*\/style/css`，
@@ -24,6 +31,17 @@ function elementPlusStyleEntries(): string[] {
   return readdirSync(dir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && existsSync(`${dir}/${entry.name}/style/css.mjs`))
     .map((entry) => `element-plus/es/components/${entry.name}/style/css`)
+}
+
+/**
+ * 浏览器用局域网 IP（如手机连热点后访问 http://192.168.137.2:5173）时，
+ * 请求经代理转发仍会带着该 IP 的 Origin，后端 CORS 白名单只放行 localhost/127.0.0.1 → 403。
+ * 代理本身已是同源转发，这里把 Origin 改写成后端地址，避免误判为跨域。
+ */
+function rewriteOrigin(proxy: { on: (event: string, handler: (proxyReq: { setHeader: (k: string, v: string) => void }) => void) => void }): void {
+  proxy.on('proxyReq', (proxyReq) => {
+    proxyReq.setHeader('origin', apiTarget)
+  })
 }
 
 export default defineConfig({
@@ -44,15 +62,18 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    host: '127.0.0.1',
+    // 默认只监听本机；ISLES_LAN=1 时才开放到局域网（手机连热点调试用）
+    host: devHost,
     proxy: {
       '/api': {
         target: apiTarget,
         changeOrigin: true,
+        configure: rewriteOrigin,
       },
       '/uploads': {
         target: apiTarget,
         changeOrigin: true,
+        configure: rewriteOrigin,
       },
       '/ws': {
         target: apiTarget,
@@ -63,10 +84,10 @@ export default defineConfig({
   },
   preview: {
     port: 4173,
-    host: '127.0.0.1',
+    host: devHost,
     proxy: {
-      '/api': { target: apiTarget, changeOrigin: true },
-      '/uploads': { target: apiTarget, changeOrigin: true },
+      '/api': { target: apiTarget, changeOrigin: true, configure: rewriteOrigin },
+      '/uploads': { target: apiTarget, changeOrigin: true, configure: rewriteOrigin },
       '/ws': { target: apiTarget, changeOrigin: true, ws: true },
     },
   },

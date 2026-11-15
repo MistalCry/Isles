@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
@@ -11,6 +12,8 @@ import PostCard from '@/components/PostCard.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import EmptyState from '@/components/EmptyState.vue'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -27,7 +30,7 @@ const needsLogin = computed(
   () => !isAuthenticated.value || list.errorStatus.value === 401,
 )
 const errorMessage = computed(() => {
-  if (list.errorStatus.value === 401) return '登录状态已失效，请重新登录后查看频道动态'
+  if (list.errorStatus.value === 401) return t('feed.sessionExpired')
   return list.error.value ?? ''
 })
 
@@ -75,27 +78,27 @@ function goDiscover(): void {
   <div class="page feed-page">
     <header class="page-header">
       <div>
-        <h1 class="page-title">频道动态</h1>
-        <p class="page-subtitle">来自你已加入频道的最新内容</p>
+        <h1 class="page-title">{{ t('nav.feed') }}</h1>
+        <p class="page-subtitle">{{ t('feed.subtitle') }}</p>
       </div>
-      <el-radio-group v-if="isAuthenticated" v-model="sort" size="small" aria-label="动态排序">
-        <el-radio-button value="latest">最新</el-radio-button>
-        <el-radio-button value="hot">热门</el-radio-button>
+      <el-radio-group v-if="isAuthenticated" v-model="sort" size="small" :aria-label="t('channel.feedSort')">
+        <el-radio-button value="latest">{{ t('comment.sort.latest') }}</el-radio-button>
+        <el-radio-button value="hot">{{ t('channel.page.hot') }}</el-radio-button>
       </el-radio-group>
     </header>
 
     <EmptyState
       v-if="needsLogin"
-      title="登录后查看频道动态"
-      description="加入频道后，就能在这里看到岛民们的最新帖子。"
+      :title="t('channel.feedLoginRequired')"
+      :description="t('channel.feedJoinHint')"
     >
       <template #action>
-        <el-button type="primary" @click="goLogin">登录 / 注册</el-button>
+        <el-button type="primary" @click="goLogin">{{ t('channel.page.loginRegister') }}</el-button>
       </template>
     </EmptyState>
 
     <template v-else>
-      <LoadingState v-if="list.initialLoading.value" :rows="4" tip="正在加载动态…" />
+      <LoadingState v-if="list.initialLoading.value" :rows="4" :tip="t('channel.feedLoading')" />
 
       <ErrorState
         v-else-if="list.error.value"
@@ -105,11 +108,11 @@ function goDiscover(): void {
 
       <EmptyState
         v-else-if="list.items.value.length === 0"
-        title="还没有动态"
-        description="加入感兴趣的频道，岛民的新帖子会出现在这里。"
+        :title="t('channel.feedEmpty')"
+        :description="t('channel.feedEmptyHint')"
       >
         <template #action>
-          <el-button type="primary" @click="goDiscover">去发现频道</el-button>
+          <el-button type="primary" @click="goDiscover">{{ t('feed.explore') }}</el-button>
         </template>
       </EmptyState>
 
@@ -129,9 +132,9 @@ function goDiscover(): void {
             :loading="list.loading.value"
             @click="list.loadMore()"
           >
-            加载更多动态
+            {{ t('feed.loadMore') }}
           </el-button>
-          <span v-else class="muted">已经到底啦，去频道里逛逛吧</span>
+          <span v-else class="muted">{{ t('feed.empty') }}</span>
         </div>
       </div>
     </template>

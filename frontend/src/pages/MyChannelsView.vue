@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
@@ -12,6 +13,8 @@ import CreateChannelDialog from '@/components/CreateChannelDialog.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import EmptyState from '@/components/EmptyState.vue'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -28,7 +31,7 @@ onMounted(() => {
 })
 
 function openCreate(): void {
-  if (!requireLogin('登录后可创建频道')) return
+  if (!requireLogin(t('nav.loginToCreateChannel'))) return
   createDialogVisible.value = true
 }
 
@@ -46,16 +49,16 @@ function goSearch(): void {
   <div class="page my-channels-page">
     <header class="page-header">
       <div>
-        <h1 class="page-title">我的频道</h1>
-        <p class="page-subtitle">你加入的所有岛屿</p>
+        <h1 class="page-title">{{ t('nav.myChannels') }}</h1>
+        <p class="page-subtitle">{{ t('myChannels.subtitle') }}</p>
       </div>
       <div class="my-channels-page__actions">
-        <el-button :icon="Search" @click="goSearch">发现频道</el-button>
-        <el-button type="primary" :icon="Plus" @click="openCreate">创建频道</el-button>
+        <el-button :icon="Search" @click="goSearch">{{ t('myChannels.discover') }}</el-button>
+        <el-button type="primary" :icon="Plus" @click="openCreate">{{ t('manage.nav.createChannel') }}</el-button>
       </div>
     </header>
 
-    <LoadingState v-if="loadingMyChannels && myChannels.length === 0" :rows="3" tip="正在加载我的频道…" />
+    <LoadingState v-if="loadingMyChannels && myChannels.length === 0" :rows="3" :tip="t('myChannels.loading')" />
 
     <ErrorState
       v-else-if="myChannelsError && myChannels.length === 0"
@@ -65,12 +68,12 @@ function goSearch(): void {
 
     <EmptyState
       v-else-if="myChannels.length === 0"
-      title="还没有加入频道"
-      description="去搜索或发现感兴趣的频道，加入后就会出现在这里。"
+      :title="t('myChannels.empty')"
+      :description="t('myChannels.emptyHint')"
     >
       <template #action>
-        <el-button type="primary" @click="goSearch">去发现频道</el-button>
-        <el-button @click="openCreate">创建我的频道</el-button>
+        <el-button type="primary" @click="goSearch">{{ t('feed.explore') }}</el-button>
+        <el-button @click="openCreate">{{ t('myChannels.create') }}</el-button>
       </template>
     </EmptyState>
 

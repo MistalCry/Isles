@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { getAiStatus, listAiModels, type AiModel, type AiStatus } from '@/api/ai'
@@ -36,7 +37,7 @@ export const useAiStore = defineStore('ai', () => {
       models.value = nextModels
       ensureSelectedModel()
     } catch (cause) {
-      error.value = resolveErrorMessage(cause, 'AI 能力状态加载失败')
+      error.value = resolveErrorMessage(cause, t('ai.statusFailed'))
     } finally {
       loading.value = false
     }

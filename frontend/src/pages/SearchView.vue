@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { searchApi, channelsApi } from '@/api'
@@ -11,6 +12,8 @@ import PostCard from '@/components/PostCard.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import EmptyState from '@/components/EmptyState.vue'
+
+const { t } = useI18n()
 
 type SearchTab = 'all' | 'channel' | 'post'
 
@@ -28,13 +31,13 @@ const channelSort = ref('relevance')
 const postSort = ref('relevance')
 
 const channelSortOptions = [
-  { value: 'relevance', label: '相关度' },
-  { value: 'memberCount', label: '按人数' },
-  { value: 'activity', label: '按活跃度' },
+  { value: 'relevance', label: t('search.sortRelevance') },
+  { value: 'memberCount', label: t('search.sortMembers') },
+  { value: 'activity', label: t('search.sortActive') },
 ]
 const postSortOptions = [
-  { value: 'relevance', label: '相关度' },
-  { value: 'createdAt', label: '按发布时间' },
+  { value: 'relevance', label: t('search.sortRelevance') },
+  { value: 'createdAt', label: t('search.sortTime') },
 ]
 
 const allLoading = ref(false)
@@ -63,9 +66,9 @@ const postList = useCursorList<Post>((cursor) =>
 )
 
 const tabs: Array<{ key: SearchTab; label: string }> = [
-  { key: 'all', label: '综合' },
-  { key: 'channel', label: '频道' },
-  { key: 'post', label: '帖子' },
+  { key: 'all', label: t('search.sortAll') },
+  { key: 'channel', label: t('common.channel') },
+  { key: 'post', label: t('channel.page.posts') },
 ]
 
 const hasAnyResult = computed(() => {
@@ -89,7 +92,7 @@ async function searchAllResults(): Promise<void> {
       channelId: channelId.value || undefined,
     })
   } catch (error) {
-    allError.value = resolveErrorMessage(error, '搜索失败，请稍后重试')
+    allError.value = resolveErrorMessage(error, t('search.failed'))
     allResult.value = null
   } finally {
     allLoading.value = false
@@ -182,8 +185,8 @@ watch(
   <div class="page search-page">
     <header class="page-header">
       <div>
-        <h1 class="page-title">搜索</h1>
-        <p class="page-subtitle">搜索频道与帖子，发现同频的岛民</p>
+        <h1 class="page-title">{{ t('common.search') }}</h1>
+        <p class="page-subtitle">{{ t('search.subtitle') }}</p>
       </div>
     </header>
 
@@ -198,11 +201,11 @@ watch(
     </div>
 
     <p v-if="scope === 'channel'" class="muted search-page__scope-hint">
-      频道内搜索：{{ channelName || channelId }}，仅展示该频道的公开内容。
+      {{ t('search.scopeHint', { name: channelName || channelId }) }}
     </p>
 
     <template v-if="keyword">
-      <nav class="search-tabs" aria-label="搜索结果类型">
+      <nav class="search-tabs" :aria-label="t('search.resultType')">
         <button
           v-for="tab in tabs"
           :key="tab.key"
@@ -216,19 +219,19 @@ watch(
       </nav>
 
       <template v-if="activeTab === 'all'">
-        <LoadingState v-if="allLoading" :rows="4" tip="正在搜索…" />
+        <LoadingState v-if="allLoading" :rows="4" :tip="t('search.searching')" />
 
         <ErrorState v-else-if="allError" :message="allError" @retry="runSearch" />
 
         <EmptyState
           v-else-if="!hasAnyResult"
-          title="没有找到相关内容"
-          description="换个关键词试试，或前往频道动态浏览大家的新帖子。"
+          :title="t('search.noResults')"
+          :description="t('search.noResultsHint')"
         />
 
         <div v-else class="search-sections">
           <section v-if="allResult && allResult.channels.length > 0" class="search-section">
-            <h2 class="search-section__title">相关频道</h2>
+            <h2 class="search-section__title">{{ t('search.channels') }}</h2>
             <div class="search-section__channels">
               <ChannelCard
                 v-for="channel in allResult.channels"
@@ -240,7 +243,7 @@ watch(
           </section>
 
           <section v-if="allResult && allResult.posts.length > 0" class="search-section">
-            <h2 class="search-section__title">相关帖子</h2>
+            <h2 class="search-section__title">{{ t('search.posts') }}</h2>
             <div class="search-section__posts">
               <PostCard v-for="post in allResult.posts" :key="post.id" :post="post" show-channel />
             </div>
@@ -250,12 +253,12 @@ watch(
 
       <template v-else-if="activeTab === 'channel'">
         <div class="search-sort">
-          <span class="muted">排序：</span>
+          <span class="muted">{{ t('search.sort') }}</span>
           <el-select v-model="channelSort" size="small" class="search-sort__select">
             <el-option v-for="option in channelSortOptions" :key="option.value" :label="option.label" :value="option.value" />
           </el-select>
         </div>
-        <LoadingState v-if="channelList.initialLoading.value" :rows="4" tip="正在搜索频道…" />
+        <LoadingState v-if="channelList.initialLoading.value" :rows="4" :tip="t('search.searchingChannels')" />
         <ErrorState
           v-else-if="channelList.error.value"
           :message="channelList.error.value"
@@ -263,8 +266,8 @@ watch(
         />
         <EmptyState
           v-else-if="channelList.items.value.length === 0"
-          title="没有找到相关频道"
-          description="试试其他关键词，或返回频道动态。"
+          :title="t('search.noChannels')"
+          :description="t('search.tryOther')"
         />
         <div v-else class="search-section">
           <div class="search-section__channels">
@@ -283,7 +286,7 @@ watch(
               :loading="channelList.loading.value"
               @click="channelList.loadMore()"
             >
-              加载更多频道
+              {{ t('search.loadMoreChannels') }}
             </el-button>
           </div>
         </div>
@@ -291,12 +294,12 @@ watch(
 
       <template v-else>
         <div class="search-sort">
-          <span class="muted">排序：</span>
+          <span class="muted">{{ t('search.sort') }}</span>
           <el-select v-model="postSort" size="small" class="search-sort__select">
             <el-option v-for="option in postSortOptions" :key="option.value" :label="option.label" :value="option.value" />
           </el-select>
         </div>
-        <LoadingState v-if="postList.initialLoading.value" :rows="4" tip="正在搜索帖子…" />
+        <LoadingState v-if="postList.initialLoading.value" :rows="4" :tip="t('search.searchingPosts')" />
         <ErrorState
           v-else-if="postList.error.value"
           :message="postList.error.value"
@@ -304,8 +307,8 @@ watch(
         />
         <EmptyState
           v-else-if="postList.items.value.length === 0"
-          title="没有找到相关帖子"
-          description="试试其他关键词，或返回频道动态。"
+          :title="t('search.noPosts')"
+          :description="t('search.tryOther')"
         />
         <div v-else class="search-section">
           <div class="search-section__posts">
@@ -319,7 +322,7 @@ watch(
               :loading="postList.loading.value"
               @click="postList.loadMore()"
             >
-              加载更多帖子
+              {{ t('search.loadMorePosts') }}
             </el-button>
           </div>
         </div>
@@ -328,8 +331,8 @@ watch(
 
     <EmptyState
       v-else
-      title="搜索群岛"
-      description="输入关键词，搜索频道与帖子。支持历史记录，单条删除或一键清空。"
+      :title="t('search.pageTitle')"
+      :description="t('search.hint')"
     />
   </div>
 </template>

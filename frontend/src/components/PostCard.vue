@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ChatDotRound, Share, Star, StarFilled, View } from '@element-plus/icons-vue'
@@ -11,6 +12,8 @@ import UserCardPopover from './UserCardPopover.vue'
 import MediaViewer from './MediaViewer.vue'
 import QuickCommentSheet from './QuickCommentSheet.vue'
 import ShareToDmDialog from './dm/ShareToDmDialog.vue'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -40,7 +43,7 @@ const commentsOpen = ref(false)
 const shareOpen = ref(false)
 
 const authorName = computed(
-  () => props.post.author.nickname || props.post.author.username || '岛民',
+  () => props.post.author.nickname || props.post.author.username || t('common.islander'),
 )
 const roleName = computed(
   () => props.post.author.channelRole?.name ?? props.post.author.roles?.[0]?.name ?? '',
@@ -51,7 +54,7 @@ const channelPath = computed(() => ({
   name: 'channel' as const,
   params: { id: props.post.channelId },
 }))
-const channelName = computed(() => props.post.channel?.name ?? '频道')
+const channelName = computed(() => props.post.channel?.name ?? t('common.channel'))
 const excerptText = computed(() => excerpt(props.post.content, 220))
 
 watch(
@@ -74,7 +77,7 @@ watch(
 )
 
 async function toggleLike(): Promise<void> {
-  if (!requireLogin('登录后可点赞')) return
+  if (!requireLogin(t('post.likeLoginRequired'))) return
   if (liking.value) return
   liking.value = true
   try {
@@ -100,7 +103,7 @@ function handleCommentCreated(_comment: Comment): void {
 }
 
 function handleAdminAction(action: string): void {
-  ElMessage.info(`${action}操作请在频道管理中心完成`)
+  ElMessage.info(t('post.adminHint', { action }))
 }
 </script>
 
@@ -115,7 +118,7 @@ function handleAdminAction(action: string): void {
 
     <header class="post-card__author">
       <UserCardPopover :user="post.author" :channel-id="post.channelId">
-        <button type="button" class="post-card__author-link" :aria-label="`查看 ${authorName} 的用户卡片`">
+        <button type="button" class="post-card__author-link" :aria-label="t('post.userCardOf', { name: authorName })">
           <UserAvatar :src="post.author.avatarUrl" :name="authorName" :size="34" />
           <span class="post-card__author-meta">
             <strong>{{ authorName }}</strong>
@@ -131,9 +134,13 @@ function handleAdminAction(action: string): void {
     </header>
 
     <div class="post-card__badges">
-      <el-tag v-if="post.isPinned" size="small" type="danger" effect="plain">置顶</el-tag>
-      <el-tag v-if="post.isEssence" size="small" type="warning" effect="plain">精华</el-tag>
+      <el-tag v-if="post.isPinned" size="small" type="danger" effect="plain">{{ t('post.pinned') }}</el-tag>
+      <el-tag v-if="post.isEssence" size="small" type="warning" effect="plain">{{ t('post.essence') }}</el-tag>
     </div>
+
+    <RouterLink v-if="post.coverUrl" :to="postPath" class="post-card__cover">
+      <img :src="post.coverUrl" :alt="post.title || t('post.cover')" loading="lazy" />
+    </RouterLink>
 
     <RouterLink :to="postPath" class="post-card__content">
       <h2 v-if="post.title" class="post-card__title line-clamp-2">{{ post.title }}</h2>
@@ -149,21 +156,21 @@ function handleAdminAction(action: string): void {
         :class="{ 'is-active': liked }"
         :disabled="liking"
         :aria-pressed="liked"
-        aria-label="点赞"
+        :aria-label="t('notifications.like')"
         @click="toggleLike"
       >
         <el-icon :size="16"><StarFilled v-if="liked" /><Star v-else /></el-icon>
         <span>{{ formatCount(likeCount) }}</span>
       </button>
 
-      <button type="button" class="post-action" aria-label="打开评论" @click="commentsOpen = true">
+      <button type="button" class="post-action" :aria-label="t('post.commentOpen')" @click="commentsOpen = true">
         <el-icon :size="16"><ChatDotRound /></el-icon>
         <span>{{ formatCount(commentCount) }}</span>
       </button>
 
-      <button type="button" class="post-action" aria-label="分享帖子" @click="shareOpen = true">
+      <button type="button" class="post-action" :aria-label="t('dm.chat.sharePost')" @click="shareOpen = true">
         <el-icon :size="16"><Share /></el-icon>
-        <span>分享</span>
+        <span>{{ t('common.share') }}</span>
       </button>
 
       <span class="post-card__views">
@@ -171,10 +178,10 @@ function handleAdminAction(action: string): void {
         {{ formatCount(post.viewCount) }}
       </span>
 
-      <div v-if="adminMode" class="post-card__admin" aria-label="管理操作">
-        <button type="button" class="post-action post-action--admin" @click="handleAdminAction('置顶')">置顶</button>
-        <button type="button" class="post-action post-action--admin" @click="handleAdminAction('精华')">加精</button>
-        <button type="button" class="post-action post-action--admin" @click="handleAdminAction('删除')">删除</button>
+      <div v-if="adminMode" class="post-card__admin" :aria-label="t('post.adminActions')">
+        <button type="button" class="post-action post-action--admin" @click="handleAdminAction(t('post.pinned'))">{{ t('post.pinned') }}</button>
+        <button type="button" class="post-action post-action--admin" @click="handleAdminAction(t('post.essence'))">{{ t('post.feature') }}</button>
+        <button type="button" class="post-action post-action--admin" @click="handleAdminAction(t('common.delete'))">{{ t('common.delete') }}</button>
       </div>
     </footer>
 
@@ -286,6 +293,22 @@ function handleAdminAction(action: string): void {
 .post-card__content {
   display: block;
   color: inherit;
+}
+
+.post-card__cover {
+  display: block;
+  margin: var(--isles-space-2) 0 var(--isles-space-1);
+  overflow: hidden;
+  background: var(--isles-surface-muted);
+  border-radius: var(--isles-radius-md);
+  aspect-ratio: 16 / 9;
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
 }
 
 .post-card__title {
