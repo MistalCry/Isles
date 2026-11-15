@@ -50,6 +50,73 @@ public interface ChannelMapper extends BaseMapper<Channel> {
                                 @Param("limit") int limit);
 
     /**
+     * 搜索频道 - 按成员数排序（偏移分页，docs/03 FR-SRCH-06）。
+     */
+    @Select("""
+            SELECT * FROM channels
+            WHERE status = 'ACTIVE' AND deleted_at IS NULL
+              AND (type = 'PUBLIC' OR visibility = 'PUBLIC_VISIBLE')
+              AND (name LIKE #{pattern} OR description LIKE #{pattern})
+            ORDER BY member_count DESC, id DESC
+            LIMIT #{limit} OFFSET #{offset}
+            """)
+    List<Channel> searchVisibleByMembers(@Param("pattern") String pattern,
+                                         @Param("offset") int offset,
+                                         @Param("limit") int limit);
+
+    /**
+     * 搜索频道 - 按活跃度（帖子数）排序。
+     */
+    @Select("""
+            SELECT * FROM channels
+            WHERE status = 'ACTIVE' AND deleted_at IS NULL
+              AND (type = 'PUBLIC' OR visibility = 'PUBLIC_VISIBLE')
+              AND (name LIKE #{pattern} OR description LIKE #{pattern})
+            ORDER BY post_count DESC, id DESC
+            LIMIT #{limit} OFFSET #{offset}
+            """)
+    List<Channel> searchVisibleByActive(@Param("pattern") String pattern,
+                                        @Param("offset") int offset,
+                                        @Param("limit") int limit);
+
+    /**
+     * 搜索频道 - 相关度（名称命中权重高于简介，docs/03 §7）。
+     */
+    @Select("""
+            SELECT * FROM channels
+            WHERE status = 'ACTIVE' AND deleted_at IS NULL
+              AND (type = 'PUBLIC' OR visibility = 'PUBLIC_VISIBLE')
+              AND (name LIKE #{pattern} OR description LIKE #{pattern})
+            ORDER BY (name LIKE #{pattern}) DESC, member_count DESC, id DESC
+            LIMIT #{limit} OFFSET #{offset}
+            """)
+    List<Channel> searchVisibleByRelevance(@Param("pattern") String pattern,
+                                           @Param("offset") int offset,
+                                           @Param("limit") int limit);
+
+    /**
+     * 推荐候选频道：公开、活跃、且当前用户未加入（按帖子数/成员数排序）。
+     */
+    @Select("""
+            SELECT * FROM channels c
+            WHERE c.status = 'ACTIVE' AND c.deleted_at IS NULL AND c.type = 'PUBLIC'
+              AND NOT EXISTS (
+                  SELECT 1 FROM channel_members m
+                  WHERE m.channel_id = c.id AND m.user_id = #{userId}
+                    AND m.status IN ('ACTIVE', 'MUTED')
+              )
+            ORDER BY c.post_count DESC, c.member_count DESC, c.id DESC
+            LIMIT #{limit}
+            """)
+    List<Channel> selectRecommendationCandidates(@Param("userId") String userId, @Param("limit") int limit);
+
+    /**
+     * 全部活跃频道 ID（统计任务遍历用）。
+     */
+    @Select("SELECT id FROM channels WHERE status = 'ACTIVE' AND deleted_at IS NULL")
+    List<String> selectActiveChannelIds();
+
+    /**
      * 原子更新成员数。
      */
     @Update("""

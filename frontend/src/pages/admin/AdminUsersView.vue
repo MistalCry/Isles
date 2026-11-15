@@ -1,0 +1,233 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Refresh, Search } from '@element-plus/icons-vue'
+import EmptyState from '@/components/EmptyState.vue'
+import ErrorState from '@/components/ErrorState.vue'
+import LoadingState from '@/components/LoadingState.vue'
+import UserAvatar from '@/components/UserAvatar.vue'
+import {
+  banAdminUser,
+  listAdminUsers,
+  unbanAdminUser,
+  type AdminUser,
+  type AdminUserPage,
+} from './adminApi'
+import { resolveErrorMessage } from '@/api/client'
+import { formatDateTime } from '@/utils/format'
+
+const keyword = ref('')
+const status = ref('')
+const page = ref(1)
+const size = ref(20)
+const data = ref<AdminUserPage | null>(null)
+const loading = ref(false)
+const error = ref<string | null>(null)
+
+async function load(): Promise<void> {
+  loading.value = true
+  error.value = null
+  try {
+    data.value = await listAdminUsers({
+      keyword: keyword.value.trim() || undefined,
+      status: status.value || undefined,
+      page: page.value,
+      size: size.value,
+    })
+  } catch (cause) {
+    error.value = resolveErrorMessage(cause, '用户列表加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function search(): void {
+  page.value = 1
+  void load()
+}
+
+async function toggleStatus(user: AdminUser): Promise<void> {
+  const banned = user.status === 'BANNED'
+  const confirmed = await ElMessageBox.confirm(
+    banned ? `确定解禁用户「${user.nickname || user.username}」？` : `确定禁用用户「${user.nickname || user.username}」？禁用后无法登录与访问。`,
+    banned ? '解禁用户' : '禁用用户',
+    { type: 'warning' },
+  ).catch(() => false)
+  if (!confirmed) return
+  try {
+    if (banned) {
+      await unbanAdminUser(user.id)
+      ElMessage.success('已解禁')
+    } else {
+      await banAdminUser(user.id)
+      ElMessage.success('已禁用')
+    }
+    await load()
+  } catch (cause) {
+    ElMessage.error(resolveErrorMessage(cause, '操作失败'))
+  }
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <section class="admin-users">
+    <header class="admin-section-head">
+      <div>
+        <h2 class="admin-section-title">用户管理</h2>
+        <p class="admin-section-subtitle">禁用/解禁用户账号；禁用后该用户无法登录（status=BANNED）</p>
+      </div>
+      <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
+    </header>
+
+    <div class="admin-filters">
+      <el-input
+        v-model="keyword"
+        placeholder="搜索用户名 / 昵称"
+        clearable
+        class="admin-filters__keyword"
+        @keydown.enter="search"
+      />
+      <el-select v-model="status" placeholder="全部状态" clearable class="admin-filters__select" @change="search">
+        <el-option label="正常" value="ACTIVE" />
+        <el-option label="已禁用" value="BANNED" />
+        <el-option label="已停用" value="DISABLED" />
+      </el-select>
+      <el-button type="primary" :icon="Search" @click="search">查询</el-button>
+    </div>
+
+    <LoadingState v-if="loading && !data" :rows="3" />
+    <ErrorState v-else-if="error" :message="error" @retry="load" />
+    <EmptyState v-else-if="!data || data.items.length === 0" title="没有匹配的用户" description="调整筛选条件后重试。" />
+    <template v-else>
+      <el-table :data="data.items" class="admin-table" row-key="id">
+        <el-table-column label="用户" min-width="220">
+          <template #default="{ row }">
+            <div class="user-cell">
+              <UserAvatar :src="row.avatarUrl" :name="row.nickname || row.username" :size="32" />
+              <div class="user-cell__meta">
+                <p class="user-cell__name">{{ row.nickname || row.username }}</p>
+                <p class="user-cell__sub">@{{ row.username }}</p>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.status === 'ACTIVE' ? 'success' : 'danger'" effect="plain">
+              {{ row.status }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="平台角色" width="120">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.platformRole === 'ADMIN' ? 'warning' : 'info'" effect="plain">
+              {{ row.platformRole }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="注册时间" width="160">
+          <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="120" align="right">
+          <template #default="{ row }">
+            <el-button
+              size="small"
+              link
+              :type="row.status === 'BANNED' ? 'primary' : 'danger'"
+              @click="toggleStatus(row as AdminUser)"
+            >
+              {{ row.status === 'BANNED' ? '解禁' : '禁用' }}
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <footer class="admin-pager">
+        <span>共 {{ data.total }} 条</span>
+        <el-pagination
+          v-model:current-page="page"
+          :page-size="size"
+          layout="prev, pager, next"
+          :total="data.total"
+          @current-change="load"
+        />
+      </footer>
+    </template>
+  </section>
+</template>
+
+<style scoped lang="scss">
+.admin-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--isles-space-4);
+}
+
+.admin-section-title {
+  font-size: var(--isles-font-lg);
+  font-weight: 600;
+}
+
+.admin-section-subtitle {
+  margin-top: var(--isles-space-1);
+  color: var(--isles-text-muted);
+  font-size: var(--isles-font-sm);
+}
+
+.admin-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--isles-space-2);
+  margin-bottom: var(--isles-space-3);
+}
+
+.admin-filters__keyword {
+  width: 240px;
+}
+
+.admin-filters__select {
+  width: 140px;
+}
+
+.admin-table {
+  background: var(--isles-surface);
+  border: 1px solid var(--isles-border);
+  border-radius: var(--isles-radius-lg);
+}
+
+.user-cell {
+  display: flex;
+  gap: var(--isles-space-2);
+  align-items: center;
+}
+
+.user-cell__meta {
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.user-cell__name {
+  overflow: hidden;
+  font-size: var(--isles-font-sm);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-cell__sub {
+  color: var(--isles-text-muted);
+  font-size: var(--isles-font-xs);
+}
+
+.admin-pager {
+  display: flex;
+  gap: var(--isles-space-3);
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--isles-space-3);
+  color: var(--isles-text-muted);
+  font-size: var(--isles-font-xs);
+}
+</style>

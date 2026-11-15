@@ -26,6 +26,9 @@ spring:
   jackson:
     # Boot 4 / Jackson 3：日期时间默认按 ISO-8601 输出；Jackson 3 已无 WRITE_DATES_AS_TIMESTAMPS 配置项
     time-zone: UTC
+    # Jackson 3 默认对「原始类型收到 null」报错；请求体省略可选 boolean 字段时不应 400
+    deserialization:
+      fail-on-null-for-primitives: false
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -58,7 +61,7 @@ management:
       show-details: never
   health:
     redis:
-      # M1 未使用 Redis（令牌走 DB、限流 M2 接入），避免本机无 Redis 时健康检查误报 DOWN
+      # 令牌存 DB、单机限流走内存；Redis 仅多实例共享限流时使用，避免本机无 Redis 时健康检查误报 DOWN
       enabled: false
 
 app:
@@ -74,7 +77,38 @@ app:
     cookie-secure: ${COOKIE_SECURE:false}
     cookie-same-site: Lax
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+    # 浏览器通过 Vite 代理访问时仍会带上 Origin，localhost 与 127.0.0.1 视为不同来源；
+    # 本地开发默认放行两个主机名的任意端口（含通配符），生产用 CORS_ALLOWED_ORIGINS 显式覆盖为正式域名。
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,http://localhost:*,http://127.0.0.1:*}
+  # 接口限流（docs/07 §7）：单机用 memory，多实例部署切换 redis（需 Redis 7）
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    store: ${RATE_LIMIT_STORE:memory}
+    # 部署在 Nginx 之后设为 true，按 X-Forwarded-For 首个地址计数
+    trust-forwarded-for: ${RATE_LIMIT_TRUST_FORWARDED_FOR:false}
+  # 平台管理员配置白名单：逗号分隔的用户名，命中即视为平台管理员（与 users.platform_role=ADMIN 并存）
+  platform-admin-usernames: ${PLATFORM_ADMIN_USERNAMES:}
+  # AI 能力（频道问问 / 频道助手）：模型配置存 DB（ai_model_configs），这里只放行为参数
+  ai:
+    # 频道助手自动任务调度开关（关闭后仅保留手动触发）
+    scheduler-enabled: ${AI_SCHEDULER_ENABLED:true}
+    # 每小时扫描一次待执行任务（Spring 六段 cron，UTC）
+    task-cron: ${AI_TASK_CRON:0 0 * * * *}
+    # 调用模型默认超时与重试（模型配置可覆盖超时）
+    default-timeout-seconds: 60
+    max-retries: 1
+    # SSE 流式连接最长存活时间（秒）
+    stream-timeout-seconds: 120
+    # 检索上下文：公开帖子 TopN 与拼装后历史消息上限
+    context-top-n: 8
+    history-max-messages: 20
+    # 单用户每日提问配额与并发上限（docs/07 §7）
+    daily-quota: 200
+    max-concurrent: 1
+    # API Key 落库加密密钥（生产必须配置）；为空时明文存储并打 WARN
+    api-key-secret: ${AI_API_KEY_SECRET:}
+    # 单次请求携带文本上限（字符，粗略 token 控制）
+    max-context-chars: 8000
 
 logging:
   level:

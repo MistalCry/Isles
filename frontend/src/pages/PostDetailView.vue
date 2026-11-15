@@ -1,20 +1,22 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ArrowLeft, ChatDotRound, EditPen, Share, Star, StarFilled, View } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, ChatDotRound, Share, Star, StarFilled, View } from '@element-plus/icons-vue'
-import { postsApi } from '@/api'
+import { channelsApi, postsApi } from '@/api'
 import { AppError, resolveErrorMessage } from '@/api/client'
 import { useRequireLogin } from '@/composables/useRequireLogin'
-import { absoluteUrl, formatCount, formatDateTime, sortMedia } from '@/utils/format'
-import { copyText } from '@/utils/clipboard'
+import { useAuthStore } from '@/stores/auth'
+import { formatCount, formatDateTime, sortMedia } from '@/utils/format'
 import { renderContent } from '@/utils/sanitize'
 import type { Post } from '@/types/models'
 import UserAvatar from '@/components/UserAvatar.vue'
 import UserCardPopover from '@/components/UserCardPopover.vue'
 import MediaViewer from '@/components/MediaViewer.vue'
 import CommentSection from '@/components/CommentSection.vue'
+import RichTextEditor from '@/components/RichTextEditor.vue'
 import ReportDialog from '@/components/ReportDialog.vue'
+import ShareToDmDialog from '@/components/dm/ShareToDmDialog.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 
@@ -27,6 +29,13 @@ const loading = ref(true)
 const errorMessage = ref('')
 const errorStatus = ref(0)
 const reportOpen = ref(false)
+const shareOpen = ref(false)
+const editOpen = ref(false)
+const editSaving = ref(false)
+const auth = useAuthStore()
+const editForm = reactive({ title: '', content: '' })
+/** null = 未知（不阻塞交互，由后端兜底）；false = 确认未加入频道 */
+const joined = ref<boolean | null>(null)
 const commentsRef = ref<HTMLElement | null>(null)
 
 const liked = ref(false)
@@ -47,6 +56,50 @@ const safeHtml = computed(() =>
 )
 const media = computed(() => sortMedia(post.value?.media))
 
+async function loadMembership(channelId: string): Promise<void> {
+  try {
+    const channel = await channelsApi.getChannel(channelId)
+    joined.value = Boolean(channel.isJoined ?? channel.joined)
+  } catch {
+    joined.value = null
+  }
+}
+
+const canComment = computed(() => joined.value !== false)
+const isAuthor = computed(() => Boolean(post.value && auth.currentUser?.id === post.value.author.id))
+const isRichText = computed(() => post.value?.contentFormat === 'HTML')
+
+function openEdit(): void {
+  if (!post.value) return
+  editForm.title = post.value.title ?? ''
+  editForm.content = post.value.content ?? ''
+  editOpen.value = true
+}
+
+async function saveEdit(): Promise<void> {
+  if (!post.value) return
+  const plain = editForm.content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+  if (!plain) {
+    ElMessage.warning('正文不能为空')
+    return
+  }
+  editSaving.value = true
+  try {
+    const updated = await postsApi.updatePost(post.value.id, {
+      title: editForm.title.trim() || undefined,
+      content: editForm.content,
+      contentFormat: isRichText.value ? 'HTML' : 'PLAIN',
+    })
+    post.value = updated
+    editOpen.value = false
+    ElMessage.success('帖子已更新')
+  } catch (err) {
+    ElMessage.error(resolveErrorMessage(err, '保存失败，请稍后重试'))
+  } finally {
+    editSaving.value = false
+  }
+}
+
 async function loadPost(): Promise<void> {
   const id = String(route.params.id ?? '')
   if (!id) return
@@ -59,6 +112,8 @@ async function loadPost(): Promise<void> {
     liked.value = Boolean(data.isLiked)
     likeCount.value = data.likeCount ?? 0
     commentCount.value = data.commentCount ?? 0
+    void loadMembership(data.channelId)
+    highlightTargetComment()
   } catch (err) {
     post.value = null
     const status = err instanceof AppError ? err.status : 0
@@ -67,6 +122,26 @@ async function loadPost(): Promise<void> {
   } finally {
     loading.value = false
   }
+}
+
+/** 从通知跳转时定位到对应评论（FR-NTF-03）。 */
+function highlightTargetComment(): void {
+  const commentId = String(route.query.commentId ?? '')
+  if (!commentId) return
+  let attempts = 0
+  const tryLocate = (): void => {
+    const target = document.querySelector(`[data-comment-id="${commentId}"]`)
+    if (target instanceof HTMLElement) {
+      commentsRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      target.classList.add('comment-highlight')
+      window.setTimeout(() => target.classList.remove('comment-highlight'), 2400)
+      return
+    }
+    attempts += 1
+    if (attempts < 10) window.setTimeout(tryLocate, 400)
+  }
+  window.setTimeout(tryLocate, 400)
 }
 
 onMounted(() => {
@@ -99,21 +174,6 @@ async function toggleLike(): Promise<void> {
     // 错误提示由 axios 拦截器统一处理
   } finally {
     liking.value = false
-  }
-}
-
-async function handleShare(): Promise<void> {
-  if (!post.value) return
-  const copied = await copyText(absoluteUrl(`/posts/${post.value.id}`))
-  if (copied) {
-    ElMessage.success('链接已复制')
-  } else {
-    ElMessage.warning('复制失败，请手动复制地址栏链接')
-  }
-  try {
-    await postsApi.countPostShare(post.value.id)
-  } catch {
-    // 分享计数失败不打扰用户
   }
 }
 
@@ -179,6 +239,7 @@ function goBack(): void {
           <el-tag v-if="post.isEssence" size="small" type="warning" effect="plain">精华</el-tag>
 
           <div class="post-detail__head-actions">
+            <el-button v-if="isAuthor" text size="small" :icon="EditPen" @click="openEdit">编辑</el-button>
             <el-button text size="small" @click="openReport">举报</el-button>
           </div>
         </header>
@@ -217,9 +278,9 @@ function goBack(): void {
             <el-icon :size="18"><ChatDotRound /></el-icon>
             <span>{{ formatCount(commentCount) }} 评论</span>
           </button>
-          <button type="button" class="detail-action" @click="handleShare">
+          <button type="button" class="detail-action" @click="shareOpen = true">
             <el-icon :size="18"><Share /></el-icon>
-            <span>复制链接分享</span>
+            <span>分享帖子</span>
           </button>
           <span class="detail-action detail-action--static">
             <el-icon :size="16"><View /></el-icon>
@@ -234,11 +295,25 @@ function goBack(): void {
           :post-author-id="post.author.id"
           :channel-id="post.channelId"
           :comment-count="commentCount"
+          :can-comment="canComment"
           @created="handleCommentCreated"
         />
       </section>
 
+      <el-dialog v-model="editOpen" title="编辑帖子" width="min(680px, 96vw)" top="6vh" append-to-body>
+        <el-input v-model="editForm.title" maxlength="200" show-word-limit placeholder="标题（选填）" />
+        <div class="post-detail__edit-body">
+          <RichTextEditor v-if="isRichText" v-model="editForm.content" :min-height="240" />
+          <el-input v-else v-model="editForm.content" type="textarea" :rows="8" maxlength="5000" show-word-limit />
+        </div>
+        <template #footer>
+          <el-button @click="editOpen = false">取消</el-button>
+          <el-button type="primary" :loading="editSaving" @click="saveEdit">保存</el-button>
+        </template>
+      </el-dialog>
+
       <ReportDialog v-model="reportOpen" target-type="post" :target-id="post.id" />
+      <ShareToDmDialog v-model="shareOpen" :post="post" />
     </template>
   </div>
 </template>
@@ -359,6 +434,10 @@ function goBack(): void {
   border-top: 1px solid var(--isles-border);
 }
 
+.post-detail__edit-body {
+  margin-top: var(--isles-space-3);
+}
+
 .detail-action {
   display: inline-flex;
   gap: var(--isles-space-1);
@@ -401,6 +480,14 @@ function goBack(): void {
 .post-detail__comments {
   margin-top: var(--isles-space-4);
   padding: var(--isles-space-6);
+}
+
+:deep(.comment-highlight) {
+  outline: 2px solid var(--isles-primary);
+  outline-offset: 2px;
+  border-radius: var(--isles-radius-sm);
+  background: var(--isles-primary-soft);
+  transition: background 0.3s ease;
 }
 
 @media (max-width: 767px) {

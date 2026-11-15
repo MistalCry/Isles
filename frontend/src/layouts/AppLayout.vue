@@ -1,14 +1,25 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
-import { Menu, Search } from '@element-plus/icons-vue'
+import { Bell, Menu, Search } from '@element-plus/icons-vue'
 import Sidebar from '@/components/Sidebar.vue'
 import { useChannelStore } from '@/stores/channel'
+import { useAuthStore } from '@/stores/auth'
+import { useNotificationStore } from '@/stores/notifications'
+import { useDmStore } from '@/stores/dm'
+import { useRealtimeStore } from '@/stores/realtime'
 import { APP_NAME } from '@/constants/app'
 
 const route = useRoute()
 const router = useRouter()
 const channelStore = useChannelStore()
+const auth = useAuthStore()
+const notificationStore = useNotificationStore()
+const dmStore = useDmStore()
+const realtimeStore = useRealtimeStore()
+const { isAuthenticated } = storeToRefs(auth)
+const { unreadCount } = storeToRefs(notificationStore)
 const mobileNavOpen = ref(false)
 
 function closeMobileNav(): void {
@@ -18,6 +29,31 @@ function closeMobileNav(): void {
 function goSearch(): void {
   void router.push({ name: 'search' })
 }
+
+function goNotifications(): void {
+  void router.push({ name: 'notifications' })
+}
+
+// 登录后连接 STOMP 实时通道并补拉未读；退出登录清理会话级状态
+watch(
+  [() => auth.accessToken, isAuthenticated],
+  () => {
+    if (auth.accessToken && isAuthenticated.value) {
+      realtimeStore.connect()
+      void notificationStore.refreshUnread()
+      void dmStore.fetchConversations(true)
+    } else {
+      realtimeStore.disconnect()
+      notificationStore.clear()
+      dmStore.clear()
+    }
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  realtimeStore.disconnect()
+})
 
 watch(
   () => route.fullPath,
@@ -53,9 +89,16 @@ watch(
           <el-icon :size="20"><Menu /></el-icon>
         </button>
         <RouterLink to="/feed" class="mobile-topbar__brand">{{ APP_NAME }}</RouterLink>
-        <button type="button" class="mobile-topbar__icon" aria-label="搜索" @click="goSearch">
-          <el-icon :size="20"><Search /></el-icon>
-        </button>
+        <div class="mobile-topbar__actions">
+          <button type="button" class="mobile-topbar__icon" aria-label="通知" @click="goNotifications">
+            <el-badge :value="unreadCount" :max="99" :hidden="unreadCount === 0">
+              <el-icon :size="20"><Bell /></el-icon>
+            </el-badge>
+          </button>
+          <button type="button" class="mobile-topbar__icon" aria-label="搜索" @click="goSearch">
+            <el-icon :size="20"><Search /></el-icon>
+          </button>
+        </div>
       </header>
 
       <main class="app-layout__content">
@@ -122,6 +165,12 @@ watch(
     font-size: var(--isles-font-md);
     font-weight: 600;
     letter-spacing: 0.06em;
+  }
+
+  .mobile-topbar__actions {
+    display: flex;
+    gap: var(--isles-space-1);
+    align-items: center;
   }
 
   .mobile-topbar__icon {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { searchApi } from '@/api'
+import { searchApi, channelsApi } from '@/api'
 import { resolveErrorMessage } from '@/api/client'
 import { useCursorList } from '@/composables/useCursorList'
 import type { ChannelSummary, Post } from '@/types/models'
@@ -19,17 +19,47 @@ const router = useRouter()
 
 const activeTab = ref<SearchTab>(normalizeTab(route.query.type))
 const keyword = computed(() => String(route.query.q ?? '').trim())
-const channelScope = computed(() => String(route.query.channelId ?? '').trim())
+const channelId = computed(() => String(route.query.channelId ?? '').trim())
+const scope = computed<'global' | 'channel'>(() =>
+  route.query.scope === 'channel' && channelId.value ? 'channel' : 'global',
+)
+const channelName = ref('')
+const channelSort = ref('relevance')
+const postSort = ref('relevance')
+
+const channelSortOptions = [
+  { value: 'relevance', label: '相关度' },
+  { value: 'memberCount', label: '按人数' },
+  { value: 'activity', label: '按活跃度' },
+]
+const postSortOptions = [
+  { value: 'relevance', label: '相关度' },
+  { value: 'createdAt', label: '按发布时间' },
+]
 
 const allLoading = ref(false)
 const allError = ref('')
 const allResult = ref<{ channels: ChannelSummary[]; posts: Post[] } | null>(null)
 
 const channelList = useCursorList<ChannelSummary>((cursor) =>
-  searchApi.searchChannels({ q: keyword.value, cursor, limit: 20 }),
+  searchApi.searchChannels({
+    q: keyword.value,
+    cursor,
+    limit: 20,
+    scope: scope.value,
+    channelId: channelId.value || undefined,
+    sort: channelSort.value,
+  }),
 )
 const postList = useCursorList<Post>((cursor) =>
-  searchApi.searchPosts({ q: keyword.value, cursor, limit: 20 }),
+  searchApi.searchPosts({
+    q: keyword.value,
+    cursor,
+    limit: 20,
+    scope: scope.value,
+    channelId: channelId.value || undefined,
+    sort: postSort.value,
+  }),
 )
 
 const tabs: Array<{ key: SearchTab; label: string }> = [
@@ -54,7 +84,10 @@ async function searchAllResults(): Promise<void> {
   allLoading.value = true
   allError.value = ''
   try {
-    allResult.value = await searchApi.searchAll(keyword.value)
+    allResult.value = await searchApi.searchAll(keyword.value, {
+      scope: scope.value,
+      channelId: channelId.value || undefined,
+    })
   } catch (error) {
     allError.value = resolveErrorMessage(error, '搜索失败，请稍后重试')
     allResult.value = null
@@ -101,6 +134,9 @@ function handleSubmit(query: string): void {
     query: {
       q: query,
       ...(activeTab.value === 'all' ? {} : { type: activeTab.value }),
+      ...(scope.value === 'channel'
+        ? { scope: 'channel', channelId: channelId.value }
+        : {}),
     },
   })
 }
@@ -113,10 +149,33 @@ function setTab(tab: SearchTab): void {
     query: {
       q: keyword.value,
       ...(tab === 'all' ? {} : { type: tab }),
-      ...(channelScope.value ? { channelId: channelScope.value } : {}),
+      ...(scope.value === 'channel'
+        ? { scope: 'channel', channelId: channelId.value }
+        : {}),
     },
   })
 }
+
+watch([channelSort, postSort], () => {
+  runSearch()
+})
+
+watch(
+  channelId,
+  async (id) => {
+    if (!id || scope.value !== 'channel') {
+      channelName.value = ''
+      return
+    }
+    try {
+      const channel = await channelsApi.getChannel(id)
+      channelName.value = channel.name
+    } catch {
+      channelName.value = ''
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -129,11 +188,17 @@ function setTab(tab: SearchTab): void {
     </header>
 
     <div class="search-page__panel isles-card">
-      <SearchPanel :initial-keyword="keyword" :navigate-on-submit="false" @submit="handleSubmit" />
+      <SearchPanel
+        :initial-keyword="keyword"
+        :navigate-on-submit="false"
+        :scope="scope"
+        :channel-id="channelId"
+        @submit="handleSubmit"
+      />
     </div>
 
-    <p v-if="channelScope" class="muted search-page__scope-hint">
-      频道内搜索（{{ channelScope }}）将在 M2 上线，这里先展示全站搜索结果。
+    <p v-if="scope === 'channel'" class="muted search-page__scope-hint">
+      频道内搜索：{{ channelName || channelId }}，仅展示该频道的公开内容。
     </p>
 
     <template v-if="keyword">
@@ -184,6 +249,12 @@ function setTab(tab: SearchTab): void {
       </template>
 
       <template v-else-if="activeTab === 'channel'">
+        <div class="search-sort">
+          <span class="muted">排序：</span>
+          <el-select v-model="channelSort" size="small" class="search-sort__select">
+            <el-option v-for="option in channelSortOptions" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
+        </div>
         <LoadingState v-if="channelList.initialLoading.value" :rows="4" tip="正在搜索频道…" />
         <ErrorState
           v-else-if="channelList.error.value"
@@ -219,6 +290,12 @@ function setTab(tab: SearchTab): void {
       </template>
 
       <template v-else>
+        <div class="search-sort">
+          <span class="muted">排序：</span>
+          <el-select v-model="postSort" size="small" class="search-sort__select">
+            <el-option v-for="option in postSortOptions" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
+        </div>
         <LoadingState v-if="postList.initialLoading.value" :rows="4" tip="正在搜索帖子…" />
         <ErrorState
           v-else-if="postList.error.value"
@@ -327,5 +404,17 @@ function setTab(tab: SearchTab): void {
   display: flex;
   justify-content: center;
   padding-top: var(--isles-space-3);
+}
+
+.search-sort {
+  display: flex;
+  gap: var(--isles-space-2);
+  align-items: center;
+  margin-bottom: var(--isles-space-3);
+  font-size: var(--isles-font-xs);
+}
+
+.search-sort__select {
+  width: 140px;
 }
 </style>

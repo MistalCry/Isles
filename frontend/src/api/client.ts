@@ -72,11 +72,24 @@ function toAppError(error: AxiosError<ApiErrorEnvelope>): AppError {
   }
   const { status, data } = error.response
   const envelope = data && typeof data === 'object' && 'error' in data ? (data as ApiErrorEnvelope).error : undefined
-  // 代理层（Vite/Nginx）在服务不可达时可能返回 HTML 错误页而非统一错误信封，按网络错误处理
-  if (!envelope && typeof data === 'string') {
+  // 代理层（Vite/Nginx）在服务不可达时可能返回 HTML 错误页而非统一错误信封。
+  // 只有网关级失败才算「连不上服务器」；4xx（如 CORS 拒绝返回 403 Invalid CORS request）
+  // 必须保留真实状态语义，否则用户会误以为后端没启动。
+  if (!envelope && (typeof data === 'string' || data === undefined)) {
+    const body = typeof data === 'string' ? data : ''
+    const gatewayFailure = status === 502 || status === 503 || status === 504
+      || /proxy|ECONNREFUSED|socket hang up|ERR_CONNECTION/i.test(body)
+    if (gatewayFailure) {
+      return new AppError({
+        code: 'NETWORK_ERROR',
+        message: NETWORK_ERROR_MESSAGE,
+        status,
+        cause: error,
+      })
+    }
     return new AppError({
-      code: 'NETWORK_ERROR',
-      message: NETWORK_ERROR_MESSAGE,
+      code: `HTTP_${status}`,
+      message: STATUS_MESSAGES[status] ?? `请求失败（HTTP ${status}）`,
       status,
       cause: error,
     })

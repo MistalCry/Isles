@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ChatDotRound, Plus } from '@element-plus/icons-vue'
-import { usersApi } from '@/api'
+import { friendsApi, usersApi } from '@/api'
 import { resolveErrorMessage } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { useDmStore } from '@/stores/dm'
 import { useRequireLogin } from '@/composables/useRequireLogin'
 import { formatDateTime, genderLabel } from '@/utils/format'
 import type { UserCard, UserSummary } from '@/types/models'
@@ -23,11 +25,16 @@ const props = withDefaults(
 )
 
 const auth = useAuthStore()
+const router = useRouter()
+const dm = useDmStore()
 const { requireLogin } = useRequireLogin()
 
 const card = ref<UserCard | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+const openingChat = ref(false)
+const requestingFriend = ref(false)
+const friendRequested = ref(false)
 let loadedKey = ''
 
 const isSelf = computed(() => Boolean(auth.currentUser && auth.currentUser.id === props.user.id))
@@ -54,17 +61,38 @@ watch(
   () => {
     card.value = null
     loadedKey = ''
+    friendRequested.value = false
+    openingChat.value = false
   },
 )
 
-function handleMessage(): void {
+async function handleMessage(): Promise<void> {
   if (!requireLogin('登录后可发送私信')) return
-  ElMessage.info('私信功能将在 M2 上线')
+  if (openingChat.value) return
+  openingChat.value = true
+  try {
+    const conversation = await dm.openConversationWithUser(props.user.id)
+    await router.push({ name: 'message-detail', params: { id: conversation.id } })
+  } catch (err) {
+    ElMessage.error(resolveErrorMessage(err, '无法发起私信，请稍后重试'))
+  } finally {
+    openingChat.value = false
+  }
 }
 
-function handleAddFriend(): void {
+async function handleAddFriend(): Promise<void> {
   if (!requireLogin('登录后可添加好友')) return
-  ElMessage.info('好友功能将在 M2 上线')
+  if (requestingFriend.value || friendRequested.value) return
+  requestingFriend.value = true
+  try {
+    await friendsApi.sendFriendRequest(props.user.id)
+    friendRequested.value = true
+    ElMessage.success('好友申请已发送，等待对方同意')
+  } catch (err) {
+    ElMessage.error(resolveErrorMessage(err, '好友申请发送失败'))
+  } finally {
+    requestingFriend.value = false
+  }
 }
 </script>
 
@@ -114,8 +142,18 @@ function handleAddFriend(): void {
 
         <div class="user-card__actions">
           <template v-if="!isSelf">
-            <el-button type="primary" size="small" :icon="ChatDotRound" @click="handleMessage">私信</el-button>
-            <el-button size="small" :icon="Plus" @click="handleAddFriend">加好友</el-button>
+            <el-button type="primary" size="small" :icon="ChatDotRound" :loading="openingChat" @click="handleMessage">
+              私信
+            </el-button>
+            <el-button
+              size="small"
+              :icon="Plus"
+              :loading="requestingFriend"
+              :disabled="friendRequested"
+              @click="handleAddFriend"
+            >
+              {{ friendRequested ? '已申请' : '加好友' }}
+            </el-button>
           </template>
           <span v-else class="muted">这是你自己</span>
         </div>

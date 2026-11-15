@@ -10,10 +10,12 @@ const props = withDefaults(
     channel: Channel
     joined?: boolean
     joining?: boolean
+    showSettings?: boolean
   }>(),
   {
     joined: false,
     joining: false,
+    showSettings: true,
   },
 )
 
@@ -84,7 +86,7 @@ const isPrivate = computed(() => props.channel.type === 'PRIVATE')
         <el-button circle aria-label="频道消息" @click="$emit('messages')">
           <el-icon><Bell /></el-icon>
         </el-button>
-        <el-button circle aria-label="频道设置" @click="$emit('settings')">
+        <el-button v-if="showSettings" circle aria-label="频道设置" @click="$emit('settings')">
           <el-icon><Setting /></el-icon>
         </el-button>
         <el-button

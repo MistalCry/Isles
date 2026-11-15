@@ -1,6 +1,8 @@
 package com.isles.channel.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.isles.channel.audit.AuditLogService;
+import com.isles.channel.audit.ChannelAuditLog;
 import com.isles.channel.dto.BoardResponse;
 import com.isles.channel.dto.ChannelResponse;
 import com.isles.channel.dto.CreateChannelRequest;
@@ -65,6 +67,7 @@ public class ChannelService {
     private final JoinRequestMapper joinRequestMapper;
     private final ChannelAccessService accessService;
     private final JsonSupport jsonSupport;
+    private final AuditLogService auditLogService;
 
     /**
      * 创建频道：单事务内完成频道、默认板块、四个系统身份组、频道主成员关系的创建，失败整体回滚。
@@ -129,6 +132,8 @@ public class ChannelService {
         channelMemberMapper.insert(ownerMember);
 
         log.info("频道创建成功 channelId={} channelNo={}", channel.getId(), channel.getChannelNo());
+        auditLogService.record(channel.getId(), ownerId, ChannelAuditLog.Action.CHANNEL_CREATE, "CHANNEL",
+                channel.getId(), Map.of("channelNo", channel.getChannelNo()));
         return toResponse(channel, true, SystemRoles.OWNER);
     }
 
@@ -194,6 +199,7 @@ public class ChannelService {
         channelMapper.addMemberCount(channelId, 1);
         channel.setMemberCount(channel.getMemberCount() + 1);
         log.info("加入频道成功 channelId={} userId={}", channelId, userId);
+        auditLogService.record(channelId, userId, ChannelAuditLog.Action.MEMBER_JOIN, "MEMBER", userId);
         return toResponse(channel, true, SystemRoles.MEMBER);
     }
 
@@ -204,6 +210,7 @@ public class ChannelService {
         accessService.requireVisibleChannel(channelId, viewerId);
         return boardMapper.selectList(Wrappers.<Board>lambdaQuery()
                         .eq(Board::getChannelId, channelId)
+                        .isNull(Board::getDeletedAt)
                         .orderByAsc(Board::getSort)
                         .orderByAsc(Board::getCreatedAt))
                 .stream()
@@ -236,6 +243,8 @@ public class ChannelService {
         channelInviteMapper.insert(invite);
         log.info("创建邀请链接 channelId={} inviteId={} requiresApproval={}", channelId, invite.getId(),
                 invite.getRequiresApproval());
+        auditLogService.record(channelId, userId, ChannelAuditLog.Action.INVITE_CREATE, "INVITE", invite.getId(),
+                Map.of("requiresApproval", invite.getRequiresApproval()));
         return new InviteCreateResponse(invite.getId(), rawToken, "/invites/" + rawToken,
                 invite.getRequiresApproval(), ClockTimes.toInstant(invite.getExpiresAt()), invite.getMaxUses());
     }
@@ -282,6 +291,8 @@ public class ChannelService {
             joinRequest.setStatus(JoinRequest.Status.PENDING.name());
             joinRequest.setCreatedAt(now);
             joinRequestMapper.insert(joinRequest);
+            auditLogService.record(channel.getId(), userId, ChannelAuditLog.Action.INVITE_ACCEPT, "JOIN_REQUEST",
+                    joinRequest.getId(), Map.of("status", "PENDING"));
             return new InviteAcceptResponse("PENDING", channel.getId(), joinRequest.getId());
         }
         addMember(channel.getId(), member, userId, now);
@@ -290,7 +301,24 @@ public class ChannelService {
             throw new AppException(ErrorCode.INVITE_EXHAUSTED);
         }
         log.info("通过邀请加入频道 channelId={} userId={}", channel.getId(), userId);
+        auditLogService.record(channel.getId(), userId, ChannelAuditLog.Action.INVITE_ACCEPT, "INVITE",
+                invite.getId(), Map.of("status", "JOINED"));
         return new InviteAcceptResponse("JOINED", channel.getId(), null);
+    }
+
+    /**
+     * 直接添加成员（供加入审批通过时复用，事务由调用方管理）。
+     */
+    @Transactional
+    public void addMemberDirectly(String channelId, String userId) {
+        Channel channel = accessService.requireActiveChannel(channelId);
+        ChannelMember member = accessService.findMember(channelId, userId);
+        if (ChannelAccessService.isActiveMember(member)) {
+            return;
+        }
+        addMember(channelId, member, userId, ClockTimes.nowUtc());
+        log.info("审批加入频道成功 channelId={} userId={}", channelId, userId);
+        auditLogService.record(channelId, userId, ChannelAuditLog.Action.MEMBER_JOIN, "MEMBER", userId);
     }
 
     /**

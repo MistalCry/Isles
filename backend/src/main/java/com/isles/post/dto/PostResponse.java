@@ -30,5 +30,6 @@ public record PostResponse(
         boolean liked,
         boolean pinned,
         boolean essence,
+        String status,
         Instant createdAt) {
 }

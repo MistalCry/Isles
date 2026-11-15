@@ -1,13 +1,31 @@
 import type {
+  AuditLogItem,
   Board,
   Channel,
+  ChannelMemberItem,
+  ChannelOverview,
+  ChannelRecommendation,
   ChannelRole,
+  ChannelRoleItem,
   ChannelSummary,
   Comment,
   ContentFormat,
+  DmConversation,
+  DmMessage,
+  DmPostShare,
+  FriendItem,
+  FriendRequestItem,
+  HotKeyword,
+  InviteLinkItem,
+  JoinRequestItem,
   LikeResult,
+  ManageStats,
   MediaItem,
+  NotificationItem,
   Post,
+  ReportItem,
+  StatDistributionItem,
+  TrendPoint,
   UserCard,
   UserSummary,
 } from '@/types/models'
@@ -81,9 +99,8 @@ export function toMediaItem(value: unknown): MediaItem {
 
 function normalizeContentFormat(value: unknown): ContentFormat {
   const raw = (str(value) ?? 'PLAIN').toUpperCase()
-  if (raw === 'HTML') return 'HTML'
-  if (raw === 'MARKDOWN') return 'MARKDOWN'
-  return 'TEXT'
+  // 历史数据里出现过 TEXT/MARKDOWN，统一归一到后端枚举（PLAIN/HTML）
+  return raw === 'HTML' ? 'HTML' : 'PLAIN'
 }
 
 export function toUserSummary(value: unknown): UserSummary {
@@ -119,13 +136,19 @@ export function toBoard(value: unknown): Board {
     id: str(raw.id) ?? '',
     channelId: str(raw.channelId) ?? '',
     name: str(raw.name) ?? '',
+    description: str(raw.description),
     sortOrder: typeof raw.sortOrder === 'number' ? raw.sortOrder : num(raw.sort),
+    sort: num(raw.sort),
+    postCount: num(raw.postCount),
   }
 }
 
 export function toChannelSummary(value: unknown): ChannelSummary {
   const raw = record(value) ?? {}
   const joined = raw.isJoined !== undefined ? bool(raw.isJoined) : bool(raw.joined)
+  const permissions = Array.isArray(raw.myPermissions)
+    ? (raw.myPermissions as unknown[]).filter((item): item is string => typeof item === 'string')
+    : null
   return {
     id: str(raw.id) ?? '',
     channelNo: (raw.channelNo as number | string | null) ?? null,
@@ -135,9 +158,15 @@ export function toChannelSummary(value: unknown): ChannelSummary {
     description: str(raw.description) ?? str(raw.summary),
     type: (str(raw.type) as ChannelSummary['type']) ?? undefined,
     visibility: (str(raw.visibility) as ChannelSummary['visibility']) ?? undefined,
+    ownerId: str(raw.ownerId) ?? undefined,
     memberCount: num(raw.memberCount),
     postCount: num(raw.postCount),
     isJoined: joined,
+    joined,
+    myRoleName: str(raw.myRoleName) ?? (record(raw.myRole) ? str((raw.myRole as Raw).name) : null),
+    myPermissions: permissions,
+    myMemberStatus: str(raw.myMemberStatus) ?? str(raw.memberStatus),
+    muteAllUntil: str(raw.muteAllUntil),
     createdAt: str(raw.createdAt) ?? undefined,
   }
 }
@@ -147,7 +176,6 @@ export function toChannel(value: unknown): Channel {
   const summary = toChannelSummary(raw)
   return {
     ...summary,
-    ownerId: str(raw.ownerId) ?? undefined,
     boards: Array.isArray(raw.boards) ? raw.boards.map((item) => toBoard(item)) : undefined,
     myRole: toChannelRole(raw.myRole) ?? (str(raw.myRoleName) ? { code: '', name: str(raw.myRoleName)! } : null),
   }
@@ -252,7 +280,7 @@ export function searchItemToPost(value: unknown): Post {
     author: toAuthor(raw),
     title: str(raw.title),
     content: str(raw.summary) ?? '',
-    contentFormat: 'TEXT',
+    contentFormat: 'PLAIN',
     media: [],
     coverUrl: null,
     likeCount: num(raw.likeCount),
@@ -281,3 +309,333 @@ export function toPage<T>(page: { items: unknown[]; nextCursor?: string | null; 
     total: page.total,
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* WP1：频道管理 / 权限 / 通知                                                  */
+/* -------------------------------------------------------------------------- */
+
+function toPermissionCodes(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string')
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(value)
+      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+export function toChannelRoleItem(value: unknown): ChannelRoleItem {
+  const raw = record(value) ?? {}
+  return {
+    id: str(raw.id) ?? '',
+    channelId: str(raw.channelId) ?? '',
+    name: str(raw.name) ?? '',
+    description: str(raw.description),
+    permissions: toPermissionCodes(raw.permissions),
+    scopeBoardId: str(raw.scopeBoardId),
+    isSystem: bool(raw.isSystem),
+    sort: num(raw.sort),
+    memberCount: raw.memberCount === undefined ? undefined : num(raw.memberCount),
+  }
+}
+
+export function toChannelMember(value: unknown): ChannelMemberItem {
+  const raw = record(value) ?? {}
+  const nestedUser = record(raw.user)
+  const source = nestedUser ?? raw
+  return {
+    id: str(raw.id) ?? undefined,
+    userId: str(raw.userId) ?? str(source.id) ?? '',
+    username: str(source.username) ?? str(raw.username) ?? '',
+    nickname: str(source.nickname) ?? str(raw.nickname),
+    avatarUrl: str(source.avatarUrl) ?? str(raw.avatarUrl),
+    roleId: str(raw.roleId),
+    roleName: str(raw.roleName) ?? str(raw.role),
+    status: str(raw.status),
+    mutedUntil: str(raw.mutedUntil),
+    joinedAt: str(raw.joinedAt),
+    signature: str(source.signature),
+  }
+}
+
+export function toInviteLink(value: unknown): InviteLinkItem {
+  const raw = record(value) ?? {}
+  return {
+    id: str(raw.id) ?? '',
+    channelId: str(raw.channelId) ?? undefined,
+    token: str(raw.token),
+    url: str(raw.url),
+    requiresApproval: bool(raw.requiresApproval),
+    expiresAt: str(raw.expiresAt),
+    maxUses: raw.maxUses === null || raw.maxUses === undefined ? null : num(raw.maxUses),
+    usedCount: num(raw.usedCount),
+    revokedAt: str(raw.revokedAt),
+    createdBy: str(raw.createdBy),
+    createdAt: str(raw.createdAt),
+  }
+}
+
+export function toJoinRequest(value: unknown): JoinRequestItem {
+  const raw = record(value) ?? {}
+  const nestedUser = record(raw.user) ?? record(raw.applicant)
+  const source = nestedUser ?? raw
+  return {
+    id: str(raw.id) ?? '',
+    channelId: str(raw.channelId) ?? undefined,
+    userId: str(raw.userId) ?? str(source.id) ?? '',
+    username: str(source.username) ?? '',
+    nickname: str(source.nickname) ?? str(raw.nickname),
+    avatarUrl: str(source.avatarUrl) ?? str(raw.avatarUrl),
+    inviteId: str(raw.inviteId),
+    status: str(raw.status) ?? 'PENDING',
+    createdAt: str(raw.createdAt),
+    reviewedAt: str(raw.reviewedAt),
+  }
+}
+
+export function toNotification(value: unknown): NotificationItem {
+  const raw = record(value) ?? {}
+  return {
+    id: str(raw.id) ?? '',
+    type: str(raw.type) ?? 'SYSTEM',
+    channelId: str(raw.channelId),
+    postId: str(raw.postId),
+    commentId: str(raw.commentId),
+    actorId: str(raw.actorId),
+    actorNickname: str(raw.actorNickname) ?? str(raw.actorName),
+    title: str(raw.title),
+    content: str(raw.content),
+    read: raw.isRead !== undefined ? bool(raw.isRead) : bool(raw.read),
+    createdAt: str(raw.createdAt) ?? '',
+  }
+}
+
+export function toChannelOverview(value: unknown): ChannelOverview {
+  const raw = record(value) ?? {}
+  // 后端 /stats/overview 把昨日指标放在 yesterday 子对象中，这里兼容扁平与嵌套两种形状
+  const yesterday = record(raw.yesterday) ?? {}
+  return {
+    channelId: str(raw.channelId) ?? '',
+    name: str(raw.name) ?? undefined,
+    memberCount: num(raw.memberCount),
+    postCount: num(raw.postCount),
+    yesterdayNewMembers: num(raw.yesterdayNewMembers ?? raw.newMembers ?? yesterday.newMembers),
+    yesterdayVisitors: num(raw.yesterdayVisitors ?? raw.visitors ?? yesterday.visitUv),
+    activeRate: num(raw.activeRate ?? yesterday.activeRate),
+    yesterdayNewPosts: num(raw.yesterdayNewPosts ?? raw.newPosts ?? yesterday.posts),
+    totalViews: num(raw.totalViews ?? yesterday.postViews),
+    totalInteractions: num(raw.totalInteractions ?? yesterday.interactions),
+  }
+}
+
+function toTrendPoint(value: unknown): TrendPoint {
+  const raw = record(value) ?? {}
+  return {
+    date: str(raw.date) ?? str(raw.day) ?? str(raw.statDate) ?? '',
+    members: num(raw.members ?? raw.memberCount),
+    visits: num(raw.visits ?? raw.uv ?? raw.visitUv),
+    posts: num(raw.posts ?? raw.postCount),
+    interactions: num(raw.interactions),
+    activeRate: num(raw.activeRate),
+  }
+}
+
+function toDistribution(value: unknown): StatDistributionItem {
+  const raw = record(value) ?? {}
+  return {
+    name: str(raw.name) ?? str(raw.label) ?? str(raw.boardName) ?? str(raw.roleName) ?? '其他',
+    value: num(raw.value ?? raw.count ?? raw.postCount),
+  }
+}
+
+function toTopPost(value: unknown): Post {
+  const raw = record(value) ?? {}
+  return toPost({
+    ...raw,
+    id: raw.id ?? raw.postId,
+    content: raw.content ?? raw.contentPreview ?? '',
+  })
+}
+
+export function toManageStats(value: unknown): ManageStats {
+  const raw = record(value) ?? {}
+  const trend = Array.isArray(raw.trend) ? raw.trend.map(toTrendPoint) : []
+  const boardSource = Array.isArray(raw.boardDistribution)
+    ? raw.boardDistribution
+    : Array.isArray(record(raw.content)?.boardDistribution)
+      ? (record(raw.content)!.boardDistribution as unknown[])
+      : []
+  const roleSource = Array.isArray(raw.roleDistribution)
+    ? raw.roleDistribution
+    : Array.isArray(record(raw.members)?.roleDistribution)
+      ? (record(raw.members)!.roleDistribution as unknown[])
+      : []
+  const topPostsSource = Array.isArray(raw.topPosts)
+    ? raw.topPosts
+    : Array.isArray(record(raw.content)?.topPosts)
+      ? (record(raw.content)!.topPosts as unknown[])
+      : []
+  return {
+    overview: record(raw.overview) ? toChannelOverview(raw.overview) : null,
+    trend,
+    boardDistribution: boardSource.map(toDistribution),
+    roleDistribution: roleSource.map(toDistribution),
+    topPosts: topPostsSource.map(toTopPost),
+  }
+}
+
+export function toAuditLog(value: unknown): AuditLogItem {
+  const raw = record(value) ?? {}
+  return {
+    id: str(raw.id) ?? '',
+    channelId: str(raw.channelId) ?? undefined,
+    actorId: str(raw.actorId) ?? str(raw.operatorId),
+    actorNickname: str(raw.actorNickname) ?? str(raw.operatorNickname),
+    action: str(raw.action) ?? str(raw.actionType) ?? '',
+    targetType: str(raw.targetType),
+    targetId: str(raw.targetId),
+    detail: str(raw.detail) ?? str(raw.description),
+    ip: str(raw.ip),
+    createdAt: str(raw.createdAt) ?? '',
+  }
+}
+
+export function toReport(value: unknown): ReportItem {
+  const raw = record(value) ?? {}
+  return {
+    id: str(raw.id) ?? '',
+    channelId: str(raw.channelId),
+    targetType: str(raw.targetType) ?? '',
+    targetId: str(raw.targetId) ?? '',
+    targetTitle: str(raw.targetTitle),
+    reason: str(raw.reason) ?? '',
+    description: str(raw.description),
+    status: str(raw.status) ?? 'PENDING',
+    reporterId: str(raw.reporterId),
+    reporterNickname: str(raw.reporterNickname) ?? str(raw.reporterName),
+    createdAt: str(raw.createdAt) ?? '',
+    handledAt: str(raw.handledAt),
+    handleNote: str(raw.handleNote),
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* WP2：好友 / 私信                                                             */
+/* -------------------------------------------------------------------------- */
+
+export function toFriend(value: unknown): FriendItem {
+  const raw = record(value) ?? {}
+  const nested = record(raw.user) ?? record(raw.friend)
+  const source = nested ?? raw
+  return {
+    id: str(raw.id) ?? undefined,
+    userId: str(raw.userId) ?? str(raw.friendId) ?? str(source.id) ?? '',
+    username: str(source.username) ?? '',
+    nickname: str(source.nickname) ?? str(raw.nickname),
+    avatarUrl: str(source.avatarUrl) ?? str(raw.avatarUrl),
+    signature: str(source.signature) ?? str(raw.signature),
+    online: bool(raw.online),
+    since: str(raw.since) ?? str(raw.createdAt) ?? str(raw.friendSince),
+  }
+}
+
+export function toFriendRequest(value: unknown): FriendRequestItem {
+  const raw = record(value) ?? {}
+  const fromUser = record(raw.fromUser) ?? record(raw.requester)
+  const toUser = record(raw.toUser) ?? record(raw.target)
+  return {
+    id: str(raw.id) ?? '',
+    direction: str(raw.direction) ?? undefined,
+    fromUser: fromUser ? toUserSummary(fromUser) : null,
+    toUser: toUser ? toUserSummary(toUser) : null,
+    status: str(raw.status) ?? 'PENDING',
+    message: str(raw.message),
+    createdAt: str(raw.createdAt) ?? '',
+    handledAt: str(raw.handledAt),
+  }
+}
+
+export function toDmPostShare(value: unknown): DmPostShare {
+  const raw = record(value) ?? {}
+  return {
+    postId: str(raw.postId) ?? str(raw.id) ?? '',
+    title: str(raw.title),
+    summary: str(raw.summary) ?? str(raw.content),
+    channelId: str(raw.channelId),
+    channelName: str(raw.channelName),
+    coverUrl: str(raw.coverUrl),
+    authorNickname: str(raw.authorNickname),
+  }
+}
+
+export function toDmMessage(value: unknown): DmMessage {
+  const raw = record(value) ?? {}
+  const sender = record(raw.sender) ?? null
+  const post = record(raw.post) ?? record(raw.postShare) ?? (str(raw.postId) ? raw : null)
+  const type = (str(raw.type) ?? 'TEXT').toUpperCase() as DmMessage['type']
+  return {
+    id: str(raw.id) ?? '',
+    conversationId: str(raw.conversationId) ?? '',
+    senderId: str(raw.senderId) ?? str(raw.fromUserId) ?? '',
+    sender: sender ? toUserSummary(sender) : null,
+    type: type === 'POST_SHARE' ? 'POST' : type,
+    content: str(raw.content) ?? str(raw.text),
+    media: Array.isArray(raw.media) ? raw.media.map(toMediaItem) : [],
+    post: post ? toDmPostShare(post) : null,
+    read: raw.isRead !== undefined ? bool(raw.isRead) : bool(raw.read),
+    createdAt: str(raw.createdAt) ?? '',
+    clientMessageId: str(raw.clientMessageId),
+  }
+}
+
+export function toDmConversation(value: unknown): DmConversation {
+  const raw = record(value) ?? {}
+  const peerRaw = record(raw.peer) ?? record(raw.participant) ?? record(raw.targetUser) ?? record(raw.user)
+  const peer = peerRaw ? toUserSummary(peerRaw) : toUserSummary(raw)
+  return {
+    id: str(raw.id) ?? '',
+    peer,
+    lastMessage: record(raw.lastMessage) ? toDmMessage(raw.lastMessage) : null,
+    unreadCount: num(raw.unreadCount),
+    updatedAt: str(raw.updatedAt) ?? str(raw.lastMessageAt) ?? str(raw.createdAt),
+    createdAt: str(raw.createdAt),
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* WP3：热门 / 推荐                                                             */
+/* -------------------------------------------------------------------------- */
+
+export function toChannelRecommendation(value: unknown): ChannelRecommendation {
+  const raw = record(value) ?? {}
+  const channelRaw = record(raw.channel)
+  const source = channelRaw ?? raw
+  // 后端推荐接口是扁平结构（channelId/name/avatarUrl...），toChannelSummary 读的是 id，
+  // 这里补齐 id，否则 channel.id 为空会让「加入」按钮永远处于 loading 状态。
+  const channel = toChannelSummary({
+    ...source,
+    id: str(source.id) ?? str(raw.channelId) ?? str(source.channelId) ?? '',
+  })
+  return {
+    channel,
+    reason: str(raw.reason) ?? str(raw.recommendReason) ?? '根据你的兴趣推荐',
+    score: num(raw.score),
+  }
+}
+
+export function toHotKeyword(value: unknown): HotKeyword {
+  if (typeof value === 'string') {
+    return { keyword: value }
+  }
+  const raw = record(value) ?? {}
+  return {
+    keyword: str(raw.keyword) ?? str(raw.word) ?? '',
+    count: raw.count === undefined ? undefined : num(raw.count),
+  }
+}
+

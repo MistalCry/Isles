@@ -18,8 +18,41 @@ public final class CursorUtils {
 
     public static final int DEFAULT_LIMIT = 20;
     public static final int MAX_LIMIT = 100;
+    private static final String OFFSET_PREFIX = "o:";
 
     private CursorUtils() {
+    }
+
+    /**
+     * 是否为偏移分页游标（排序结果无法用 ULID 稳定翻页时使用，如按人数/活跃度/相关度搜索）。
+     */
+    public static boolean isOffsetCursor(String cursor) {
+        return cursor != null && cursor.startsWith(OFFSET_PREFIX);
+    }
+
+    /**
+     * 解析偏移游标：null/空表示第一页；非法游标返回 400。
+     */
+    public static int parseOffsetCursor(String cursor) {
+        if (cursor == null || cursor.isBlank()) {
+            return 0;
+        }
+        if (!isOffsetCursor(cursor)) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR, "cursor 格式非法");
+        }
+        try {
+            int offset = Integer.parseInt(cursor.substring(OFFSET_PREFIX.length()));
+            if (offset < 0) {
+                throw new AppException(ErrorCode.VALIDATION_ERROR, "cursor 格式非法");
+            }
+            return offset;
+        } catch (NumberFormatException ex) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR, "cursor 格式非法");
+        }
+    }
+
+    public static String formatOffsetCursor(int nextOffset) {
+        return OFFSET_PREFIX + nextOffset;
     }
 
     /**

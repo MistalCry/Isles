@@ -1,22 +1,37 @@
 <script setup lang="ts">
-import ComingSoon from '@/components/ComingSoon.vue'
-
-const features = ['基于全站公开帖子的问答', '会话历史与模型选择', '深度思考与图片多模态', '流式输出与来源引用']
+import AiChatPanel from '@/components/ai/AiChatPanel.vue'
 </script>
 
 <template>
-  <div class="page">
+  <div class="page ai-page">
     <header class="page-header">
       <div>
         <h1 class="page-title">频道问问</h1>
-        <p class="page-subtitle">让 AI 帮你梳理群岛上的内容</p>
+        <p class="page-subtitle">让 AI 帮你梳理群岛上的公开内容，回答附来源引用</p>
       </div>
     </header>
-    <ComingSoon
-      title="频道问问即将上线"
-      description="AI 问答基于全站公开帖子检索上下文，回答问题时会附上内容来源，帮助你在群岛中快速找到答案。"
-      eta="规划中 · M3"
-      :features="features"
-    />
+    <AiChatPanel class="ai-page__panel" scope="GLOBAL" :show-session-sidebar="true" />
   </div>
 </template>
+
+<style scoped lang="scss">
+.ai-page {
+  display: flex;
+  flex-direction: column;
+  max-width: 1280px;
+  height: calc(100vh - var(--isles-space-12));
+  min-height: 560px;
+}
+
+.ai-page__panel {
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .ai-page {
+    height: auto;
+    min-height: 0;
+  }
+}
+</style>

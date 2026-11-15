@@ -9,6 +9,8 @@ import { useRequireLogin } from '@/composables/useRequireLogin'
 import { EMOJI_LIST, MAX_MEDIA_COUNT } from '@/constants/app'
 import type { Board, MediaItem, Post } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
+import RichTextEditor from './RichTextEditor.vue'
+import ImageCropUpload from './media/ImageCropUpload.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -37,13 +39,15 @@ const content = ref('')
 const title = ref('')
 const boardId = ref(props.defaultBoardId || props.boards[0]?.id || '')
 const mediaItems = ref<MediaItem[]>([])
+const coverUrl = ref<string | null>(null)
 const uploading = ref(false)
 const submitting = ref(false)
 const errorMessage = ref<string | null>(null)
 const fileInputRef = ref<HTMLInputElement>()
 
 const isFull = computed(() => props.mode === 'full')
-const canSubmit = computed(() => content.value.trim().length > 0 && !submitting.value)
+const plainText = computed(() => content.value.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim())
+const canSubmit = computed(() => plainText.value.length > 0 && !submitting.value)
 
 watch(
   () => props.boards,
@@ -101,13 +105,18 @@ function reset(): void {
   content.value = ''
   title.value = ''
   mediaItems.value = []
+  coverUrl.value = null
   errorMessage.value = null
 }
 
 async function submit(): Promise<void> {
   if (!requireLogin('登录后可发帖')) return
-  if (!content.value.trim()) {
+  if (!plainText.value) {
     ElMessage.warning('写点什么再发布吧')
+    return
+  }
+  if (boardId.value === '') {
+    ElMessage.warning('请先选择要发布到的板块')
     return
   }
   if (!props.channelId) {
@@ -118,10 +127,12 @@ async function submit(): Promise<void> {
   errorMessage.value = null
   try {
     const post = await channelsApi.createChannelPost(props.channelId, {
-      boardId: boardId.value || null,
+      boardId: boardId.value,
       title: title.value.trim() || undefined,
-      content: content.value.trim(),
-      contentFormat: 'TEXT',
+      // 长文走富文本（HTML），快捷发帖为纯文本；后端按 contentFormat 做白名单净化
+      content: isFull.value ? content.value : content.value.trim(),
+      contentFormat: isFull.value ? 'HTML' : 'PLAIN',
+      coverUrl: isFull.value ? coverUrl.value : undefined,
       media: mediaItems.value,
     })
     ElMessage.success('发布成功')
@@ -152,15 +163,7 @@ async function submit(): Promise<void> {
 
     <template v-if="isFull">
       <el-input v-model="title" maxlength="100" show-word-limit placeholder="标题（选填）" class="post-composer__title" />
-      <el-input
-        v-model="content"
-        type="textarea"
-        :rows="6"
-        maxlength="5000"
-        show-word-limit
-        placeholder="写下你想分享的内容…"
-        aria-label="长文正文"
-      />
+      <RichTextEditor v-model="content" :min-height="240" placeholder="写下你想分享的内容…（支持标题、加粗、列表、引用、链接与图片）" />
     </template>
 
     <div v-else class="post-composer__quick-row">
@@ -222,6 +225,18 @@ async function submit(): Promise<void> {
       <el-button type="primary" :icon="Promotion" :loading="submitting" :disabled="!canSubmit" @click="submit">
         发布
       </el-button>
+    </div>
+
+    <div v-if="isFull" class="post-composer__cover">
+      <span class="muted">封面（选填，展示在卡片顶部）</span>
+      <ImageCropUpload
+        v-model="coverUrl"
+        :aspect-ratio="16 / 9"
+        :output-width="960"
+        :box-width="320"
+        label="上传封面"
+        hint="长条图，16:9"
+      />
     </div>
 
     <div v-if="isFull" class="post-composer__full-row">
@@ -391,6 +406,13 @@ async function submit(): Promise<void> {
   &:hover {
     background: var(--isles-hover);
   }
+}
+
+.post-composer__cover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--isles-space-2);
+  margin-top: var(--isles-space-3);
 }
 
 .post-composer__full-row {

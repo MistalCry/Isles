@@ -1,6 +1,9 @@
 package com.isles.post.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.isles.analytics.service.ChannelViewService;
+import com.isles.channel.audit.AuditLogService;
+import com.isles.channel.audit.ChannelAuditLog;
 import com.isles.channel.entity.Board;
 import com.isles.channel.entity.Channel;
 import com.isles.channel.mapper.BoardMapper;
@@ -18,6 +21,7 @@ import com.isles.common.security.HtmlSanitizer;
 import com.isles.common.time.ClockTimes;
 import com.isles.interaction.service.InteractionService;
 import com.isles.post.dto.CreatePostRequest;
+import com.isles.post.dto.UpdatePostRequest;
 import com.isles.post.dto.PostResponse;
 import com.isles.post.entity.Post;
 import com.isles.post.entity.PostMedia;
@@ -32,7 +36,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -59,6 +66,8 @@ public class PostService {
     private final UserMapper userMapper;
     private final ChannelAccessService accessService;
     private final InteractionService interactionService;
+    private final ChannelViewService channelViewService;
+    private final AuditLogService auditLogService;
 
     /**
      * 发帖：校验成员身份、禁言状态、板块归属与媒体合法性；事务内写帖子、媒体与计数。
@@ -130,7 +139,81 @@ public class PostService {
 
         channelMapper.addPostCount(channelId, 1);
         boardMapper.addPostCount(board.getId(), 1);
+        auditLogService.record(channelId, userId, ChannelAuditLog.Action.POST_CREATE, "POST", post.getId(),
+                Map.of("boardId", board.getId()));
         return toResponses(List.of(post), userId).get(0);
+    }
+
+    /**
+     * 编辑帖子（FR-POST-07）：仅作者本人；富文本重新走白名单净化，媒体可整体替换。
+     */
+    @Transactional
+    public PostResponse updatePost(String postId, UpdatePostRequest request, String userId) {
+        Post post = requirePublishedPost(postId);
+        if (!post.getAuthorId().equals(userId)) {
+            throw new AppException(ErrorCode.FORBIDDEN, "只能编辑自己的帖子");
+        }
+
+        String contentFormat = request.contentFormat() == null ? post.getContentFormat() : request.contentFormat();
+        String content = request.content() == null ? post.getContent() : request.content();
+        if (Post.ContentFormat.HTML.name().equals(contentFormat)) {
+            content = HtmlSanitizer.sanitize(content);
+        }
+        if (content == null || content.isBlank()) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR, "正文不能为空");
+        }
+        if (request.title() != null && request.title().length() > 200) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR, "标题最长 200 个字符");
+        }
+
+        Map<String, Object> detail = new LinkedHashMap<>();
+        if (request.title() != null) {
+            String title = request.title().isBlank() ? null : request.title().trim();
+            if (!Objects.equals(title, post.getTitle())) {
+                detail.put("title", title);
+            }
+            post.setTitle(title);
+        }
+        if (!Objects.equals(content, post.getContent())) {
+            detail.put("content", "updated");
+            post.setContent(content);
+            post.setContentFormat(contentFormat);
+        } else if (request.contentFormat() != null && !request.contentFormat().equals(post.getContentFormat())) {
+            post.setContentFormat(contentFormat);
+            detail.put("contentFormat", contentFormat);
+        }
+        if (request.coverUrl() != null) {
+            post.setCoverUrl(request.coverUrl().isBlank() ? null : request.coverUrl());
+            detail.put("coverUrl", post.getCoverUrl());
+        }
+        if (request.media() != null) {
+            List<MediaItem> media = MediaPayloads.normalize(request.media());
+            postMediaMapper.delete(Wrappers.<PostMedia>lambdaQuery().eq(PostMedia::getPostId, postId));
+            LocalDateTime now = ClockTimes.nowUtc();
+            for (int index = 0; index < media.size(); index++) {
+                MediaItem item = media.get(index);
+                PostMedia postMedia = new PostMedia();
+                postMedia.setId(UlidGenerator.generate());
+                postMedia.setPostId(postId);
+                postMedia.setMediaType(item.type());
+                postMedia.setUrl(item.url());
+                postMedia.setThumbUrl(item.thumbUrl());
+                postMedia.setWidth(item.width());
+                postMedia.setHeight(item.height());
+                postMedia.setDurationMs(item.durationMs());
+                postMedia.setSort(index);
+                postMedia.setCreatedAt(now);
+                postMediaMapper.insert(postMedia);
+            }
+            detail.put("mediaCount", media.size());
+        }
+        if (detail.isEmpty()) {
+            return getPostDetail(postId, userId);
+        }
+        post.setUpdatedAt(ClockTimes.nowUtc());
+        postMapper.updateById(post);
+        auditLogService.record(post.getChannelId(), userId, ChannelAuditLog.Action.POST_UPDATE, "POST", postId, detail);
+        return getPostDetail(postId, userId);
     }
 
     /**
@@ -194,6 +277,9 @@ public class PostService {
         }
         interactionService.incrementViewCount(postId);
         post.setViewCount(post.getViewCount() + 1);
+        if (viewerId != null) {
+            channelViewService.recordView(post.getChannelId(), postId, viewerId);
+        }
         return toResponses(List.of(post), viewerId).get(0);
     }
 
@@ -266,6 +352,7 @@ public class PostService {
                     likedPostIds.contains(post.getId()),
                     Boolean.TRUE.equals(post.getIsPinned()),
                     Boolean.TRUE.equals(post.getIsEssence()),
+                    post.getStatus(),
                     ClockTimes.toInstant(post.getCreatedAt())));
         }
         return responses;

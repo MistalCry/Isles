@@ -10,12 +10,14 @@ import { useChannelStore } from '@/stores/channel'
 import { useCursorList } from '@/composables/useCursorList'
 import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import { useRequireLogin } from '@/composables/useRequireLogin'
-import { excerpt, formatCount, formatRelativeTime } from '@/utils/format'
+import { excerpt, formatCount, formatDateTime, formatRelativeTime } from '@/utils/format'
 import type { Board, Channel, Post, PostTab } from '@/types/models'
 import ChannelHeader from '@/components/ChannelHeader.vue'
+import ChannelSettingsDialog from '@/components/channel/ChannelSettingsDialog.vue'
 import PostCard from '@/components/PostCard.vue'
 import PostComposer from '@/components/PostComposer.vue'
 import SearchPanel from '@/components/SearchPanel.vue'
+import ChannelAssistantPanel from '@/components/ai/ChannelAssistantPanel.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -41,6 +43,8 @@ const activeTab = ref<ChannelTab>('latest')
 const selectedBoardId = ref('')
 const pinnedExpanded = ref(false)
 const searchOpen = ref(false)
+const settingsOpen = ref(false)
+const assistantOpen = ref(false)
 const fullComposerOpen = ref(false)
 const sentinel = ref<HTMLElement | null>(null)
 
@@ -53,6 +57,15 @@ const tabs: Array<{ key: ChannelTab; label: string }> = [
 
 const joined = computed(
   () => Boolean(channel.value?.isJoined || channelStore.isJoined(channelId.value)),
+)
+const muteAllActive = computed(
+  () => Boolean(channel.value?.muteAllUntil && new Date(channel.value.muteAllUntil).getTime() > Date.now()),
+)
+const canPostDuringMuteAll = computed(
+  () => channel.value?.myRoleName === '频道主' || channel.value?.myRoleName === '超级管理员',
+)
+const canUseComposer = computed(
+  () => isAuthenticated.value && joined.value && (!muteAllActive.value || canPostDuringMuteAll.value),
 )
 const pinnedPosts = computed(() => postList.items.value.filter((post) => post.isPinned).slice(0, 20))
 const pinnedCount = computed(() => pinnedPosts.value.length)
@@ -193,15 +206,41 @@ function handlePublished(): void {
 
 function handleChannelSearch(keyword: string): void {
   searchOpen.value = false
-  void router.push({ name: 'search', query: { q: keyword, channelId: channelId.value } })
+  void router.push({
+    name: 'search',
+    query: { q: keyword, scope: 'channel', channelId: channelId.value },
+  })
 }
 
 function handleMessages(): void {
-  ElMessage.info('频道消息与互动提醒将在 M2 上线')
+  void router.push({ name: 'notifications', query: { channelId: channelId.value } })
 }
 
 function handleSettings(): void {
-  void router.push({ name: 'manage', params: { channelId: channelId.value } })
+  if (!requireLogin('登录后可打开频道设置')) return
+  if (!joined.value) {
+    ElMessage.info('加入频道后即可打开频道设置')
+    return
+  }
+  settingsOpen.value = true
+}
+
+function handleChannelUpdated(updated: Channel): void {
+  channel.value = updated
+  channelStore.upsertMyChannel(updated)
+}
+
+function handleLeftChannel(): void {
+  channel.value = null
+  channelStore.removeMyChannel(channelId.value)
+  void router.push('/feed')
+}
+
+function handleDissolvedChannel(): void {
+  channel.value = null
+  channelStore.removeMyChannel(channelId.value)
+  ElMessage.success('频道已解散')
+  void router.push('/feed')
 }
 
 function openPinnedPost(post: Post): void {
@@ -235,10 +274,20 @@ function pinnedTitle(post: Post): string {
             :channel="channel"
             :joined="joined"
             :joining="joining"
+            :show-settings="isAuthenticated && joined"
             @join="handleMemberAction"
             @search="searchOpen = true"
             @messages="handleMessages"
             @settings="handleSettings"
+          />
+
+          <el-alert
+            v-if="muteAllActive"
+            :title="`全员禁言中，结束时间：${formatDateTime(channel.muteAllUntil)}，仅频道主与超级管理员可发言`"
+            type="warning"
+            :closable="false"
+            show-icon
+            class="channel-mute-alert"
           />
 
           <nav class="channel-tabs" aria-label="频道内容筛选">
@@ -353,7 +402,7 @@ function pinnedTitle(post: Post): string {
 
           <div class="channel-composer">
             <PostComposer
-              v-if="isAuthenticated && joined"
+              v-if="canUseComposer"
               mode="quick"
               :channel-id="channelId"
               :boards="boards"
@@ -361,6 +410,12 @@ function pinnedTitle(post: Post): string {
               @published="handlePublished"
               @request-full="fullComposerOpen = true"
             />
+            <div v-else-if="isAuthenticated && joined && muteAllActive" class="join-prompt">
+              <div>
+                <strong>频道正在全员禁言</strong>
+                <p class="muted">禁言期间仅频道主与超级管理员可发帖，解除后可继续参与讨论。</p>
+              </div>
+            </div>
             <div v-else class="join-prompt">
               <div>
                 <strong>{{ isAuthenticated ? '加入频道后即可发帖' : '登录后加入频道参与讨论' }}</strong>
@@ -429,11 +484,89 @@ function pinnedTitle(post: Post): string {
           @cancel="fullComposerOpen = false"
         />
       </el-dialog>
+
+      <ChannelSettingsDialog
+        v-model="settingsOpen"
+        :channel="channel"
+        @updated="handleChannelUpdated"
+        @left="handleLeftChannel"
+        @dissolved="handleDissolvedChannel"
+      />
+
+      <!-- 频道助手（FR-ASSIST-02）：频道内基于本频道内容问答 -->
+      <button
+        v-if="isAuthenticated && joined"
+        type="button"
+        class="assistant-fab"
+        :aria-expanded="assistantOpen"
+        aria-label="打开频道助手"
+        @click="assistantOpen = !assistantOpen"
+      >
+        <span class="assistant-fab__dot" aria-hidden="true" />
+        频道助手
+      </button>
+      <Transition name="assistant-pop">
+        <ChannelAssistantPanel
+          v-if="assistantOpen"
+          v-model="assistantOpen"
+          class="assistant-float"
+          :channel-id="channelId"
+          :channel-name="channel.name"
+          @close="assistantOpen = false"
+        />
+      </Transition>
     </template>
   </div>
 </template>
 
 <style scoped lang="scss">
+.assistant-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 28px;
+  z-index: 20;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 10px 16px;
+  color: #fff;
+  font-size: var(--isles-font-sm);
+  background: var(--isles-primary);
+  border: none;
+  border-radius: 999px;
+  box-shadow: var(--isles-shadow-lg);
+  cursor: pointer;
+
+  &:hover {
+    filter: brightness(1.05);
+  }
+}
+
+.assistant-fab__dot {
+  width: 6px;
+  height: 6px;
+  background: #7ef0b2;
+  border-radius: 50%;
+}
+
+.assistant-float {
+  position: fixed;
+  right: 24px;
+  bottom: 84px;
+  z-index: 30;
+}
+
+.assistant-pop-enter-active,
+.assistant-pop-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.assistant-pop-enter-from,
+.assistant-pop-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
 .channel-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
@@ -625,6 +758,10 @@ function pinnedTitle(post: Post): string {
   bottom: var(--isles-space-4);
   z-index: 10;
   margin-top: var(--isles-space-4);
+}
+
+.channel-mute-alert {
+  margin-bottom: var(--isles-space-3);
 }
 
 .join-prompt {

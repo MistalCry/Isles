@@ -49,7 +49,7 @@ function handleLike(comment: Comment): void {
 </script>
 
 <template>
-  <article class="comment-item">
+  <article class="comment-item" :data-comment-id="comment.id">
     <UserCardPopover :user="comment.author" :channel-id="channelId">
       <button type="button" class="comment-item__avatar" :aria-label="`查看 ${authorName} 的用户卡片`">
         <UserAvatar :src="comment.author.avatarUrl" :name="authorName" :size="34" />
@@ -89,7 +89,7 @@ function handleLike(comment: Comment): void {
       </div>
 
       <div v-if="hasReplies" class="comment-replies">
-        <article v-for="reply in comment.replies" :key="reply.id" class="comment-reply">
+        <article v-for="reply in comment.replies" :key="reply.id" class="comment-reply" :data-comment-id="reply.id">
           <UserCardPopover :user="reply.author" :channel-id="channelId">
             <button type="button" class="comment-reply__avatar" :aria-label="`查看 ${displayName(reply.author)} 的用户卡片`">
               <UserAvatar :src="reply.author.avatarUrl" :name="displayName(reply.author)" :size="26" />

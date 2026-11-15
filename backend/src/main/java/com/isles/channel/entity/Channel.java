@@ -1,5 +1,6 @@
 package com.isles.channel.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -30,6 +31,11 @@ public class Channel {
     private Long memberCount;
     private Long postCount;
     private String status;
+    /** 全员禁言到期时间；NULL 表示未开启（V2 新增）。 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private LocalDateTime muteAllUntil;
+    /** 频道扩展设置 JSON（V2 新增，预留）。 */
+    private String settings;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;

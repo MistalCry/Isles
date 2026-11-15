@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import { canManageChannelSummary } from '@/utils/channelPermissions'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -8,16 +9,20 @@ import {
   Compass,
   HomeFilled,
   HotWater,
-  Message,
   Plus,
   Search,
   ArrowDown,
+  Bell,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useChannelStore } from '@/stores/channel'
+import { useNotificationStore } from '@/stores/notifications'
+import { useDmStore } from '@/stores/dm'
 import { useRequireLogin } from '@/composables/useRequireLogin'
 import { APP_NAME, APP_NAME_EN } from '@/constants/app'
+import { formatRelativeTime } from '@/utils/format'
 import UserAvatar from './UserAvatar.vue'
+import ProfileEditDialog from './ProfileEditDialog.vue'
 import CreateChannelDialog from './CreateChannelDialog.vue'
 import type { Channel } from '@/types/models'
 
@@ -27,13 +32,29 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const channelStore = useChannelStore()
+const notificationStore = useNotificationStore()
+const dmStore = useDmStore()
 const { requireLogin } = useRequireLogin()
 const { currentUser, isAuthenticated } = storeToRefs(auth)
 const { myChannels, loadingMyChannels, currentChannel } = storeToRefs(channelStore)
+const { unreadCount } = storeToRefs(notificationStore)
+const {
+  conversations: dmConversations,
+  unreadCount: dmUnreadCount,
+  loading: dmLoading,
+} = storeToRefs(dmStore)
 
 const createDialogVisible = ref(false)
 const myChannelsExpanded = ref(true)
+const profileOpen = ref(false)
 const messagesExpanded = ref(true)
+
+const recentConversations = computed(() => dmConversations.value.slice(0, 5))
+
+/** 侧边栏「管理」标识：直接进入该频道的管理中心（阻止外层 RouterLink 跳转） */
+function openManage(channelId: string): void {
+  void router.push({ name: 'manage', params: { channelId } })
+}
 
 const signature = computed(() => currentUser.value?.signature || '这个人很神秘，还没有留下签名')
 const activeChannelId = computed(() => (route.name === 'channel' ? String(route.params.id) : ''))
@@ -87,11 +108,21 @@ function goRegister(): void {
 function handleUserCommand(command: string | number | object): void {
   if (command === 'channels') {
     goTo('my-channels')
+  } else if (command === 'friends') {
+    goTo('friends')
+  } else if (command === 'notifications') {
+    goTo('notifications')
   } else if (command === 'profile') {
-    ElMessage.info('个人资料编辑将在 M2 上线')
+    profileOpen.value = true
   } else if (command === 'logout') {
     void handleLogout()
   }
+}
+
+function goConversation(conversationId: string): void {
+  notifyNavigate()
+  if (route.name === 'message-detail' && route.params.id === conversationId) return
+  void router.push({ name: 'message-detail', params: { id: conversationId } })
 }
 
 watch(
@@ -160,6 +191,21 @@ watch(
           <el-icon><HotWater /></el-icon>
           <span>热门讨论</span>
         </button>
+        <button
+          type="button"
+          class="nav-item"
+          :class="{ 'is-active': isActive('notifications') }"
+          @click="goTo('notifications')"
+        >
+          <el-icon><Bell /></el-icon>
+          <span>通知</span>
+          <el-badge
+            v-if="isAuthenticated && unreadCount > 0"
+            :value="unreadCount"
+            :max="99"
+            class="nav-item__badge"
+          />
+        </button>
       </nav>
 
       <section class="sidebar__section">
@@ -188,6 +234,15 @@ watch(
                 >
                   <UserAvatar :src="channel.avatarUrl" :name="channel.name" :size="24" square />
                   <span class="channel-item__name">{{ channel.name }}</span>
+                  <button
+                    v-if="canManageChannelSummary(channel, currentUser?.id)"
+                    type="button"
+                    class="channel-item__manage"
+                    title="进入频道管理中心"
+                    @click.stop.prevent="openManage(channel.id)"
+                  >
+                    管理
+                  </button>
                 </RouterLink>
               </li>
             </ul>
@@ -222,14 +277,41 @@ watch(
               <ArrowDown />
             </el-icon>
             我的私信
+            <el-badge
+              v-if="isAuthenticated && dmUnreadCount > 0"
+              :value="dmUnreadCount"
+              :max="99"
+              class="section-title__badge"
+            />
           </button>
         </div>
-        <div v-if="messagesExpanded" class="messages-placeholder">
-          <el-icon :size="16"><Message /></el-icon>
-          <p>私信功能将在 M2 上线</p>
-          <RouterLink v-if="isAuthenticated" to="/messages" class="section-more" @click="notifyNavigate">
-            查看私信入口
-          </RouterLink>
+        <div v-if="messagesExpanded">
+          <template v-if="isAuthenticated">
+            <p v-if="dmLoading && recentConversations.length === 0" class="section-hint">正在加载私信…</p>
+            <ul v-else-if="recentConversations.length > 0" class="channel-list">
+              <li v-for="conversation in recentConversations" :key="conversation.id">
+                <button type="button" class="channel-item dm-item" @click="goConversation(conversation.id)">
+                  <UserAvatar
+                    :src="conversation.peer.avatarUrl"
+                    :name="conversation.peer.nickname || conversation.peer.username"
+                    :size="24"
+                  />
+                  <span class="channel-item__name">
+                    {{ conversation.peer.nickname || conversation.peer.username }}
+                  </span>
+                  <span v-if="conversation.unreadCount > 0" class="dm-item__unread">
+                    {{ conversation.unreadCount > 99 ? '99+' : conversation.unreadCount }}
+                  </span>
+                  <small v-else-if="conversation.lastMessage" class="dm-item__time">
+                    {{ formatRelativeTime(conversation.lastMessage.createdAt) }}
+                  </small>
+                </button>
+              </li>
+            </ul>
+            <p v-else class="section-hint">还没有私信，去用户卡片打个招呼吧。</p>
+            <RouterLink to="/messages" class="section-more" @click="notifyNavigate">查看全部私信</RouterLink>
+          </template>
+          <p v-else class="section-hint">登录后查看私信会话</p>
         </div>
       </section>
     </div>
@@ -247,7 +329,9 @@ watch(
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item command="channels">我的频道</el-dropdown-item>
-            <el-dropdown-item command="profile">个人资料（M2）</el-dropdown-item>
+            <el-dropdown-item command="friends">我的好友</el-dropdown-item>
+            <el-dropdown-item command="notifications">通知中心</el-dropdown-item>
+            <el-dropdown-item command="profile">个人资料</el-dropdown-item>
             <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
           </el-dropdown-menu>
         </template>
@@ -261,6 +345,8 @@ watch(
         </div>
       </div>
     </footer>
+
+    <ProfileEditDialog v-model="profileOpen" />
 
     <CreateChannelDialog v-model="createDialogVisible" @created="handleChannelCreated" />
   </div>
@@ -454,6 +540,68 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.channel-item__manage {
+  flex-shrink: 0;
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--isles-primary);
+  cursor: pointer;
+  background: var(--isles-primary-soft, rgb(64 128 255 / 12%));
+  border: none;
+  border-radius: var(--isles-radius-sm);
+
+  &:hover {
+    filter: brightness(0.96);
+  }
+}
+
+.nav-item__badge {
+  margin-left: auto;
+
+  :deep(.el-badge__content) {
+    position: static;
+    transform: none;
+  }
+}
+
+.section-title__badge {
+  margin-left: var(--isles-space-1);
+
+  :deep(.el-badge__content) {
+    position: static;
+    transform: none;
+  }
+}
+
+.dm-item {
+  width: 100%;
+  color: var(--isles-text-secondary);
+  font-size: var(--isles-font-sm);
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dm-item__unread {
+  flex: none;
+  min-width: 16px;
+  padding: 0 5px;
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  background: var(--isles-danger);
+  border-radius: var(--isles-radius-pill);
+}
+
+.dm-item__time {
+  flex: none;
+  color: var(--isles-text-muted);
+  font-size: 10px;
 }
 
 .section-hint {

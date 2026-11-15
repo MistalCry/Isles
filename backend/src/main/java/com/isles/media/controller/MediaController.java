@@ -1,5 +1,7 @@
 package com.isles.media.controller;
 
+import com.isles.common.ratelimit.RateLimit;
+import com.isles.common.ratelimit.RateLimitPolicy;
 import com.isles.common.security.CurrentUserProvider;
 import com.isles.media.dto.MediaUploadResponse;
 import com.isles.media.service.MediaService;
@@ -25,6 +27,7 @@ public class MediaController {
     private final MediaService mediaService;
     private final CurrentUserProvider currentUserProvider;
 
+    @RateLimit(RateLimitPolicy.UPLOAD)
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public MediaUploadResponse upload(@RequestPart("file") MultipartFile file,

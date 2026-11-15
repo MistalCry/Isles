@@ -5,6 +5,7 @@ import com.isles.channel.entity.Board;
 import com.isles.channel.entity.Channel;
 import com.isles.channel.mapper.BoardMapper;
 import com.isles.channel.mapper.ChannelMapper;
+import com.isles.channel.service.ChannelAccessService;
 import com.isles.common.error.AppException;
 import com.isles.common.error.ErrorCode;
 import com.isles.common.id.UlidGenerator;
@@ -12,8 +13,11 @@ import com.isles.common.pagination.CursorUtils;
 import com.isles.common.pagination.PageResult;
 import com.isles.common.security.HtmlSanitizer;
 import com.isles.common.time.ClockTimes;
+import com.isles.post.dto.PostResponse;
 import com.isles.post.entity.Post;
 import com.isles.post.mapper.PostMapper;
+import com.isles.post.service.PostService;
+import com.isles.search.dto.HotKeywordResponse;
 import com.isles.search.dto.SearchHistoryResponse;
 import com.isles.search.dto.SearchItemResponse;
 import com.isles.search.dto.SearchSuggestResponse;
@@ -36,15 +40,17 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 搜索服务（docs/03 §5.2 SearchService）：M1 使用 MySQL LIKE 基础检索。
+ * 搜索服务（docs/03 §5.2 SearchService、§4.10）：MySQL LIKE 基础检索 + 排序筛选 + 频道内搜索 + 热词联想。
  *
- * <p>安全：
+ * <p>安全：关键词长度 ≤ 100、LIKE 通配符转义、排序白名单（禁止用户输入进入 ORDER BY）、
+ * 只检索公开频道/公开帖子（FR-SRCH-09）。
+ *
+ * <p>排序：
  * <ul>
- *   <li>关键词长度 ≤ 100，LIKE 通配符转义，禁止用户输入进入排序/SQL 结构；</li>
- *   <li>只检索公开频道与公开频道下的已发布帖子（FR-SRCH-09）；</li>
- *   <li>type 只允许 all/channel/post 白名单。</li>
+ *   <li>频道：relevance（名称命中优先）/ members（人数）/ active（帖子数）/ latest（最新）；</li>
+ *   <li>帖子：relevance（标题命中优先）/ latest。</li>
  * </ul>
- * 搜索历史仅本人可见；搜索日志用于 M2 热词聚合。
+ * 非 latest 排序使用偏移游标（{@code o:N}），latest 使用 ULID 游标。
  */
 @Service
 @RequiredArgsConstructor
@@ -55,58 +61,54 @@ public class SearchService {
     private static final int SUMMARY_LENGTH = 120;
     private static final int SUGGEST_LIMIT = 10;
 
+    private static final String SORT_RELEVANCE = "relevance";
+    private static final String SORT_MEMBERS = "members";
+    private static final String SORT_ACTIVE = "active";
+    private static final String SORT_LATEST = "latest";
+
     private final ChannelMapper channelMapper;
     private final PostMapper postMapper;
     private final UserMapper userMapper;
     private final BoardMapper boardMapper;
     private final SearchHistoryMapper searchHistoryMapper;
     private final SearchLogMapper searchLogMapper;
+    private final SearchHotwordService searchHotwordService;
+    private final ChannelAccessService accessService;
+    private final PostService postService;
 
     /**
-     * 全站搜索：type=all|channel|post，游标分页（按 ULID 倒序）。
+     * 全站搜索：type=all|channel|post，sort 见类注释。
      */
     @Transactional
-    public PageResult<SearchItemResponse> search(String q, String type, String cursor, Integer limit, String userId) {
+    public PageResult<SearchItemResponse> search(String q, String type, String sort, String cursor, Integer limit,
+                                                 String userId) {
         String keyword = requireKeyword(q);
         String pattern = "%" + escapeLike(keyword) + "%";
         String typeValue = type == null || type.isBlank() ? "all" : type;
+        String sortValue = sort == null || sort.isBlank() ? SORT_RELEVANCE : sort;
         int pageSize = CursorUtils.normalizeLimit(limit);
-        String cursorId = CursorUtils.validateIdCursor(cursor);
 
         List<SearchItemResponse> items;
         String nextCursor = null;
         switch (typeValue) {
             case "channel" -> {
-                List<Channel> rows = channelMapper.searchVisible(pattern, cursorId, pageSize + 1);
-                boolean hasMore = rows.size() > pageSize;
-                List<Channel> page = hasMore ? rows.subList(0, pageSize) : rows;
-                items = page.stream().map(this::toChannelItem).toList();
-                nextCursor = hasMore && !items.isEmpty() ? items.get(items.size() - 1).id() : null;
+                ChannelPage channelPage = searchChannels(pattern, sortValue, cursor, pageSize);
+                items = channelPage.items().stream().map(this::toChannelItem).toList();
+                nextCursor = channelPage.nextCursor();
             }
             case "post" -> {
-                List<Post> rows = postMapper.searchVisiblePosts(pattern, cursorId, pageSize + 1);
-                boolean hasMore = rows.size() > pageSize;
-                List<Post> page = hasMore ? rows.subList(0, pageSize) : rows;
-                Map<String, Channel> channels = loadChannels(page);
-                Map<String, User> authors = loadAuthors(page);
-                Map<String, Board> boards = loadBoards(page);
-                items = page.stream()
-                        .map(post -> toPostItem(post, channels.get(post.getChannelId()),
-                                authors.get(post.getAuthorId()), boards.get(post.getBoardId())))
-                        .toList();
-                nextCursor = hasMore && !items.isEmpty() ? items.get(items.size() - 1).id() : null;
+                PostPage postPage = searchPosts(pattern, sortValue, cursor, pageSize);
+                items = postPage.items().stream().map(this::toSearchItem).toList();
+                nextCursor = postPage.nextCursor();
             }
             case "all" -> {
+                // 综合搜索按最新合并（相关度排序对混合类型没有统一口径，前端可用 channel/post tab 精确排序）
+                String cursorId = CursorUtils.validateIdCursor(cursor);
                 List<Channel> channels = channelMapper.searchVisible(pattern, cursorId, pageSize + 1);
                 List<Post> posts = postMapper.searchVisiblePosts(pattern, cursorId, pageSize + 1);
-                Map<String, Channel> channelMap = loadChannels(posts);
-                Map<String, User> authorMap = loadAuthors(posts);
-                Map<String, Board> boardMap = loadBoards(posts);
                 List<SearchItemResponse> merged = new ArrayList<>(channels.size() + posts.size());
                 channels.forEach(channel -> merged.add(toChannelItem(channel)));
-                posts.forEach(post -> merged.add(toPostItem(post, channelMap.get(post.getChannelId()),
-                        authorMap.get(post.getAuthorId()), boardMap.get(post.getBoardId()))));
-                // 两类资源同样使用 ULID 主键，按 id 倒序合并等价于按时间倒序，游标语义保持一致
+                posts.forEach(post -> merged.add(toSearchItem(post)));
                 merged.sort(Comparator.comparing(SearchItemResponse::id).reversed());
                 boolean hasMore = merged.size() > pageSize;
                 items = hasMore ? merged.subList(0, pageSize) : merged;
@@ -115,12 +117,99 @@ public class SearchService {
             default -> throw new AppException(ErrorCode.VALIDATION_ERROR, "type 取值必须为 all、channel 或 post");
         }
 
-        recordSearch(keyword, userId, items.size());
+        recordSearch(keyword, userId, SearchLog.Scope.GLOBAL, null, items.size());
         return new PageResult<>(items, nextCursor);
     }
 
+    private record ChannelPage(List<Channel> items, String nextCursor) {
+    }
+
+    private record PostPage(List<Post> items, String nextCursor) {
+    }
+
     /**
-     * 搜索联想：已加入频道前缀匹配 + 搜索日志高频词前缀匹配。
+     * 频道结果排序：relevance/members/active 用偏移游标，latest 用 ULID 游标。
+     */
+    private ChannelPage searchChannels(String pattern, String sort, String cursor, int pageSize) {
+        if (SORT_LATEST.equals(sort)) {
+            String cursorId = CursorUtils.validateIdCursor(cursor);
+            List<Channel> rows = channelMapper.searchVisible(pattern, cursorId, pageSize + 1);
+            boolean hasMore = rows.size() > pageSize;
+            List<Channel> page = hasMore ? rows.subList(0, pageSize) : rows;
+            String nextCursor = hasMore && !page.isEmpty() ? page.get(page.size() - 1).getId() : null;
+            return new ChannelPage(page, nextCursor);
+        }
+        int offset = CursorUtils.parseOffsetCursor(cursor);
+        List<Channel> rows = switch (sort) {
+            case SORT_MEMBERS -> channelMapper.searchVisibleByMembers(pattern, offset, pageSize + 1);
+            case SORT_ACTIVE -> channelMapper.searchVisibleByActive(pattern, offset, pageSize + 1);
+            case SORT_RELEVANCE -> channelMapper.searchVisibleByRelevance(pattern, offset, pageSize + 1);
+            default -> throw new AppException(ErrorCode.VALIDATION_ERROR,
+                    "频道排序取值必须为 relevance、members、active 或 latest");
+        };
+        boolean hasMore = rows.size() > pageSize;
+        List<Channel> page = hasMore ? rows.subList(0, pageSize) : rows;
+        String nextCursor = hasMore ? CursorUtils.formatOffsetCursor(offset + pageSize) : null;
+        return new ChannelPage(page, nextCursor);
+    }
+
+    /**
+     * 帖子结果排序：relevance 偏移游标，latest ULID 游标。
+     */
+    private PostPage searchPosts(String pattern, String sort, String cursor, int pageSize) {
+        if (SORT_LATEST.equals(sort)) {
+            String cursorId = CursorUtils.validateIdCursor(cursor);
+            List<Post> rows = postMapper.searchVisiblePosts(pattern, cursorId, pageSize + 1);
+            boolean hasMore = rows.size() > pageSize;
+            List<Post> page = hasMore ? rows.subList(0, pageSize) : rows;
+            String nextCursor = hasMore && !page.isEmpty() ? page.get(page.size() - 1).getId() : null;
+            return new PostPage(page, nextCursor);
+        }
+        if (!SORT_RELEVANCE.equals(sort)) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR, "帖子排序取值必须为 relevance 或 latest");
+        }
+        int offset = CursorUtils.parseOffsetCursor(cursor);
+        List<Post> rows = postMapper.searchVisiblePostsByRelevance(pattern, offset, pageSize + 1);
+        boolean hasMore = rows.size() > pageSize;
+        List<Post> page = hasMore ? rows.subList(0, pageSize) : rows;
+        String nextCursor = hasMore ? CursorUtils.formatOffsetCursor(offset + pageSize) : null;
+        return new PostPage(page, nextCursor);
+    }
+
+    /**
+     * 频道内搜索（FR-SRCH-08）：可见性校验后仅检索该频道帖子，结果复用帖子卡片结构。
+     */
+    @Transactional
+    public PageResult<PostResponse> channelSearch(String channelId, String q, String boardId, String sort,
+                                                  String cursor, Integer limit, String viewerId) {
+        accessService.requireVisibleChannel(channelId, viewerId);
+        if (boardId != null && !boardId.isBlank()) {
+            Board board = boardMapper.selectById(boardId);
+            if (board == null || board.getDeletedAt() != null || !channelId.equals(board.getChannelId())) {
+                throw new AppException(ErrorCode.BOARD_NOT_FOUND);
+            }
+        }
+        String keyword = requireKeyword(q);
+        String pattern = "%" + escapeLike(keyword) + "%";
+        int pageSize = CursorUtils.normalizeLimit(limit);
+        int offset = CursorUtils.parseOffsetCursor(cursor);
+        String sortValue = sort == null || sort.isBlank() ? SORT_RELEVANCE : sort;
+        List<Post> rows = switch (sortValue) {
+            case SORT_RELEVANCE -> postMapper.searchInChannelByRelevance(channelId, boardId, pattern, offset,
+                    pageSize + 1);
+            case SORT_LATEST -> postMapper.searchInChannelLatest(channelId, boardId, pattern, offset, pageSize + 1);
+            default -> throw new AppException(ErrorCode.VALIDATION_ERROR,
+                    "频道内搜索排序取值必须为 relevance 或 latest");
+        };
+        boolean hasMore = rows.size() > pageSize;
+        List<Post> page = hasMore ? rows.subList(0, pageSize) : rows;
+        String nextCursor = hasMore ? CursorUtils.formatOffsetCursor(offset + pageSize) : null;
+        recordSearch(keyword, viewerId, SearchLog.Scope.CHANNEL, channelId, page.size());
+        return new PageResult<>(postService.toResponses(page, viewerId), nextCursor);
+    }
+
+    /**
+     * 搜索联想：已加入频道前缀匹配 + 热词前缀匹配（热词来自 hot_keywords 聚合）。
      */
     public SearchSuggestResponse suggest(String q, String userId) {
         String keyword = requireKeyword(q);
@@ -131,8 +220,16 @@ public class SearchService {
                 .map(this::toChannelItem)
                 .toList();
         String prefixPattern = escapeLike(keyword) + "%";
-        List<String> keywords = searchLogMapper.selectPopularKeywords(prefixPattern, SUGGEST_LIMIT);
+        List<String> keywords = searchHotwordService.keywordsByPrefix(prefixPattern, SUGGEST_LIMIT);
         return new SearchSuggestResponse(channels, keywords);
+    }
+
+    /**
+     * 搜索热词榜（公开只读）。
+     */
+    public PageResult<HotKeywordResponse> hotKeywords(Integer limit) {
+        int size = limit == null || limit <= 0 ? 10 : Math.min(limit, 50);
+        return new PageResult<>(searchHotwordService.top(size), null);
     }
 
     /**
@@ -145,17 +242,11 @@ public class SearchService {
                 .toList();
     }
 
-    /**
-     * 清空搜索历史。
-     */
     @Transactional
     public void clearHistory(String userId) {
         searchHistoryMapper.delete(Wrappers.<SearchHistory>lambdaQuery().eq(SearchHistory::getUserId, userId));
     }
 
-    /**
-     * 删除单条历史（防 IDOR：必须属于当前用户）。
-     */
     @Transactional
     public void deleteHistory(String historyId, String userId) {
         SearchHistory history = searchHistoryMapper.selectById(historyId);
@@ -165,18 +256,20 @@ public class SearchService {
         searchHistoryMapper.deleteById(historyId);
     }
 
-    private void recordSearch(String keyword, String userId, int resultCount) {
+    private void recordSearch(String keyword, String userId, SearchLog.Scope scope, String channelId,
+                              int resultCount) {
         LocalDateTime now = ClockTimes.nowUtc();
         SearchLog log = new SearchLog();
         log.setId(UlidGenerator.generate());
         log.setUserId(userId);
         log.setKeyword(keyword);
-        log.setScope(SearchLog.Scope.GLOBAL.name());
+        log.setScope(scope.name());
+        log.setChannelId(channelId);
         log.setResultCount(resultCount);
         log.setCreatedAt(now);
         searchLogMapper.insert(log);
 
-        if (userId != null) {
+        if (userId != null && scope == SearchLog.Scope.GLOBAL) {
             // 同一关键词只保留最新一条（唯一约束 uk_search_history_user_keyword）
             searchHistoryMapper.delete(Wrappers.<SearchHistory>lambdaQuery()
                     .eq(SearchHistory::getUserId, userId)
@@ -223,6 +316,15 @@ public class SearchService {
                 channel.getId(), channel.getName(), channel.getAvatarUrl(), channel.getAvatarUrl(),
                 channel.getMemberCount(), null, null, null, null, null, null, null, null,
                 ClockTimes.toInstant(channel.getCreatedAt()));
+    }
+
+    private SearchItemResponse toSearchItem(Post post) {
+        List<Post> single = List.of(post);
+        Map<String, Channel> channels = loadChannels(single);
+        Map<String, User> authors = loadAuthors(single);
+        Map<String, Board> boards = loadBoards(single);
+        return toPostItem(post, channels.get(post.getChannelId()), authors.get(post.getAuthorId()),
+                boards.get(post.getBoardId()));
     }
 
     private SearchItemResponse toPostItem(Post post, Channel channel, User author, Board board) {

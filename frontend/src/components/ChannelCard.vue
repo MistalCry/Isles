@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { formatCount } from '@/utils/format'
+import { canManageChannelSummary } from '@/utils/channelPermissions'
 import type { ChannelSummary } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
 
@@ -14,8 +16,16 @@ const props = withDefaults(
   },
 )
 
+const router = useRouter()
 const channelNo = computed(() => (props.channel.channelNo ? `#${props.channel.channelNo}` : ''))
 const isPrivate = computed(() => props.channel.type === 'PRIVATE')
+const isManager = computed(() => canManageChannelSummary(props.channel))
+
+function openManage(event: Event): void {
+  event.preventDefault()
+  event.stopPropagation()
+  void router.push({ name: 'manage', params: { channelId: props.channel.id } })
+}
 </script>
 
 <template>
@@ -29,6 +39,9 @@ const isPrivate = computed(() => props.channel.type === 'PRIVATE')
       <div class="channel-card__title-row">
         <h3 class="channel-card__name line-clamp-1">{{ channel.name }}</h3>
         <el-tag v-if="isPrivate" size="small" type="info" effect="plain">私密</el-tag>
+        <button v-if="isManager" type="button" class="channel-card__manage" title="进入频道管理中心" @click="openManage">
+          管理
+        </button>
       </div>
       <p class="channel-card__meta">
         <span v-if="channelNo">{{ channelNo }}</span>
@@ -77,6 +90,18 @@ const isPrivate = computed(() => props.channel.type === 'PRIVATE')
   display: flex;
   gap: var(--isles-space-2);
   align-items: center;
+}
+
+.channel-card__manage {
+  flex-shrink: 0;
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--isles-primary);
+  cursor: pointer;
+  background: var(--isles-primary-soft, rgb(64 128 255 / 12%));
+  border: none;
+  border-radius: var(--isles-radius-sm);
 }
 
 .channel-card__name {

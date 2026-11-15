@@ -32,6 +32,18 @@ export async function joinChannel(id: string): Promise<Channel> {
   return toChannel(data)
 }
 
+export interface InviteAcceptResult {
+  status: string
+  channelId?: string
+  joinRequestId?: string
+}
+
+/** 使用邀请链接：返回 JOINED 或 PENDING（需审批）。 */
+export async function acceptInvite(token: string): Promise<InviteAcceptResult> {
+  const { data } = await http.post<InviteAcceptResult>(`/invites/${encodeURIComponent(token)}/accept`)
+  return data
+}
+
 export async function leaveChannel(id: string): Promise<void> {
   await http.post(`/channels/${encodeURIComponent(id)}/leave`)
 }

@@ -1,6 +1,8 @@
 package com.isles.comment.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.isles.channel.audit.AuditLogService;
+import com.isles.channel.audit.ChannelAuditLog;
 import com.isles.channel.service.ChannelAccessService;
 import com.isles.channel.service.ChannelPermissions;
 import com.isles.comment.dto.CommentResponse;
@@ -59,6 +61,8 @@ public class CommentService {
     private final InteractionService interactionService;
     private final NotificationService notificationService;
     private final JsonSupport jsonSupport;
+    private final AuditLogService auditLogService;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     /**
      * 评论列表：默认按点赞数排序，支持最新排序，游标分页；回复一次性批量加载避免 N+1。
@@ -142,8 +146,15 @@ public class CommentService {
         comment.setCreatedAt(now);
         commentMapper.insert(comment);
         postMapper.addCommentCount(postId, 1);
+        auditLogService.record(post.getChannelId(), userId, ChannelAuditLog.Action.COMMENT_CREATE, "COMMENT",
+                comment.getId(), Map.of("postId", postId));
 
         notifyComment(post, parent, comment, userId);
+        if (parent != null) {
+            // 事务提交后由 AI 模块判断是否需要「助手接话」（CommentService 不直接依赖 AI 模块）
+            eventPublisher.publishEvent(new com.isles.comment.event.CommentRepliedEvent(
+                    post.getChannelId(), postId, comment.getId(), parent.getId(), parent.getAuthorId(), userId));
+        }
         User author = userMapper.selectById(userId);
         return buildResponse(comment, author, null, false, null, List.of());
     }

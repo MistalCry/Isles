@@ -23,6 +23,8 @@ const props = withDefaults(
     commentCount?: number
     embedded?: boolean
     defaultSort?: CommentSort
+    /** 是否允许当前用户评论（频道成员校验；未加入频道时为 false） */
+    canComment?: boolean
   }>(),
   {
     postAuthorId: '',
@@ -30,6 +32,7 @@ const props = withDefaults(
     commentCount: 0,
     embedded: false,
     defaultSort: 'likes',
+    canComment: true,
   },
 )
 
@@ -84,6 +87,10 @@ function cancelReply(): void {
 
 async function submit(): Promise<void> {
   if (!requireLogin('登录后可发表评论')) return
+  if (!props.canComment) {
+    ElMessage.warning('加入频道后才能评论')
+    return
+  }
   const message = validateComment(content.value)
   if (message) {
     ElMessage.warning(message)
@@ -147,7 +154,14 @@ const placeholder = () => (auth.isAuthenticated ? '友善发言，理性讨论�
       </el-radio-group>
     </header>
 
-    <div class="comment-composer">
+    <div v-if="!canComment" class="comment-section__join-tip">
+      <p>加入该频道后才能评论与回复。</p>
+      <RouterLink v-if="channelId" :to="{ name: 'channel', params: { id: channelId } }" class="link">
+        前往频道页加入 →
+      </RouterLink>
+    </div>
+
+    <div v-else class="comment-composer">
       <UserAvatar
         v-if="auth.currentUser"
         :src="auth.currentUser.avatarUrl"
@@ -249,6 +263,19 @@ const placeholder = () => (auth.isAuthenticated ? '友善发言，理性讨论�
   color: var(--isles-text-muted);
   font-size: var(--isles-font-sm);
   font-weight: 400;
+}
+
+.comment-section__join-tip {
+  display: flex;
+  gap: var(--isles-space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--isles-space-3) var(--isles-space-4);
+  margin-bottom: var(--isles-space-3);
+  color: var(--isles-text-secondary);
+  font-size: var(--isles-font-sm);
+  background: var(--isles-surface-muted);
+  border-radius: var(--isles-radius-md);
 }
 
 .comment-composer {

@@ -4,13 +4,13 @@ import { ElMessage } from 'element-plus'
 import { ChatDotRound, Share, Star, StarFilled, View } from '@element-plus/icons-vue'
 import { postsApi } from '@/api'
 import { useRequireLogin } from '@/composables/useRequireLogin'
-import { absoluteUrl, excerpt, formatCount, formatRelativeTime, sortMedia } from '@/utils/format'
-import { copyText } from '@/utils/clipboard'
+import { excerpt, formatCount, formatRelativeTime, sortMedia } from '@/utils/format'
 import type { Comment, Post } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
 import UserCardPopover from './UserCardPopover.vue'
 import MediaViewer from './MediaViewer.vue'
 import QuickCommentSheet from './QuickCommentSheet.vue'
+import ShareToDmDialog from './dm/ShareToDmDialog.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -37,6 +37,7 @@ const liked = ref(Boolean(props.post.isLiked))
 const commentCount = ref(props.post.commentCount ?? 0)
 const liking = ref(false)
 const commentsOpen = ref(false)
+const shareOpen = ref(false)
 
 const authorName = computed(
   () => props.post.author.nickname || props.post.author.username || '岛民',
@@ -93,28 +94,13 @@ async function toggleLike(): Promise<void> {
   }
 }
 
-async function handleShare(): Promise<void> {
-  const url = absoluteUrl(`/posts/${props.post.id}`)
-  const copied = await copyText(url)
-  if (copied) {
-    ElMessage.success('链接已复制')
-  } else {
-    ElMessage.warning('复制失败，请手动复制地址栏链接')
-  }
-  try {
-    await postsApi.countPostShare(props.post.id)
-  } catch {
-    // 分享计数失败不打扰用户
-  }
-}
-
 function handleCommentCreated(_comment: Comment): void {
   commentCount.value += 1
   emit('changed', props.post)
 }
 
 function handleAdminAction(action: string): void {
-  ElMessage.info(`${action}操作将在 M2 的内容管理能力中上线`)
+  ElMessage.info(`${action}操作请在频道管理中心完成`)
 }
 </script>
 
@@ -175,7 +161,7 @@ function handleAdminAction(action: string): void {
         <span>{{ formatCount(commentCount) }}</span>
       </button>
 
-      <button type="button" class="post-action" aria-label="复制分享链接" @click="handleShare">
+      <button type="button" class="post-action" aria-label="分享帖子" @click="shareOpen = true">
         <el-icon :size="16"><Share /></el-icon>
         <span>分享</span>
       </button>
@@ -198,6 +184,8 @@ function handleAdminAction(action: string): void {
       :comment-count="commentCount"
       @created="handleCommentCreated"
     />
+
+    <ShareToDmDialog v-model="shareOpen" :post="post" />
   </article>
 </template>
 

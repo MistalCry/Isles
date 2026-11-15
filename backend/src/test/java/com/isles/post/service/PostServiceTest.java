@@ -4,6 +4,8 @@ import com.isles.channel.entity.Board;
 import com.isles.channel.entity.Channel;
 import com.isles.channel.entity.ChannelMember;
 import com.isles.channel.entity.Role;
+import com.isles.channel.audit.AuditLogService;
+import com.isles.analytics.service.ChannelViewService;
 import com.isles.channel.mapper.BoardMapper;
 import com.isles.channel.mapper.ChannelMapper;
 import com.isles.channel.service.ChannelAccessService;
@@ -50,6 +52,8 @@ class PostServiceTest {
     private UserMapper userMapper;
     private ChannelAccessService accessService;
     private InteractionService interactionService;
+    private ChannelViewService channelViewService;
+    private AuditLogService auditLogService;
     private PostService postService;
 
     @BeforeEach
@@ -61,8 +65,10 @@ class PostServiceTest {
         userMapper = mock(UserMapper.class);
         accessService = mock(ChannelAccessService.class);
         interactionService = mock(InteractionService.class);
+        channelViewService = mock(ChannelViewService.class);
+        auditLogService = mock(AuditLogService.class);
         postService = new PostService(postMapper, postMediaMapper, channelMapper, boardMapper, userMapper,
-                accessService, interactionService);
+                accessService, interactionService, channelViewService, auditLogService);
     }
 
     @Test

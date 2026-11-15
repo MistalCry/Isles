@@ -3,6 +3,7 @@ package com.isles.channel.service;
 import com.isles.channel.dto.ChannelResponse;
 import com.isles.channel.dto.CreateChannelRequest;
 import com.isles.channel.dto.InviteAcceptResponse;
+import com.isles.channel.audit.AuditLogService;
 import com.isles.channel.entity.Board;
 import com.isles.channel.entity.Channel;
 import com.isles.channel.entity.ChannelInvite;
@@ -45,6 +46,7 @@ class ChannelServiceTest {
     private JoinRequestMapper joinRequestMapper;
     private ChannelAccessService accessService;
     private ChannelService channelService;
+    private AuditLogService auditLogService;
 
     @BeforeEach
     void setUp() {
@@ -55,8 +57,9 @@ class ChannelServiceTest {
         channelInviteMapper = mock(ChannelInviteMapper.class);
         joinRequestMapper = mock(JoinRequestMapper.class);
         accessService = mock(ChannelAccessService.class);
+        auditLogService = mock(AuditLogService.class);
         channelService = new ChannelService(channelMapper, boardMapper, roleMapper, channelMemberMapper,
-                channelInviteMapper, joinRequestMapper, accessService, new JsonSupport());
+                channelInviteMapper, joinRequestMapper, accessService, new JsonSupport(), auditLogService);
     }
 
     @Test

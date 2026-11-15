@@ -3,6 +3,7 @@ package com.isles.comment.service;
 import com.isles.channel.entity.Channel;
 import com.isles.channel.entity.ChannelMember;
 import com.isles.channel.entity.Role;
+import com.isles.channel.audit.AuditLogService;
 import com.isles.channel.service.ChannelAccessService;
 import com.isles.channel.service.ChannelPermissions;
 import com.isles.comment.dto.CommentResponse;
@@ -30,6 +31,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+
+import org.springframework.context.ApplicationEventPublisher;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -46,6 +49,7 @@ class CommentServiceTest {
     private InteractionService interactionService;
     private NotificationService notificationService;
     private CommentService commentService;
+    private AuditLogService auditLogService;
 
     @BeforeEach
     void setUp() {
@@ -55,8 +59,9 @@ class CommentServiceTest {
         accessService = mock(ChannelAccessService.class);
         interactionService = mock(InteractionService.class);
         notificationService = mock(NotificationService.class);
+        auditLogService = mock(AuditLogService.class);
         commentService = new CommentService(commentMapper, postMapper, userMapper, accessService,
-                interactionService, notificationService, new JsonSupport());
+                interactionService, notificationService, new JsonSupport(), auditLogService, mock(ApplicationEventPublisher.class));
     }
 
     @Test

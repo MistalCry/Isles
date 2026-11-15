@@ -1,5 +1,7 @@
 package com.isles.auth.controller;
 
+import com.isles.common.ratelimit.RateLimit;
+import com.isles.common.ratelimit.RateLimitPolicy;
 import com.isles.auth.dto.LoginRequest;
 import com.isles.auth.dto.LoginResponse;
 import com.isles.auth.dto.RefreshResponse;
@@ -50,12 +52,14 @@ public class AuthController {
     @Value("${app.auth.refresh-token-days:7}")
     private long refreshTokenDays;
 
+    @RateLimit(RateLimitPolicy.REGISTER)
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
     public UserResponse register(@Valid @RequestBody RegisterRequest request) {
         return authService.register(request);
     }
 
+    @RateLimit(RateLimitPolicy.LOGIN)
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest,
                                HttpServletResponse httpResponse) {

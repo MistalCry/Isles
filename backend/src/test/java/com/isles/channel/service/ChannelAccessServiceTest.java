@@ -8,6 +8,7 @@ import com.isles.channel.mapper.ChannelMemberMapper;
 import com.isles.channel.mapper.RoleMapper;
 import com.isles.common.error.AppException;
 import com.isles.common.error.ErrorCode;
+import com.isles.common.json.JsonSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -34,7 +35,7 @@ class ChannelAccessServiceTest {
         channelMapper = mock(ChannelMapper.class);
         channelMemberMapper = mock(ChannelMemberMapper.class);
         roleMapper = mock(RoleMapper.class);
-        accessService = new ChannelAccessService(channelMapper, channelMemberMapper, roleMapper);
+        accessService = new ChannelAccessService(channelMapper, channelMemberMapper, roleMapper, new JsonSupport());
     }
 
     @Test
@@ -137,6 +138,58 @@ class ChannelAccessServiceTest {
                 ChannelPermissions.POST_CREATE))
                 .isInstanceOf(AppException.class)
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+    }
+
+    @Test
+    void should_reject_interaction_when_mute_all_active() {
+        Channel channel = channel(Channel.Type.PUBLIC, Channel.Visibility.PUBLIC_VISIBLE);
+        channel.setMuteAllUntil(LocalDateTime.now().plusHours(1));
+        ChannelMember member = member(ChannelMember.Status.ACTIVE, null);
+        member.setRoleId("role-1");
+        when(channelMapper.selectById("ch-1")).thenReturn(channel);
+        when(channelMemberMapper.selectOne(any())).thenReturn(member);
+        when(roleMapper.selectById("role-1")).thenReturn(role("[\"post.create\"]", "ch-1"));
+
+        assertThatThrownBy(() -> accessService.requireInteractionPermission("ch-1", "user-2",
+                ChannelPermissions.POST_CREATE))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode()).isEqualTo(ErrorCode.CHANNEL_MUTED));
+    }
+
+    @Test
+    void should_allow_super_admin_interaction_during_mute_all() {
+        Channel channel = channel(Channel.Type.PUBLIC, Channel.Visibility.PUBLIC_VISIBLE);
+        channel.setMuteAllUntil(LocalDateTime.now().plusHours(1));
+        ChannelMember member = member(ChannelMember.Status.ACTIVE, null);
+        member.setRoleId("role-1");
+        when(channelMapper.selectById("ch-1")).thenReturn(channel);
+        when(channelMemberMapper.selectOne(any())).thenReturn(member);
+        when(roleMapper.selectById("role-1"))
+                .thenReturn(role("[\"post.create\",\"channel.mute_all\"]", "ch-1"));
+
+        ChannelAccessService.ChannelAccessContext context = accessService
+                .requireInteractionPermission("ch-1", "user-2", ChannelPermissions.POST_CREATE);
+
+        assertThat(context.isMember()).isTrue();
+    }
+
+    @Test
+    void should_enforce_board_scope_for_board_admin() {
+        Channel channel = channel(Channel.Type.PUBLIC, Channel.Visibility.PUBLIC_VISIBLE);
+        ChannelMember member = member(ChannelMember.Status.ACTIVE, null);
+        member.setRoleId("role-board");
+        Role boardAdminRole = role("[\"post.pin\"]", "ch-1");
+        boardAdminRole.setScopeBoardId("board-1");
+        when(channelMapper.selectById("ch-1")).thenReturn(channel);
+        when(channelMemberMapper.selectOne(any())).thenReturn(member);
+        when(roleMapper.selectById("role-board")).thenReturn(boardAdminRole);
+
+        assertThatThrownBy(() -> accessService.requirePostManagePermission("ch-1", "user-2", "board-2",
+                ChannelPermissions.POST_PIN))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+        assertThat(accessService.requirePostManagePermission("ch-1", "user-2", "board-1",
+                ChannelPermissions.POST_PIN)).isNotNull();
     }
 
     private Channel channel(Channel.Type type, Channel.Visibility visibility) {

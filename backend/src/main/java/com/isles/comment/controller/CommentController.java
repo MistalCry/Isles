@@ -1,5 +1,7 @@
 package com.isles.comment.controller;
 
+import com.isles.common.ratelimit.RateLimit;
+import com.isles.common.ratelimit.RateLimitPolicy;
 import com.isles.comment.dto.CommentResponse;
 import com.isles.comment.dto.CreateCommentRequest;
 import com.isles.comment.service.CommentService;
@@ -40,6 +42,7 @@ public class CommentController {
         return commentService.listComments(postId, sort, cursor, limit, currentUserProvider.currentUserIdOrNull());
     }
 
+    @RateLimit(RateLimitPolicy.COMMENT_CREATE)
     @PostMapping("/posts/{postId}/comments")
     @ResponseStatus(HttpStatus.CREATED)
     public CommentResponse createComment(@PathVariable String postId,

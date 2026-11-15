@@ -24,6 +24,8 @@ public class JoinRequest {
     private String status;
     private String reviewedBy;
     private LocalDateTime reviewedAt;
+    /** 审批备注（V2 新增）。 */
+    private String reviewNote;
     private LocalDateTime createdAt;
 
     public enum Status {

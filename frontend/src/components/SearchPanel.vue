@@ -6,7 +6,7 @@ import { Close, Search } from '@element-plus/icons-vue'
 import { searchApi } from '@/api'
 import { useSearchHistory } from '@/composables/useSearchHistory'
 import UserAvatar from './UserAvatar.vue'
-import type { SearchSuggestion } from '@/types/models'
+import type { HotKeyword, SearchSuggestion } from '@/types/models'
 
 const props = withDefaults(
   defineProps<{
@@ -31,6 +31,8 @@ const router = useRouter()
 const keyword = ref(props.initialKeyword)
 const suggestion = ref<SearchSuggestion>({ channels: [], keywords: [] })
 const suggesting = ref(false)
+const hotKeywords = ref<HotKeyword[]>([])
+const hotLoading = ref(false)
 const { items: history, loading: historyLoading, usingLocalFallback, load, record, remove, clear } = useSearchHistory()
 
 let debounceTimer: number | undefined
@@ -62,7 +64,17 @@ watch(keyword, (value) => {
 
 onMounted(() => {
   void load()
+  void loadHotKeywords()
 })
+
+async function loadHotKeywords(): Promise<void> {
+  hotLoading.value = true
+  try {
+    hotKeywords.value = await searchApi.getHotKeywords(10)
+  } finally {
+    hotLoading.value = false
+  }
+}
 
 onBeforeUnmount(() => {
   window.clearTimeout(debounceTimer)
@@ -112,7 +124,7 @@ async function clearHistory(): Promise<void> {
     </form>
 
     <p v-if="scope === 'channel'" class="search-panel__scope">
-      频道内搜索（{{ channelId }}）将在 M2 上线，当前先执行全站搜索。
+      频道内搜索：仅搜索当前频道「{{ channelId }}」的内容。
     </p>
 
     <div v-if="keyword.trim()" class="search-panel__suggest">
@@ -146,6 +158,25 @@ async function clearHistory(): Promise<void> {
     </div>
 
     <div v-else class="search-panel__history">
+      <div v-if="hotKeywords.length > 0 || hotLoading" class="search-panel__hot">
+        <div class="search-panel__history-head">
+          <h3>热门搜索</h3>
+        </div>
+        <el-skeleton v-if="hotLoading" :rows="1" animated />
+        <div v-else class="search-panel__chips">
+          <button
+            v-for="(item, index) in hotKeywords"
+            :key="item.keyword"
+            type="button"
+            class="hot-chip"
+            @click="submit(item.keyword)"
+          >
+            <span class="hot-chip__rank">{{ index + 1 }}</span>
+            {{ item.keyword }}
+          </button>
+        </div>
+      </div>
+
       <div class="search-panel__history-head">
         <h3>搜索历史</h3>
         <button v-if="history.length > 0" type="button" class="link" @click="clearHistory">清空</button>
@@ -231,6 +262,33 @@ async function clearHistory(): Promise<void> {
 
 .search-panel__history {
   margin-top: var(--isles-space-4);
+}
+
+.search-panel__hot {
+  margin-bottom: var(--isles-space-4);
+}
+
+.hot-chip {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 12px;
+  color: var(--isles-text-secondary);
+  font-size: var(--isles-font-xs);
+  background: var(--isles-surface);
+  border: 1px solid var(--isles-border);
+  border-radius: var(--isles-radius-pill);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--isles-primary);
+    border-color: var(--isles-border-strong);
+  }
+}
+
+.hot-chip__rank {
+  color: var(--isles-accent);
+  font-weight: 600;
 }
 
 .search-panel__history-head {

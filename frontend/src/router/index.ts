@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { pinia } from '@/stores'
+import { aiRoutes } from './ai.routes'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -74,6 +75,24 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '私信', requiresAuth: true },
   },
   {
+    path: '/notifications',
+    name: 'notifications',
+    component: () => import('@/pages/NotificationsView.vue'),
+    meta: { title: '通知', requiresAuth: true },
+  },
+  {
+    path: '/friends',
+    name: 'friends',
+    component: () => import('@/pages/FriendsView.vue'),
+    meta: { title: '好友', requiresAuth: true },
+  },
+  {
+    path: '/invites/:token',
+    name: 'invite-accept',
+    component: () => import('@/pages/InviteAcceptView.vue'),
+    meta: { title: '邀请加入频道', requiresAuth: true },
+  },
+  {
     path: '/manage/:channelId/:pathMatch(.*)*',
     name: 'manage',
     component: () => import('@/pages/ManageView.vue'),
@@ -91,11 +110,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/RegisterView.vue'),
     meta: { title: '注册', guestOnly: true, authLayout: true },
   },
+  // 平台管理后台（WP6）：AdminLayout + 子路由，未命中的 /admin/* 回落到概览
+  ...aiRoutes,
   {
     path: '/admin/:pathMatch(.*)*',
-    name: 'admin',
-    component: () => import('@/pages/AdminView.vue'),
-    meta: { title: '平台管理后台', requiresAuth: true },
+    redirect: '/admin/overview',
   },
   {
     path: '/:pathMatch(.*)*',

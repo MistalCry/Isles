@@ -3,6 +3,7 @@ package com.isles.config;
 import com.isles.auth.security.JwtAuthenticationFilter;
 import com.isles.common.error.ErrorCode;
 import com.isles.common.web.JsonErrorWriter;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -65,8 +66,13 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // SSE/异步请求完成后会再走一次 ASYNC 派发；此时 SecurityContext 不再可用，
+                        // 必须放行，否则已提交的流会被中断（客户端表现为 "terminated"）。
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         // 健康检查与错误页
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/error").permitAll()
+                        // WebSocket 握手放行：鉴权在 STOMP CONNECT 帧由 ChannelInterceptor 完成（docs/02 §5.4）
+                        .requestMatchers("/ws", "/ws/**").permitAll()
                         // 上传文件静态访问
                         .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                         // 认证入口
@@ -83,6 +89,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/posts/*", "/api/v1/posts/*/comments").permitAll()
                         // 公开只读：搜索
                         .requestMatchers(HttpMethod.GET, "/api/v1/search").permitAll()
+                        // 公开只读：全站热门、搜索热词、频道内搜索（WP3）
+                        .requestMatchers(HttpMethod.GET, "/api/v1/hot").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/search/hot").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/channels/*/search").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(this::handleUnauthorized)
@@ -94,14 +104,23 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.stream(allowedOrigins.split(","))
+        List<String> entries = Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isEmpty())
-                .toList());
+                .toList();
+        // 含通配符的条目（如 http://127.0.0.1:*）只能走 allowedOriginPatterns，
+        // Spring 的 setAllowedOrigins 不接受通配符；两类条目分开注册，避免混用抛异常。
+        List<String> exactOrigins = entries.stream().filter(origin -> !origin.contains("*")).toList();
+        List<String> originPatterns = entries.stream().filter(origin -> origin.contains("*")).toList();
+
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(exactOrigins);
+        if (!originPatterns.isEmpty()) {
+            configuration.setAllowedOriginPatterns(originPatterns);
+        }
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
-        configuration.setExposedHeaders(List.of("X-Request-Id"));
+        configuration.setExposedHeaders(List.of("X-Request-Id", "Retry-After"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

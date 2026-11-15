@@ -1,6 +1,8 @@
 package com.isles.interaction.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.isles.channel.audit.AuditLogService;
+import com.isles.channel.audit.ChannelAuditLog;
 import com.isles.channel.service.ChannelAccessService;
 import com.isles.comment.entity.Comment;
 import com.isles.comment.mapper.CommentLikeMapper;
@@ -41,6 +43,7 @@ public class InteractionService {
     private final CommentLikeMapper commentLikeMapper;
     private final ChannelAccessService accessService;
     private final NotificationService notificationService;
+    private final AuditLogService auditLogService;
 
     /**
      * 帖子点赞（需登录；对公开频道非成员也开放，符合 FR-AUTH-04"互动需登录"）。
@@ -89,6 +92,7 @@ public class InteractionService {
     public long sharePost(String postId, String userId) {
         Post post = requireVisiblePost(postId, userId);
         postMapper.addShareCount(postId);
+        auditLogService.record(post.getChannelId(), userId, ChannelAuditLog.Action.POST_SHARE, "POST", postId);
         return post.getShareCount() + 1;
     }
 

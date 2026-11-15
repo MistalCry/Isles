@@ -25,4 +25,6 @@ public class Board {
     private Long postCount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    /** 软删除（V2 新增）：板块删除后历史帖子仍可展示板块名。 */
+    private LocalDateTime deletedAt;
 }

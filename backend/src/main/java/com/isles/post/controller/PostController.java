@@ -1,10 +1,13 @@
 package com.isles.post.controller;
 
+import com.isles.common.ratelimit.RateLimit;
+import com.isles.common.ratelimit.RateLimitPolicy;
 import com.isles.common.pagination.PageResult;
 import com.isles.common.security.CurrentUserProvider;
 import com.isles.interaction.dto.LikeStateResponse;
 import com.isles.interaction.service.InteractionService;
 import com.isles.post.dto.CreatePostRequest;
+import com.isles.post.dto.UpdatePostRequest;
 import com.isles.post.dto.PostResponse;
 import com.isles.post.dto.ShareResponse;
 import com.isles.post.service.PostService;
@@ -14,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -33,6 +37,7 @@ public class PostController {
     private final InteractionService interactionService;
     private final CurrentUserProvider currentUserProvider;
 
+    @RateLimit(RateLimitPolicy.POST_CREATE)
     @PostMapping("/channels/{channelId}/posts")
     @ResponseStatus(HttpStatus.CREATED)
     public PostResponse createPost(@PathVariable String channelId, @Valid @RequestBody CreatePostRequest request) {
@@ -52,6 +57,14 @@ public class PostController {
     @GetMapping("/posts/{id}")
     public PostResponse getPost(@PathVariable String id) {
         return postService.getPostDetail(id, currentUserProvider.currentUserIdOrNull());
+    }
+
+    /**
+     * 编辑帖子（FR-POST-07）：仅作者本人可调用。
+     */
+    @PatchMapping("/posts/{id}")
+    public PostResponse updatePost(@PathVariable String id, @Valid @RequestBody UpdatePostRequest request) {
+        return postService.updatePost(id, request, currentUserProvider.requireUserId());
     }
 
     @PostMapping("/posts/{id}/like")

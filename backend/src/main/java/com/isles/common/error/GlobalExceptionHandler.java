@@ -3,12 +3,15 @@ package com.isles.common.error;
 import com.isles.common.api.ApiError;
 import com.isles.common.api.ErrorResponse;
 import com.isles.common.api.FieldErrorDetail;
+import com.isles.common.ratelimit.RateLimitExceededException;
 import com.isles.common.web.RequestIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -35,6 +38,17 @@ import java.util.List;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ErrorResponse> handleRateLimited(RateLimitExceededException ex,
+                                                           HttpServletRequest request) {
+        ApiError error = new ApiError(ErrorCode.RATE_LIMITED.name(), ex.getMessage(), List.of(),
+                requestId(request));
+        return ResponseEntity.status(ErrorCode.RATE_LIMITED.httpStatus())
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+                .body(new ErrorResponse(error));
+    }
 
     @ExceptionHandler(AppException.class)
     public ResponseEntity<ErrorResponse> handleAppException(AppException ex, HttpServletRequest request) {
@@ -116,7 +130,10 @@ public class GlobalExceptionHandler {
     private ResponseEntity<ErrorResponse> build(ErrorCode code, String message, List<FieldErrorDetail> details,
                                                 HttpServletRequest request) {
         ApiError error = new ApiError(code.name(), message, details, requestId(request));
-        return ResponseEntity.status(code.httpStatus()).body(new ErrorResponse(error));
+        // 显式声明 JSON：SSE 接口（Accept: text/event-stream）出错时也能返回统一错误信封而非 406/空响应
+        return ResponseEntity.status(code.httpStatus())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new ErrorResponse(error));
     }
 
     private String requestId(HttpServletRequest request) {

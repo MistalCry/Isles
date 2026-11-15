@@ -23,6 +23,10 @@ public enum ErrorCode {
     FORBIDDEN(HttpStatus.FORBIDDEN, "无权执行该操作"),
     CHANNEL_MUTED(HttpStatus.FORBIDDEN, "你已被禁言，暂时无法操作"),
     NOT_JOINED(HttpStatus.FORBIDDEN, "尚未加入该频道"),
+    BLOCKED(HttpStatus.FORBIDDEN, "由于拉黑关系，无法执行该操作"),
+    CANNOT_OPERATE_OWNER(HttpStatus.FORBIDDEN, "不能对频道主执行该操作"),
+    SYSTEM_ROLE_PROTECTED(HttpStatus.FORBIDDEN, "系统身份组不支持该操作"),
+    PERMISSION_EXCEEDED(HttpStatus.FORBIDDEN, "不能授予或使用超过自身的权限"),
 
     // 404
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "资源不存在"),
@@ -33,6 +37,13 @@ public enum ErrorCode {
     BOARD_NOT_FOUND(HttpStatus.NOT_FOUND, "板块不存在"),
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "通知不存在"),
     INVITE_INVALID(HttpStatus.NOT_FOUND, "邀请链接无效"),
+    INVITE_NOT_FOUND(HttpStatus.NOT_FOUND, "邀请链接不存在"),
+    ROLE_NOT_FOUND(HttpStatus.NOT_FOUND, "身份组不存在"),
+    MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "频道成员不存在"),
+    JOIN_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "加入申请不存在"),
+    REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "举报记录不存在"),
+    FRIEND_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "好友申请不存在或已处理"),
+    CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "私信会话不存在或无权访问"),
 
     // 405
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "请求方法不支持"),
@@ -42,6 +53,11 @@ public enum ErrorCode {
     ALREADY_JOINED(HttpStatus.CONFLICT, "你已经加入该频道"),
     ALREADY_LIKED(HttpStatus.CONFLICT, "已经点过赞"),
     ALREADY_APPLIED(HttpStatus.CONFLICT, "已提交过加入申请"),
+    JOIN_REQUEST_HANDLED(HttpStatus.CONFLICT, "该加入申请已处理"),
+    REPORT_ALREADY_EXISTS(HttpStatus.CONFLICT, "你已举报过该内容，请等待处理"),
+    REPORT_ALREADY_HANDLED(HttpStatus.CONFLICT, "该举报已处理"),
+    ALREADY_FRIENDS(HttpStatus.CONFLICT, "你们已经是好友"),
+    FRIEND_REQUEST_PENDING(HttpStatus.CONFLICT, "已有待处理的好友申请"),
     CONFLICT(HttpStatus.CONFLICT, "资源冲突"),
 
     // 413
@@ -51,6 +67,9 @@ public enum ErrorCode {
     BUSINESS_RULE_VIOLATION(HttpStatus.UNPROCESSABLE_CONTENT, "业务规则校验失败"),
     INVITE_EXPIRED(HttpStatus.UNPROCESSABLE_CONTENT, "邀请链接已过期"),
     INVITE_EXHAUSTED(HttpStatus.UNPROCESSABLE_CONTENT, "邀请链接使用次数已达上限"),
+    OWNER_CANNOT_LEAVE(HttpStatus.UNPROCESSABLE_CONTENT, "频道主不能退出频道，请先转让或解散频道"),
+    LAST_BOARD_CANNOT_DELETE(HttpStatus.UNPROCESSABLE_CONTENT, "至少保留一个板块"),
+    REPORT_TARGET_INVALID(HttpStatus.UNPROCESSABLE_CONTENT, "举报目标不存在或不可见"),
 
     // 429
     RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "请求过于频繁，请稍后再试"),

@@ -7,6 +7,15 @@ export async function getPost(id: string): Promise<Post> {
   return toPost(data)
 }
 
+/** 编辑帖子（仅作者）：返回更新后的帖子。 */
+export async function updatePost(
+  id: string,
+  payload: { title?: string; content?: string; contentFormat?: 'PLAIN' | 'HTML'; coverUrl?: string | null },
+): Promise<Post> {
+  const { data } = await http.patch(`/posts/${encodeURIComponent(id)}`, payload)
+  return toPost(data)
+}
+
 export async function likePost(id: string): Promise<LikeResult> {
   const { data } = await http.post(`/posts/${encodeURIComponent(id)}/like`)
   return toLikeResult(data)

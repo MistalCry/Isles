@@ -1,0 +1,2972 @@
+openapi: 3.1.0
+info:
+  title: 群岛（Isles）API
+  version: 0.4.0
+  description: |
+    社交频道平台后端接口契约（与 `docs/05-API设计.md` 同步维护）。
+
+    - Base URL：`/api/v1`
+    - 认证：`Authorization: Bearer <accessToken>`；refresh token 走 HttpOnly Cookie
+    - 错误信封：`{ "error": { code, message, details, requestId } }`
+    - 列表分页：内容流用游标 `cursor` + `nextCursor`；管理端列表用 `page`/`size` + `total`
+    - 限流：超限返回 429 并携带 `Retry-After`
+servers:
+  - url: http://127.0.0.1:8080/api/v1
+    description: 本地开发
+tags:
+  - name: auth
+    description: 认证与会话
+  - name: user
+    description: 用户与资料
+  - name: channel
+    description: 频道、板块、邀请
+  - name: post
+    description: 帖子与互动
+  - name: comment
+    description: 评论
+  - name: feed
+    description: 动态、热门、推荐
+  - name: search
+    description: 搜索
+  - name: dm
+    description: 私信
+  - name: friend
+    description: 好友与拉黑
+  - name: notification
+    description: 通知
+  - name: manage
+    description: 频道管理中心
+  - name: stats
+    description: 数据中心
+  - name: ai
+    description: 频道问问与频道助手
+  - name: admin
+    description: 平台管理后台
+  - name: media
+    description: 媒体上传
+security:
+  - bearerAuth: []
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: 注册（每 IP 5 次/小时）
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, minLength: 3, maxLength: 20 }
+                password: { type: string, minLength: 8, maxLength: 64 }
+                nickname: { type: string, maxLength: 32 }
+      responses:
+        '201':
+          description: 注册成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: 登录（每 IP 10 次/分钟）
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: 登录成功，refresh token 通过 Set-Cookie 下发
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  tokenType: { type: string, example: Bearer }
+                  expiresIn: { type: integer, example: 900 }
+                  user: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: 刷新 access token（读取 refresh_token Cookie，轮换旧令牌）
+      security: []
+      responses:
+        '200':
+          description: 刷新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  expiresIn: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: 登出并撤销 refresh token
+      responses:
+        '204': { description: 已登出 }
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: 当前登录用户
+      responses:
+        '200':
+          description: 当前用户
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /users/{id}:
+    get:
+      tags: [user]
+      summary: 用户公开资料
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 用户资料
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /users/{id}/card:
+    get:
+      tags: [user]
+      summary: 用户卡片（可带频道上下文返回加入时间/身份组）
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: channelId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: 用户卡片
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserCard' }
+  /users/me:
+    patch:
+      tags: [user]
+      summary: 修改我的资料
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nickname: { type: string, maxLength: 32 }
+                avatarUrl: { type: [string, 'null'], maxLength: 500 }
+                signature: { type: [string, 'null'], maxLength: 200 }
+                gender: { type: string, enum: [MALE, FEMALE, UNKNOWN] }
+                region: { type: [string, 'null'], maxLength: 64 }
+      responses:
+        '200':
+          description: 更新后的资料
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+  /channels:
+    post:
+      tags: [channel]
+      summary: 创建频道（自动生成频道号、默认板块与四个系统身份组）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, avatarUrl]
+              properties:
+                name: { type: string, maxLength: 64 }
+                avatarUrl: { type: string, maxLength: 500 }
+                coverUrl: { type: [string, 'null'], maxLength: 500 }
+                description: { type: [string, 'null'], maxLength: 1000 }
+                type: { type: string, enum: [PUBLIC, PRIVATE] }
+                visibility: { type: string, enum: [PUBLIC_VISIBLE, MEMBERS_ONLY] }
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Channel' }
+  /channels/mine:
+    get:
+      tags: [channel]
+      summary: 我加入的频道
+      responses:
+        '200':
+          description: 频道列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Channel' }
+  /channels/{id}:
+    get:
+      tags: [channel]
+      summary: 频道详情（按可见性校验）
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 频道详情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Channel' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /channels/{id}/join:
+    post:
+      tags: [channel]
+      summary: 加入公开频道
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 加入成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Channel' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /channels/{id}/boards:
+    get:
+      tags: [channel]
+      summary: 频道板块列表
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 板块列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Board' }
+                  nextCursor: { type: [string, 'null'] }
+  /channels/{id}/posts:
+    get:
+      tags: [post]
+      summary: 频道帖子列表（latest/hot/essence，可按板块过滤）
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: tab
+          in: query
+          schema: { type: string, enum: [latest, hot, essence], default: latest }
+        - name: boardId
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 帖子分页
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PostPage' }
+    post:
+      tags: [post]
+      summary: 发帖（每用户 10 次/分钟）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePostRequest' }
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Post' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /posts/{id}:
+    get:
+      tags: [post]
+      summary: 帖子详情（浏览量 +1）
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 帖子详情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Post' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [post]
+      summary: 删除帖子（作者或具备 post.delete 的管理者）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204': { description: 已删除 }
+  /posts/{id}/like:
+    post:
+      tags: [post]
+      summary: 点赞帖子
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 点赞状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LikeState' }
+    delete:
+      tags: [post]
+      summary: 取消点赞
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 点赞状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LikeState' }
+  /posts/{id}/share:
+    post:
+      tags: [post]
+      summary: 分享计数
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 分享后计数
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  shareCount: { type: integer }
+  /posts/{postId}/comments:
+    get:
+      tags: [comment]
+      summary: 评论列表（likes/latest 排序）
+      security: []
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [latest, likes], default: latest }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 评论分页
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommentPage' }
+    post:
+      tags: [comment]
+      summary: 发表评论/回复（每用户 30 次/分钟）
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, maxLength: 2000 }
+                parentId: { type: [string, 'null'] }
+                replyToUserId: { type: [string, 'null'] }
+                media: { type: array, items: { $ref: '#/components/schemas/MediaItem' } }
+                emoji: { type: array, items: { type: string } }
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Comment' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /comments/{id}/like:
+    post:
+      tags: [comment]
+      summary: 点赞评论
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 点赞状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LikeState' }
+    delete:
+      tags: [comment]
+      summary: 取消点赞评论
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 点赞状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LikeState' }
+  /comments/{id}:
+    delete:
+      tags: [comment]
+      summary: 删除评论（作者或管理员）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204': { description: 已删除 }
+  /feed:
+    get:
+      tags: [feed]
+      summary: 已加入频道的动态（latest/hot）
+      parameters:
+        - name: sort
+          in: query
+          schema: { type: string, enum: [latest, hot], default: latest }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 动态分页
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PostPage' }
+  /hot:
+    get:
+      tags: [feed]
+      summary: 全站热门讨论（热度 = 浏览 + 点赞×3 + 评论×5，时间衰减）
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 热门帖子分页
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PostPage' }
+  /hot/recommendations:
+    get:
+      tags: [feed]
+      summary: 频道推荐（含推荐理由）
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 推荐频道
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Recommendation' }
+  /search:
+    get:
+      tags: [search]
+      summary: 全站搜索（仅公开频道与帖子；每用户 60 次/分钟）
+      security: []
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 100 }
+        - name: type
+          in: query
+          schema: { type: string, enum: [all, channel, post], default: all }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [relevance, latest, members, active] }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 搜索结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SearchPage' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /search/suggest:
+    get:
+      tags: [search]
+      summary: 搜索联想（已加入频道前缀 + 热词前缀）
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: 联想结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SearchSuggest' }
+  /search/hot:
+    get:
+      tags: [search]
+      summary: 搜索热词榜
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 热词
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    keyword: { type: string }
+                    count: { type: integer }
+  /search/history:
+    get:
+      tags: [search]
+      summary: 我的搜索历史
+      responses:
+        '200':
+          description: 历史记录
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    keyword: { type: string }
+                    createdAt: { type: string, format: date-time }
+    delete:
+      tags: [search]
+      summary: 清空搜索历史
+      responses:
+        '204': { description: 已清空 }
+  /search/history/{id}:
+    delete:
+      tags: [search]
+      summary: 删除单条搜索历史
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204': { description: 已删除 }
+  /channels/{id}/search:
+    get:
+      tags: [search]
+      summary: 频道内搜索
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: q
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 频道内结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SearchPage' }
+  /channels/{id}/invites:
+    get:
+      tags: [manage]
+      summary: 邀请链接列表
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 邀请列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Invite' }
+    post:
+      tags: [channel]
+      summary: 创建邀请链接
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                requiresApproval: { type: boolean, default: false }
+                expiresInSeconds: { type: integer }
+                maxUses: { type: integer }
+      responses:
+        '201':
+          description: 邀请链接（含 token 与分享 URL）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invite' }
+  /channels/{id}/invites/{inviteId}:
+    delete:
+      tags: [manage]
+      summary: 撤销邀请链接
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: inviteId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: 已撤销 }
+  /invites/{token}/accept:
+    post:
+      tags: [channel]
+      summary: 使用邀请链接加入 / 提交加入申请
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 直接加入或已提交申请
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [JOINED, PENDING] }
+                  channel: { $ref: '#/components/schemas/Channel' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /channels/{id}/join-requests:
+    get:
+      tags: [manage]
+      summary: 加入申请列表（默认 PENDING）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: status
+          in: query
+          schema: { type: string, enum: [PENDING, APPROVED, REJECTED], default: PENDING }
+      responses:
+        '200':
+          description: 申请列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/JoinRequest' }
+  /channels/{id}/join-requests/{requestId}/approve:
+    post:
+      tags: [manage]
+      summary: 通过加入申请
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: 已通过 }
+  /channels/{id}/join-requests/{requestId}/reject:
+    post:
+      tags: [manage]
+      summary: 拒绝加入申请
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: 已拒绝 }
+  /channels/{id}/settings:
+    get:
+      tags: [manage]
+      summary: 频道设置面板（成员/邀请/禁言状态）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 设置信息
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChannelSettings' }
+  /channels/{id}/mute-all:
+    post:
+      tags: [manage]
+      summary: 全员禁言
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                durationSeconds: { type: integer, minimum: 60, maximum: 2592000 }
+      responses:
+        '200': { description: 已设置 }
+    delete:
+      tags: [manage]
+      summary: 解除全员禁言
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204': { description: 已解除 }
+  /channels/{id}/leave:
+    post:
+      tags: [manage]
+      summary: 退出频道（频道主不可退出）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204': { description: 已退出 }
+        '422': { $ref: '#/components/responses/BusinessRule' }
+  /channels/{id}/dissolve:
+    post:
+      tags: [manage]
+      summary: 解散频道（仅频道主）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204': { description: 已解散 }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /channels/{id}/members:
+    get:
+      tags: [manage]
+      summary: 成员列表（page/size）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: keyword
+          in: query
+          schema: { type: string }
+        - name: roleId
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 成员分页
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MemberPage' }
+  /channels/{id}/members/{userId}/mute:
+    post:
+      tags: [manage]
+      summary: 禁言成员
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [durationSeconds]
+              properties:
+                durationSeconds: { type: integer, minimum: 60, maximum: 2592000 }
+      responses:
+        '200':
+          description: 成员信息
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Member' }
+    delete:
+      tags: [manage]
+      summary: 解除禁言
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: 成员信息
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Member' }
+  /channels/{id}/members/{userId}:
+    delete:
+      tags: [manage]
+      summary: 移除成员
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204': { description: 已移除 }
+  /channels/{id}/members/{userId}/role:
+    post:
+      tags: [manage]
+      summary: 分配身份组
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roleId]
+              properties:
+                roleId: { type: string }
+      responses:
+        '200':
+          description: 成员信息
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Member' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /channels/{id}/roles:
+    get:
+      tags: [manage]
+      summary: 身份组列表
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 身份组列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Role' }
+    post:
+      tags: [manage]
+      summary: 新建身份组
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 32 }
+                description: { type: string, maxLength: 200 }
+                permissions: { type: array, items: { type: string } }
+                scopeBoardId: { type: [string, 'null'] }
+                sort: { type: integer }
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Role' }
+  /channels/{id}/roles/{roleId}:
+    patch:
+      tags: [manage]
+      summary: 编辑身份组
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                permissions: { type: array, items: { type: string } }
+                scopeBoardId: { type: [string, 'null'] }
+      responses:
+        '200':
+          description: 已更新
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Role' }
+    delete:
+      tags: [manage]
+      summary: 删除身份组（系统身份组不可删除）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: roleId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: 已删除 }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /channels/{id}/boards/manage:
+    get:
+      tags: [manage]
+      summary: 板块管理列表（含帖子数）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 板块列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Board' }
+  /channels/{id}/boards/reorder:
+    patch:
+      tags: [manage]
+      summary: 板块排序
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                boardIds: { type: array, items: { type: string } }
+      responses:
+        '200': { description: 已排序 }
+  /channels/{id}/posts/manage:
+    get:
+      tags: [manage]
+      summary: 内容管理列表（page/size，支持关键词/作者/板块/状态/时间筛选）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: keyword
+          in: query
+          schema: { type: string }
+        - name: authorId
+          in: query
+          schema: { type: string }
+        - name: boardId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [PUBLISHED, DELETED, HIDDEN] }
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 内容分页
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PostOffsetPage' }
+  /channels/{channelId}/posts/{postId}/pin:
+    post:
+      tags: [manage]
+      summary: 置顶帖子
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: postId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 帖子
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Post' }
+    delete:
+      tags: [manage]
+      summary: 取消置顶
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: postId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 帖子
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Post' }
+  /channels/{channelId}/posts/{postId}/essence:
+    post:
+      tags: [manage]
+      summary: 加精
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: postId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 帖子
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Post' }
+    delete:
+      tags: [manage]
+      summary: 取消精华
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: postId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 帖子
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Post' }
+  /channels/{channelId}/posts/{postId}:
+    delete:
+      tags: [manage]
+      summary: 管理端删除帖子
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: postId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: 已删除 }
+  /channels/{channelId}/posts/batch:
+    post:
+      tags: [manage]
+      summary: 批量置顶/精华/删除（单次最多 50 条）
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, postIds]
+              properties:
+                action: { type: string, enum: [PIN, UNPIN, ESSENCE, UNESSENCE, DELETE] }
+                postIds: { type: array, maxItems: 50, items: { type: string } }
+      responses:
+        '200':
+          description: 处理条数
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  affected: { type: integer }
+  /channels/{id}/audit-logs:
+    get:
+      tags: [manage]
+      summary: 管理日志（page/size，按操作人/动作/时间筛选）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: actorId
+          in: query
+          schema: { type: string }
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: targetType
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 日志分页
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditLogPage' }
+  /channels/{channelId}/stats/overview:
+    get:
+      tags: [stats]
+      summary: 数据中心概览（实时数字 + 昨日指标 + 环比）
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 概览
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StatsOverview' }
+  /channels/{channelId}/stats/trends:
+    get:
+      tags: [stats]
+      summary: 日趋势（近 N 天）
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: days
+          in: query
+          schema: { type: integer, default: 7, maximum: 90 }
+      responses:
+        '200':
+          description: 趋势点
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DailyStats' }
+  /channels/{channelId}/stats/content:
+    get:
+      tags: [stats]
+      summary: 内容分析（板块分布 / 热门帖子 / 互动漏斗）
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 内容统计
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  boardDistribution:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        boardId: { type: string }
+                        boardName: { type: string }
+                        postCount: { type: integer }
+                  topPosts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        postId: { type: string }
+                        title: { type: [string, 'null'] }
+                        contentPreview: { type: [string, 'null'] }
+                        viewCount: { type: integer }
+                        likeCount: { type: integer }
+                        commentCount: { type: integer }
+                        shareCount: { type: integer }
+                        createdAt: { type: string, format: date-time }
+                  funnel:
+                    type: object
+                    properties:
+                      viewCount: { type: integer }
+                      likeCount: { type: integer }
+                      commentCount: { type: integer }
+                      shareCount: { type: integer }
+                      interactionRate: { type: number }
+  /channels/{channelId}/stats/members:
+    get:
+      tags: [stats]
+      summary: 成员分析（身份组分布 / 新增趋势）
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: days
+          in: query
+          schema: { type: integer, default: 7 }
+      responses:
+        '200':
+          description: 成员统计
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  memberCount: { type: integer }
+                  roleDistribution:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        roleId: { type: string }
+                        roleName: { type: string }
+                        memberCount: { type: integer }
+                  newMemberTrend:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string, format: date }
+                        value: { type: integer }
+  /channels/{channelId}/stats/aggregate:
+    post:
+      tags: [stats]
+      summary: 手动补跑日聚合（默认昨日）
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: date
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: 聚合结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DailyStats' }
+  /reports:
+    post:
+      tags: [manage]
+      summary: 提交举报
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetType, targetId, reason]
+              properties:
+                targetType: { type: string, enum: [POST, COMMENT] }
+                targetId: { type: string }
+                reason: { type: string, enum: [SPAM, ABUSE, PORN, ILLEGAL, OTHER] }
+                description: { type: string, maxLength: 500 }
+      responses:
+        '201':
+          description: 已提交
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /reports/mine:
+    get:
+      tags: [manage]
+      summary: 我的举报记录
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 举报分页
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Report' }
+                  nextCursor: { type: [string, 'null'] }
+  /channels/{channelId}/reports:
+    get:
+      tags: [manage]
+      summary: 频道举报列表（page/size）
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [PENDING, ACCEPTED, REJECTED] }
+        - name: targetType
+          in: query
+          schema: { type: string, enum: [POST, COMMENT] }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 举报分页
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportPage' }
+  /channels/{channelId}/reports/{reportId}/handle:
+    post:
+      tags: [manage]
+      summary: 处置举报
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: reportId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [ACCEPTED, REJECTED] }
+                action: { type: string, enum: [NONE, DELETE_CONTENT, MUTE_AUTHOR] }
+                note: { type: string, maxLength: 500 }
+                muteDurationSeconds: { type: integer }
+      responses:
+        '200':
+          description: 处置结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /dm/conversations:
+    get:
+      tags: [dm]
+      summary: 私信会话列表
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 会话分页
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Conversation' }
+                  nextCursor: { type: [string, 'null'] }
+    post:
+      tags: [dm]
+      summary: 创建/复用与某用户的会话
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId: { type: string }
+      responses:
+        '200':
+          description: 会话
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Conversation' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /dm/conversations/{id}:
+    get:
+      tags: [dm]
+      summary: 会话详情
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 会话
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Conversation' }
+  /dm/conversations/{id}/messages:
+    get:
+      tags: [dm]
+      summary: 历史消息（时间正序，cursor 为上一页最旧消息 ID）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 消息分页
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/DmMessage' }
+                  nextCursor: { type: [string, 'null'] }
+    post:
+      tags: [dm]
+      summary: 发送私信（TEXT / IMAGE / POST 分享）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type: { type: string, enum: [TEXT, IMAGE, POST] }
+                content: { type: [string, 'null'], maxLength: 2000 }
+                mediaUrl: { type: [string, 'null'] }
+                postId: { type: [string, 'null'] }
+      responses:
+        '201':
+          description: 消息
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DmMessage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /dm/conversations/{id}/read:
+    post:
+      tags: [dm]
+      summary: 标记会话已读
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 未读数
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  unreadCount: { type: integer }
+  /dm/unread-count:
+    get:
+      tags: [dm]
+      summary: 私信未读总数
+      responses:
+        '200':
+          description: 未读数
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  unreadCount: { type: integer }
+  /friends:
+    get:
+      tags: [friend]
+      summary: 好友列表
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 好友分页
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Friend' }
+                  nextCursor: { type: [string, 'null'] }
+  /friends/requests:
+    get:
+      tags: [friend]
+      summary: 好友申请列表
+      parameters:
+        - name: direction
+          in: query
+          schema: { type: string, enum: [incoming, outgoing], default: incoming }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 申请分页
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/FriendRequest' }
+                  nextCursor: { type: [string, 'null'] }
+    post:
+      tags: [friend]
+      summary: 发起好友申请
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId: { type: string }
+                message: { type: string, maxLength: 200 }
+      responses:
+        '200':
+          description: 申请状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FriendRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /friends/requests/{id}/accept:
+    post:
+      tags: [friend]
+      summary: 同意好友申请
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200': { description: 已成为好友 }
+  /friends/requests/{id}/reject:
+    post:
+      tags: [friend]
+      summary: 拒绝好友申请
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200': { description: 已拒绝 }
+  /friends/{userId}:
+    delete:
+      tags: [friend]
+      summary: 删除好友
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204': { description: 已删除 }
+  /friends/{userId}/status:
+    get:
+      tags: [friend]
+      summary: 与目标用户的关系状态
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: 关系状态
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  friend: { type: boolean }
+                  requestPending: { type: boolean }
+                  blocked: { type: boolean }
+  /users/{userId}/block:
+    post:
+      tags: [friend]
+      summary: 拉黑用户
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204': { description: 已拉黑 }
+    delete:
+      tags: [friend]
+      summary: 解除拉黑
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204': { description: 已解除 }
+  /users/blocked:
+    get:
+      tags: [friend]
+      summary: 黑名单列表
+      responses:
+        '200':
+          description: 被拉黑用户
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/User' }
+  /notifications:
+    get:
+      tags: [notification]
+      summary: 通知列表（可按频道/类型/未读过滤）
+      parameters:
+        - name: channelId
+          in: query
+          schema: { type: string }
+        - name: type
+          in: query
+          schema: { type: string }
+        - name: unreadOnly
+          in: query
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 通知分页
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Notification' }
+                  nextCursor: { type: [string, 'null'] }
+  /notifications/unread-count:
+    get:
+      tags: [notification]
+      summary: 通知未读数（按类型分组）
+      responses:
+        '200':
+          description: 未读数
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  byType:
+                    type: object
+                    additionalProperties: { type: integer }
+  /notifications/{id}/read:
+    post:
+      tags: [notification]
+      summary: 标记单条已读
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204': { description: 已标记 }
+  /notifications/read-all:
+    post:
+      tags: [notification]
+      summary: 全部标记已读
+      responses:
+        '204': { description: 已标记 }
+  /media/upload:
+    post:
+      tags: [media]
+      summary: 上传图片/视频（每用户 30 次/小时）
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, type]
+              properties:
+                file: { type: string, format: binary }
+                type: { type: string, enum: [image, video] }
+      responses:
+        '201':
+          description: 上传结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  url: { type: string }
+                  thumbUrl: { type: [string, 'null'] }
+                  mediaType: { type: string, enum: [IMAGE, VIDEO] }
+                  width: { type: [integer, 'null'] }
+                  height: { type: [integer, 'null'] }
+                  durationMs: { type: [integer, 'null'] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '413': { description: 文件超出限制 }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /ai/status:
+    get:
+      tags: [ai]
+      summary: AI 能力状态（是否已配置模型）
+      responses:
+        '200':
+          description: 状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiStatus' }
+  /ai/models:
+    get:
+      tags: [ai]
+      summary: 可用模型（用户端，仅启用项）
+      responses:
+        '200':
+          description: 模型列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AiModel' }
+  /ai/conversations:
+    get:
+      tags: [ai]
+      summary: 会话列表（scope=GLOBAL/CHANNEL）
+      parameters:
+        - name: scope
+          in: query
+          schema: { type: string, enum: [GLOBAL, CHANNEL] }
+        - name: channelId
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 会话分页
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AiConversation' }
+                  nextCursor: { type: [string, 'null'] }
+    post:
+      tags: [ai]
+      summary: 新建会话
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scope]
+              properties:
+                scope: { type: string, enum: [GLOBAL, CHANNEL] }
+                channelId: { type: [string, 'null'] }
+                title: { type: string, maxLength: 100 }
+                modelConfigId: { type: [string, 'null'] }
+      responses:
+        '201':
+          description: 会话
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiConversation' }
+  /ai/conversations/{id}:
+    get:
+      tags: [ai]
+      summary: 会话详情
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 会话
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiConversation' }
+    patch:
+      tags: [ai]
+      summary: 重命名会话
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, maxLength: 100 }
+      responses:
+        '200':
+          description: 会话
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiConversation' }
+    delete:
+      tags: [ai]
+      summary: 删除会话
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204': { description: 已删除 }
+  /ai/conversations/{id}/messages:
+    get:
+      tags: [ai]
+      summary: 会话消息
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 消息分页
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AiMessage' }
+                  nextCursor: { type: [string, 'null'] }
+  /ai/conversations/{id}/messages/stream:
+    post:
+      tags: [ai]
+      summary: 发送提问（SSE 流式：meta/delta/reasoning/done/error）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content: { type: string }
+                imageUrls: { type: array, items: { type: string } }
+                modelConfigId: { type: [string, 'null'] }
+                deepThinking: { type: boolean }
+                regenerate: { type: boolean }
+      responses:
+        '200':
+          description: SSE 事件流
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /ai/conversations/{id}/regenerate:
+    post:
+      tags: [ai]
+      summary: 重新生成最后一条回答（SSE）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: SSE 事件流
+          content:
+            text/event-stream:
+              schema: { type: string }
+  /ai/messages/{id}/edit-stream:
+    post:
+      tags: [ai]
+      summary: 编辑历史提问并重发（SSE，截断后续消息）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+                modelConfigId: { type: [string, 'null'] }
+                deepThinking: { type: boolean }
+      responses:
+        '200':
+          description: SSE 事件流
+          content:
+            text/event-stream:
+              schema: { type: string }
+  /ai/messages/{id}/stop:
+    post:
+      tags: [ai]
+      summary: 停止生成
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204': { description: 已请求停止 }
+  /channels/{channelId}/ai/assistant:
+    get:
+      tags: [ai]
+      summary: 频道助手面板信息
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 助手信息
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssistantInfo' }
+  /channels/{channelId}/ai/settings:
+    get:
+      tags: [ai]
+      summary: 读取频道助手设置（channel.ai.manage）
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 设置
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssistantSettings' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [ai]
+      summary: 保存频道助手设置
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssistantSettings' }
+      responses:
+        '200':
+          description: 设置
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssistantSettings' }
+  /channels/{channelId}/ai/assistant-account:
+    post:
+      tags: [ai]
+      summary: 创建/修复助手虚拟账号
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 助手信息
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssistantInfo' }
+  /channels/{channelId}/ai/task-logs:
+    get:
+      tags: [ai]
+      summary: 自动任务执行日志（page/size）
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: taskType
+          in: query
+          schema:
+            type: string
+            enum: [DAILY_SUMMARY, WEEKLY_SUMMARY, MONTHLY_CONTRIBUTORS, AUTO_POST, AUTO_COMMENT, AUTO_LIKE]
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 日志分页
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskLogPage' }
+  /channels/{channelId}/ai/tasks/run:
+    post:
+      tags: [ai]
+      summary: 手动触发一次助手任务（受幂等与每日频率上限约束）
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [taskType]
+              properties:
+                taskType:
+                  type: string
+                  enum: [DAILY_SUMMARY, WEEKLY_SUMMARY, MONTHLY_CONTRIBUTORS, AUTO_POST, AUTO_COMMENT, AUTO_LIKE]
+      responses:
+        '200':
+          description: 任务日志
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskLog' }
+  /admin/me:
+    get:
+      tags: [admin]
+      summary: 平台管理员身份校验
+      responses:
+        '200':
+          description: 身份
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  admin: { type: boolean }
+                  userId: { type: string }
+                  username: { type: string }
+                  platformRole: { type: string }
+  /admin/overview:
+    get:
+      tags: [admin]
+      summary: 平台数据概览
+      responses:
+        '200':
+          description: 概览
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlatformOverview' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/users:
+    get:
+      tags: [admin]
+      summary: 用户列表（page/size）
+      parameters:
+        - name: keyword
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACTIVE, BANNED, DISABLED] }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 用户分页
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AdminUser' }
+                  total: { type: integer }
+                  page: { type: integer }
+                  size: { type: integer }
+  /admin/users/{id}/ban:
+    post:
+      tags: [admin]
+      summary: 禁用用户
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 用户
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUser' }
+        '422': { $ref: '#/components/responses/BusinessRule' }
+  /admin/users/{id}/unban:
+    post:
+      tags: [admin]
+      summary: 恢复用户
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 用户
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUser' }
+  /admin/channels:
+    get:
+      tags: [admin]
+      summary: 频道列表（page/size）
+      parameters:
+        - name: keyword
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 频道分页
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AdminChannel' }
+                  total: { type: integer }
+                  page: { type: integer }
+                  size: { type: integer }
+  /admin/channels/{id}/ban:
+    post:
+      tags: [admin]
+      summary: 封禁频道
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 频道
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminChannel' }
+  /admin/channels/{id}/unban:
+    post:
+      tags: [admin]
+      summary: 解封频道
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 频道
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminChannel' }
+  /admin/reports:
+    get:
+      tags: [admin]
+      summary: 全站举报列表（reports 表未就绪时返回 available=false）
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [PENDING, ACCEPTED, REJECTED] }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 举报分页
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Report' }
+                  total: { type: integer }
+                  available: { type: boolean }
+                  dependency: { type: [string, 'null'] }
+                  page: { type: integer }
+                  size: { type: integer }
+  /admin/reports/{id}/handle:
+    post:
+      tags: [admin]
+      summary: 平台处置举报
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [DISMISS, RESOLVE] }
+                note: { type: string, maxLength: 500 }
+      responses:
+        '200':
+          description: 处置结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  status: { type: string }
+  /admin/ai/models:
+    get:
+      tags: [admin]
+      summary: 模型配置列表
+      responses:
+        '200':
+          description: 配置列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AiModel' }
+    post:
+      tags: [admin]
+      summary: 新建模型配置
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AiModelConfigRequest' }
+      responses:
+        '201':
+          description: 配置
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiModel' }
+  /admin/ai/models/{id}:
+    put:
+      tags: [admin]
+      summary: 更新模型配置（提交掩码表示保留原 Key）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AiModelConfigRequest' }
+      responses:
+        '200':
+          description: 配置
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiModel' }
+    delete:
+      tags: [admin]
+      summary: 删除模型配置
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204': { description: 已删除 }
+  /admin/ai/models/{id}/test:
+    post:
+      tags: [admin]
+      summary: 连通性测试（已保存配置）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 测试结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConnectionTest' }
+  /admin/ai/test-connection:
+    post:
+      tags: [admin]
+      summary: 连通性测试（未保存配置）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [baseUrl]
+              properties:
+                baseUrl: { type: string }
+                apiKey: { type: [string, 'null'] }
+                model: { type: [string, 'null'] }
+      responses:
+        '200':
+          description: 测试结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConnectionTest' }
+  /admin/ai/models/{id}/remote-models:
+    get:
+      tags: [admin]
+      summary: 拉取远端模型列表（OpenAI 兼容 /models）
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 模型 ID 列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { type: string }
+  /admin/ai/status:
+    get:
+      tags: [admin]
+      summary: AI 配置状态
+      responses:
+        '200':
+          description: 状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiStatus' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, description: ULID }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+  responses:
+    BadRequest:
+      description: 参数校验失败
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: 未登录或令牌失效
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: 无权限
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: 资源不存在或不可见
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: 资源冲突
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    BusinessRule:
+      description: 业务规则不满足
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    TooManyRequests:
+      description: 触发限流
+      headers:
+        Retry-After:
+          schema: { type: integer }
+          description: 建议等待秒数
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, example: CHANNEL_NOT_FOUND }
+            message: { type: string }
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field: { type: string }
+                  message: { type: string }
+            requestId: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        username: { type: string }
+        nickname: { type: string }
+        avatarUrl: { type: [string, 'null'] }
+        signature: { type: [string, 'null'] }
+        gender: { type: string, enum: [MALE, FEMALE, UNKNOWN] }
+        region: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+    UserCard:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            channelId: { type: [string, 'null'] }
+            joinedAt: { type: [string, 'null'], format: date-time }
+            roleName: { type: [string, 'null'] }
+            memberStatus: { type: [string, 'null'] }
+    Channel:
+      type: object
+      properties:
+        id: { type: string }
+        channelNo: { type: integer }
+        name: { type: string }
+        avatarUrl: { type: [string, 'null'] }
+        coverUrl: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
+        type: { type: string, enum: [PUBLIC, PRIVATE] }
+        visibility: { type: string, enum: [PUBLIC_VISIBLE, MEMBERS_ONLY] }
+        ownerId: { type: string }
+        memberCount: { type: integer }
+        postCount: { type: integer }
+        joined: { type: boolean }
+        myRoleName: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+    Board:
+      type: object
+      properties:
+        id: { type: string }
+        channelId: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        sort: { type: integer }
+        postCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+    MediaItem:
+      type: object
+      properties:
+        type: { type: string, enum: [IMAGE, VIDEO] }
+        url: { type: string }
+        thumbUrl: { type: [string, 'null'] }
+        width: { type: [integer, 'null'] }
+        height: { type: [integer, 'null'] }
+        durationMs: { type: [integer, 'null'] }
+    CreatePostRequest:
+      type: object
+      required: [boardId, content]
+      properties:
+        boardId: { type: string }
+        title: { type: [string, 'null'], maxLength: 200 }
+        content: { type: string }
+        contentFormat: { type: string, enum: [PLAIN, HTML], default: PLAIN }
+        coverUrl: { type: [string, 'null'] }
+        media:
+          type: array
+          maxItems: 9
+          items: { $ref: '#/components/schemas/MediaItem' }
+    Post:
+      type: object
+      properties:
+        id: { type: string }
+        channelId: { type: string }
+        channelName: { type: string }
+        channelAvatarUrl: { type: [string, 'null'] }
+        boardId: { type: string }
+        boardName: { type: string }
+        authorId: { type: string }
+        authorNickname: { type: string }
+        authorAvatarUrl: { type: [string, 'null'] }
+        title: { type: [string, 'null'] }
+        content: { type: string }
+        contentFormat: { type: string, enum: [PLAIN, HTML] }
+        coverUrl: { type: [string, 'null'] }
+        media:
+          type: array
+          items: { $ref: '#/components/schemas/MediaItem' }
+        viewCount: { type: integer }
+        likeCount: { type: integer }
+        commentCount: { type: integer }
+        shareCount: { type: integer }
+        liked: { type: boolean }
+        pinned: { type: boolean }
+        essence: { type: boolean }
+        status: { type: string, enum: [PUBLISHED, DELETED, HIDDEN] }
+        createdAt: { type: string, format: date-time }
+    PostPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Post' }
+        nextCursor: { type: [string, 'null'] }
+    PostOffsetPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Post' }
+        total: { type: integer }
+    Comment:
+      type: object
+      properties:
+        id: { type: string }
+        postId: { type: string }
+        parentId: { type: [string, 'null'] }
+        authorId: { type: string }
+        authorNickname: { type: string }
+        authorAvatarUrl: { type: [string, 'null'] }
+        replyToUserId: { type: [string, 'null'] }
+        replyToNickname: { type: [string, 'null'] }
+        content: { type: string }
+        media:
+          type: array
+          items: { $ref: '#/components/schemas/MediaItem' }
+        emoji:
+          type: array
+          items: { type: string }
+        likeCount: { type: integer }
+        liked: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        replies:
+          type: array
+          items: { $ref: '#/components/schemas/Comment' }
+    CommentPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Comment' }
+        nextCursor: { type: [string, 'null'] }
+    LikeState:
+      type: object
+      properties:
+        liked: { type: boolean }
+        likeCount: { type: integer }
+    SearchItem:
+      type: object
+      properties:
+        type: { type: string, enum: [CHANNEL, POST] }
+        id: { type: string }
+        title: { type: [string, 'null'] }
+        summary: { type: [string, 'null'] }
+        channelId: { type: [string, 'null'] }
+        channelName: { type: [string, 'null'] }
+        channelAvatarUrl: { type: [string, 'null'] }
+        avatarUrl: { type: [string, 'null'] }
+        memberCount: { type: [integer, 'null'] }
+        likeCount: { type: [integer, 'null'] }
+        commentCount: { type: [integer, 'null'] }
+        authorId: { type: [string, 'null'] }
+        authorUsername: { type: [string, 'null'] }
+        authorNickname: { type: [string, 'null'] }
+        authorAvatarUrl: { type: [string, 'null'] }
+        boardId: { type: [string, 'null'] }
+        boardName: { type: [string, 'null'] }
+        createdAt: { type: [string, 'null'], format: date-time }
+    SearchPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SearchItem' }
+        nextCursor: { type: [string, 'null'] }
+    SearchSuggest:
+      type: object
+      properties:
+        channels:
+          type: array
+          items: { $ref: '#/components/schemas/Channel' }
+        keywords:
+          type: array
+          items: { type: string }
+    Recommendation:
+      type: object
+      properties:
+        channel: { $ref: '#/components/schemas/Channel' }
+        reason: { type: string }
+        score: { type: number }
+    Invite:
+      type: object
+      properties:
+        id: { type: string }
+        channelId: { type: string }
+        token: { type: [string, 'null'], description: 仅创建时返回明文 token }
+        requiresApproval: { type: boolean }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        maxUses: { type: [integer, 'null'] }
+        usedCount: { type: [integer, 'null'] }
+        revoked: { type: boolean }
+        status: { type: string }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+    JoinRequest:
+      type: object
+      properties:
+        id: { type: string }
+        channelId: { type: string }
+        userId: { type: string }
+        username: { type: string }
+        nickname: { type: string }
+        avatarUrl: { type: [string, 'null'] }
+        inviteId: { type: [string, 'null'] }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+        reviewedBy: { type: [string, 'null'] }
+        reviewerNickname: { type: [string, 'null'] }
+        reviewedAt: { type: [string, 'null'], format: date-time }
+        reviewNote: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+    ChannelSettings:
+      type: object
+      properties:
+        channel: { $ref: '#/components/schemas/Channel' }
+        admins:
+          type: array
+          items: { $ref: '#/components/schemas/Member' }
+        invites:
+          type: array
+          items: { $ref: '#/components/schemas/Invite' }
+        muteAllUntil: { type: [string, 'null'], format: date-time }
+        muted: { type: boolean }
+    Member:
+      type: object
+      properties:
+        userId: { type: string }
+        username: { type: string }
+        nickname: { type: string }
+        avatarUrl: { type: [string, 'null'] }
+        roleId: { type: string }
+        roleName: { type: string }
+        status: { type: string, enum: [ACTIVE, MUTED, LEFT, KICKED] }
+        mutedUntil: { type: [string, 'null'], format: date-time }
+        muted: { type: boolean }
+        joinedAt: { type: string, format: date-time }
+    MemberPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Member' }
+        total: { type: integer }
+    Role:
+      type: object
+      properties:
+        id: { type: string }
+        channelId: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        permissions:
+          type: array
+          items: { type: string }
+        scopeBoardId: { type: [string, 'null'] }
+        scopeBoardName: { type: [string, 'null'] }
+        system: { type: boolean }
+        sort: { type: integer }
+        memberCount: { type: integer }
+    Report:
+      type: object
+      properties:
+        id: { type: string }
+        reporterId: { type: string }
+        reporterNickname: { type: [string, 'null'] }
+        channelId: { type: string }
+        channelName: { type: [string, 'null'] }
+        targetType: { type: string, enum: [POST, COMMENT] }
+        targetId: { type: string }
+        targetPreview: { type: [string, 'null'] }
+        targetAuthorId: { type: [string, 'null'] }
+        targetAuthorNickname: { type: [string, 'null'] }
+        reason: { type: string }
+        description: { type: [string, 'null'] }
+        status: { type: string, enum: [PENDING, ACCEPTED, REJECTED] }
+        handleAction: { type: [string, 'null'] }
+        handleNote: { type: [string, 'null'] }
+        handlerId: { type: [string, 'null'] }
+        handlerNickname: { type: [string, 'null'] }
+        handledAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+    ReportPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Report' }
+        total: { type: integer }
+    AuditLog:
+      type: object
+      properties:
+        id: { type: string }
+        channelId: { type: string }
+        actorId: { type: string }
+        actorNickname: { type: [string, 'null'] }
+        action: { type: string }
+        targetType: { type: [string, 'null'] }
+        targetId: { type: [string, 'null'] }
+        detail: { type: [string, 'null'] }
+        ip: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+    AuditLogPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AuditLog' }
+        total: { type: integer }
+    StatsOverview:
+      type: object
+      properties:
+        channelId: { type: string }
+        memberCount: { type: integer }
+        postCount: { type: integer }
+        yesterday: { $ref: '#/components/schemas/DailyStats' }
+        memberDelta: { type: integer }
+        postDelta: { type: integer }
+    DailyStats:
+      type: object
+      properties:
+        statDate: { type: string, format: date }
+        memberCount: { type: integer }
+        newMembers: { type: integer }
+        lostMembers: { type: integer }
+        visitUv: { type: integer }
+        postViews: { type: integer }
+        activeUsers: { type: integer }
+        activeRate: { type: number }
+        posts: { type: integer }
+        comments: { type: integer }
+        likes: { type: integer }
+        shares: { type: integer }
+        interactions: { type: integer }
+        interactionRate: { type: number }
+    Conversation:
+      type: object
+      properties:
+        id: { type: string }
+        peer: { $ref: '#/components/schemas/User' }
+        lastMessage: { type: [string, 'null'] }
+        lastMessageAt: { type: [string, 'null'], format: date-time }
+        unreadCount: { type: integer }
+    DmMessage:
+      type: object
+      properties:
+        id: { type: string }
+        conversationId: { type: string }
+        senderId: { type: string }
+        type: { type: string, enum: [TEXT, IMAGE, POST] }
+        content: { type: [string, 'null'] }
+        mediaUrl: { type: [string, 'null'] }
+        post: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        read: { type: boolean }
+    Friend:
+      type: object
+      properties:
+        userId: { type: string }
+        username: { type: string }
+        nickname: { type: string }
+        avatarUrl: { type: [string, 'null'] }
+        signature: { type: [string, 'null'] }
+        online: { type: boolean }
+        since: { type: [string, 'null'], format: date-time }
+    FriendRequest:
+      type: object
+      properties:
+        id: { type: string }
+        requester: { $ref: '#/components/schemas/User' }
+        addressee: { $ref: '#/components/schemas/User' }
+        status: { type: string, enum: [PENDING, ACCEPTED, REJECTED] }
+        message: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        channelId: { type: [string, 'null'] }
+        postId: { type: [string, 'null'] }
+        commentId: { type: [string, 'null'] }
+        actorId: { type: [string, 'null'] }
+        title: { type: string }
+        content: { type: [string, 'null'] }
+        read: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    AiStatus:
+      type: object
+      properties:
+        configured: { type: boolean }
+        enabledModelCount: { type: integer }
+        defaultModelName: { type: [string, 'null'] }
+        defaultModel: { type: [string, 'null'] }
+        message: { type: string }
+    AiModel:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        baseUrl: { type: string }
+        model: { type: string }
+        visionEnabled: { type: boolean }
+        reasoningEnabled: { type: boolean }
+        isDefault: { type: boolean }
+        enabled: { type: boolean }
+        timeoutSeconds: { type: [integer, 'null'] }
+        maxTokens: { type: [integer, 'null'] }
+        apiKeyConfigured: { type: boolean }
+        apiKeyMasked: { type: [string, 'null'] }
+        createdAt: { type: [string, 'null'], format: date-time }
+    AiModelConfigRequest:
+      type: object
+      required: [name, baseUrl, model]
+      properties:
+        name: { type: string }
+        baseUrl: { type: string }
+        apiKey: { type: [string, 'null'], description: 提交 ****** 表示保留原 Key }
+        model: { type: string }
+        visionEnabled: { type: boolean }
+        reasoningEnabled: { type: boolean }
+        isDefault: { type: boolean }
+        enabled: { type: boolean }
+        timeoutSeconds: { type: [integer, 'null'] }
+        maxTokens: { type: [integer, 'null'] }
+    ConnectionTest:
+      type: object
+      properties:
+        success: { type: boolean }
+        latencyMs: { type: integer }
+        models:
+          type: array
+          items: { type: string }
+        message: { type: string }
+    AiConversation:
+      type: object
+      properties:
+        id: { type: string }
+        scope: { type: string, enum: [GLOBAL, CHANNEL] }
+        channelId: { type: [string, 'null'] }
+        title: { type: string }
+        modelConfigId: { type: [string, 'null'] }
+        messageCount: { type: integer }
+        lastMessageAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: [string, 'null'], format: date-time }
+        updatedAt: { type: [string, 'null'], format: date-time }
+    AiMessage:
+      type: object
+      properties:
+        id: { type: string }
+        conversationId: { type: string }
+        role: { type: string, enum: [USER, ASSISTANT, SYSTEM] }
+        content: { type: string }
+        reasoningContent: { type: [string, 'null'] }
+        images:
+          type: array
+          items: { type: string }
+        sources:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              title: { type: string }
+              channelId: { type: [string, 'null'] }
+              channelName: { type: [string, 'null'] }
+              excerpt: { type: [string, 'null'] }
+              url: { type: string }
+        model: { type: [string, 'null'] }
+        tokenIn: { type: [integer, 'null'] }
+        tokenOut: { type: [integer, 'null'] }
+        status: { type: string, enum: [COMPLETED, STREAMING, ABORTED, FAILED] }
+        createdAt: { type: [string, 'null'], format: date-time }
+    AssistantInfo:
+      type: object
+      properties:
+        channelId: { type: string }
+        configured: { type: boolean }
+        enabled: { type: boolean }
+        assistantUserId: { type: [string, 'null'] }
+        nickname: { type: [string, 'null'] }
+        avatarUrl: { type: [string, 'null'] }
+        bio: { type: [string, 'null'] }
+        persona: { type: [string, 'null'] }
+    AssistantSettings:
+      type: object
+      required: [enabled]
+      properties:
+        channelId: { type: [string, 'null'] }
+        assistantUserId: { type: [string, 'null'] }
+        nickname: { type: string, maxLength: 32 }
+        avatarUrl: { type: [string, 'null'], maxLength: 500 }
+        coverUrl: { type: [string, 'null'], maxLength: 500 }
+        bio: { type: [string, 'null'], maxLength: 500 }
+        persona: { type: [string, 'null'], maxLength: 2000 }
+        enabled: { type: boolean }
+        summaryDailyEnabled: { type: boolean }
+        summaryWeeklyEnabled: { type: boolean }
+        monthlyContributorsEnabled: { type: boolean }
+        autoPostEnabled: { type: boolean }
+        autoCommentEnabled: { type: boolean }
+        autoLikeEnabled: { type: boolean }
+        dailySummaryHour: { type: integer, minimum: 0, maximum: 23 }
+        autoPostPerDay: { type: integer }
+        autoCommentPerDay: { type: integer }
+        autoLikePerDay: { type: integer }
+        updatedAt: { type: [string, 'null'], format: date-time }
+    TaskLog:
+      type: object
+      properties:
+        id: { type: string }
+        channelId: { type: string }
+        taskType: { type: string }
+        frequencyKey: { type: string }
+        status: { type: string, enum: [RUNNING, SUCCESS, SKIPPED, FAILED] }
+        resultText: { type: [string, 'null'] }
+        postId: { type: [string, 'null'] }
+        commentId: { type: [string, 'null'] }
+        errorMessage: { type: [string, 'null'] }
+        startedAt: { type: [string, 'null'], format: date-time }
+        finishedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: [string, 'null'], format: date-time }
+    TaskLogPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/TaskLog' }
+        total: { type: integer }
+        page: { type: integer }
+        size: { type: integer }
+    PlatformOverview:
+      type: object
+      properties:
+        userCount: { type: integer }
+        channelCount: { type: integer }
+        postCount: { type: integer }
+        commentCount: { type: integer }
+        todayNewUsers: { type: integer }
+        todayNewPosts: { type: integer }
+        todayActiveUsers: { type: integer }
+        aiConversationCount: { type: integer }
+        aiMessageCount: { type: integer }
+        pendingReportCount: { type: integer }
+        reportTableReady: { type: boolean }
+    AdminUser:
+      type: object
+      properties:
+        id: { type: string }
+        username: { type: string }
+        nickname: { type: [string, 'null'] }
+        avatarUrl: { type: [string, 'null'] }
+        signature: { type: [string, 'null'] }
+        status: { type: string }
+        platformRole: { type: string }
+        createdAt: { type: [string, 'null'], format: date-time }
+    AdminChannel:
+      type: object
+      properties:
+        id: { type: string }
+        channelNo: { type: [integer, 'null'] }
+        name: { type: string }
+        avatarUrl: { type: [string, 'null'] }
+        ownerId: { type: [string, 'null'] }
+        memberCount: { type: integer }
+        postCount: { type: integer }
+        type: { type: [string, 'null'] }
+        visibility: { type: [string, 'null'] }
+        status: { type: string }
+        createdAt: { type: [string, 'null'], format: date-time }
