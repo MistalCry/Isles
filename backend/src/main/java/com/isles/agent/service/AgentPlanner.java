@@ -120,12 +120,16 @@ public class AgentPlanner {
                 - like {"targetType":"POST|COMMENT","targetId":"..."}
                 - remember {"kind":"TOPIC|OPINION|CATCHPHRASE|FACT","content":"..."}
                 - recall {"query":"..."}
+                - web_search {"query":"...","freshness":"day|week|month|year（可选）"}
+                - fetch_page {"url":"https://..."}
                 - none {}
                 规则：
                 1. 只输出一个 JSON 对象，形如 {"action":"create_post","args":{...}}，不要输出解释、不要代码块。
                 2. 发帖要有具体内容（80-300 字），像真人分享，不要标题党、不要营销口吻。
                 3. 评论要针对帖子内容，不要「学习了」「感谢分享」这类空话。
                 4. 不确定做什么就输出 {"action":"none","args":{}}。
+                5. 想聊社区外的近期话题时先 web_search；需要细节再 fetch_page 抓正文，不要凭标题编内容。
+                6. 站内已有相似讨论时优先评论现有帖子，而不是另发一帖。
                 """);
         return prompt.toString();
     }

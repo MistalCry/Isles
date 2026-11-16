@@ -1,6 +1,10 @@
 package com.isles.agent.tool;
 
 import com.isles.agent.entity.AgentProfile;
+import com.isles.agent.search.PageFetcher;
+import com.isles.agent.search.SearchProvider;
+import com.isles.agent.search.SearchQuota;
+import com.isles.agent.search.SearchResult;
 import com.isles.agent.service.AgentMemoryService;
 import com.isles.ai.dto.AiContextPost;
 import com.isles.ai.mapper.AiContextMapper;
@@ -45,6 +49,9 @@ class AgentToolboxTest {
     private InteractionService interactionService;
     private BoardMapper boardMapper;
     private AgentMemoryService memoryService;
+    private SearchProvider searchProvider;
+    private SearchQuota searchQuota;
+    private PageFetcher pageFetcher;
     private AgentToolbox toolbox;
     private AgentToolbox.AgentContext context;
 
@@ -56,8 +63,15 @@ class AgentToolboxTest {
         interactionService = mock(InteractionService.class);
         boardMapper = mock(BoardMapper.class);
         memoryService = mock(AgentMemoryService.class);
+        searchProvider = mock(SearchProvider.class);
+        searchQuota = mock(SearchQuota.class);
+        pageFetcher = mock(PageFetcher.class);
+        // 默认：联网搜索关闭、配额充足（站内检索用例不受影响）
+        when(searchProvider.available()).thenReturn(false);
+        when(searchProvider.providerType()).thenReturn("NONE");
+        when(searchQuota.tryConsume()).thenReturn(true);
         toolbox = new AgentToolbox(contextMapper, postService, commentService, interactionService, boardMapper,
-                mock(ChannelMapper.class), memoryService);
+                mock(ChannelMapper.class), memoryService, searchProvider, searchQuota, pageFetcher);
         AgentProfile profile = new AgentProfile();
         profile.setUserId("agent-1");
         profile.setDisplayName("岛民小蓝");
@@ -156,6 +170,89 @@ class AgentToolboxTest {
         AgentToolbox.ToolOutcome outcome = toolbox.execute("none", Map.of(), context);
         assertThat(outcome.outputType()).isEqualTo("NONE");
         verify(postService, never()).createPost(anyString(), any(), anyString());
+    }
+
+
+    // ------------------------------------------------------------------
+    // P1 联网搜索 / 抓取
+    // ------------------------------------------------------------------
+
+    @Test
+    void should_search_web_and_remember_source_urls() {
+        when(searchProvider.available()).thenReturn(true);
+        when(searchProvider.providerType()).thenReturn("SEARXNG");
+        when(searchProvider.search("我的世界 红石", "week", 10)).thenReturn(List.of(
+                new SearchResult("红石矿石 - 我的世界", "https://mc.example.com/redstone", "红石基础",
+                        "google cse", "2026-11-01"),
+                new SearchResult("红石教程", "https://zh.example.com/p/1", "红石电路", "360search", null)));
+
+        AgentToolbox.ToolOutcome outcome = toolbox.execute("web_search",
+                Map.of("query", "我的世界 红石", "freshness", "week"), context);
+
+        assertThat(outcome.outputType()).isEqualTo("NONE");
+        assertThat(outcome.summary()).contains("google cse").contains("https://mc.example.com/redstone");
+        // 命中 url 写入 SOURCE 记忆，供后续去重与追溯
+        verify(memoryService).remember(eq("agent-1"), eq("SOURCE"), anyString(),
+                eq("https://mc.example.com/redstone"));
+        verify(memoryService).remember(eq("agent-1"), eq("SOURCE"), anyString(),
+                eq("https://zh.example.com/p/1"));
+        verify(searchQuota).tryConsume();
+    }
+
+    @Test
+    void should_fallback_to_site_search_when_provider_disabled() {
+        when(contextMapper.searchContextPosts(anyList(), eq("ch-1"), anyInt()))
+                .thenReturn(List.of(contextPost("post-1", "露营攻略")));
+
+        AgentToolbox.ToolOutcome outcome = toolbox.execute("web_search", Map.of("query", "露营"), context);
+
+        assertThat(outcome.summary()).contains("联网搜索未启用").contains("post-1");
+        verify(searchProvider, never()).search(anyString(), any(), anyInt());
+        verify(memoryService, never()).remember(anyString(), eq("SOURCE"), anyString(), anyString());
+    }
+
+    @Test
+    void should_fallback_to_site_search_when_web_search_returns_nothing() {
+        when(searchProvider.available()).thenReturn(true);
+        when(searchProvider.search(anyString(), any(), anyInt())).thenReturn(List.of());
+        when(contextMapper.searchContextPosts(anyList(), eq("ch-1"), anyInt())).thenReturn(List.of());
+
+        AgentToolbox.ToolOutcome outcome = toolbox.execute("web_search", Map.of("query", "冷门话题"), context);
+
+        assertThat(outcome.summary()).contains("联网搜索无结果");
+    }
+
+    @Test
+    void should_fail_loudly_when_quota_exhausted() {
+        when(searchQuota.tryConsume()).thenReturn(false);
+        when(searchQuota.used()).thenReturn(200);
+        when(searchQuota.limit()).thenReturn(200);
+
+        assertThatThrownBy(() -> toolbox.execute("web_search", Map.of("query", "x"), context))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.AGENT_SEARCH_QUOTA_EXCEEDED));
+        // 配额用尽不能静默降级成站内检索
+        verify(searchProvider, never()).search(anyString(), any(), anyInt());
+    }
+
+    @Test
+    void should_fetch_page_text() {
+        when(pageFetcher.fetch("https://mc.example.com/redstone")).thenReturn("红石是 Minecraft 的矿物。");
+
+        AgentToolbox.ToolOutcome outcome = toolbox.execute("fetch_page",
+                Map.of("url", "https://mc.example.com/redstone"), context);
+
+        assertThat(outcome.summary()).contains("红石是 Minecraft 的矿物");
+        assertThat(outcome.outputType()).isEqualTo("NONE");
+    }
+
+    @Test
+    void should_reject_fetch_without_url() {
+        assertThatThrownBy(() -> toolbox.execute("fetch_page", Map.of(), context))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR));
     }
 
     private Board board() {

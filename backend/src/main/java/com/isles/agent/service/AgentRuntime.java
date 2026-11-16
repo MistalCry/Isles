@@ -291,7 +291,11 @@ public class AgentRuntime {
                 || code == ErrorCode.NOT_JOINED
                 || code == ErrorCode.CHANNEL_MUTED
                 || code == ErrorCode.VALIDATION_ERROR
-                || code == ErrorCode.POST_NOT_FOUND;
+                || code == ErrorCode.POST_NOT_FOUND
+                // P1 联网搜索：配额用尽 / 内网地址被拒 / 抓取失败都属「闸门拦下」，不是系统故障
+                || code == ErrorCode.AGENT_SEARCH_QUOTA_EXCEEDED
+                || code == ErrorCode.AGENT_FETCH_BLOCKED
+                || code == ErrorCode.AGENT_FETCH_FAILED;
     }
 
     private AgentRun finish(AgentRun run, AgentRun.Status status, String outputType, String outputId,

@@ -2,6 +2,10 @@ package com.isles.agent.tool;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.isles.agent.entity.AgentMemory;
+import com.isles.agent.search.PageFetcher;
+import com.isles.agent.search.SearchProvider;
+import com.isles.agent.search.SearchQuota;
+import com.isles.agent.search.SearchResult;
 import com.isles.agent.entity.AgentProfile;
 import com.isles.agent.service.AgentMemoryService;
 import com.isles.ai.dto.AiContextPost;
@@ -33,8 +37,9 @@ import java.util.Set;
 /**
  * AI 代理工具集（V13 / docs/12 §4，P0 范围）。
  *
- * <p>八个工具：{@code search_site_posts}、{@code list_channel_posts}、{@code get_post_detail}、
- * {@code create_post}、{@code comment}、{@code like}、{@code remember}、{@code recall}。
+ * <p>P0 八个工具：{@code search_site_posts}、{@code list_channel_posts}、{@code get_post_detail}、
+ * {@code create_post}、{@code comment}、{@code like}、{@code remember}、{@code recall}；
+ * P1 追加 {@code web_search}（联网搜索）与 {@code fetch_page}（抓正文）。
  *
  * <p>两条硬约束：
  * <ol>
@@ -55,9 +60,14 @@ public class AgentToolbox {
     /** P0 允许的动作（docs/12 §4）。 */
     public static final Set<String> ALLOWED_ACTIONS = Set.of(
             "search_site_posts", "list_channel_posts", "get_post_detail",
-            "create_post", "comment", "like", "remember", "recall", "none");
+            "create_post", "comment", "like", "remember", "recall",
+            "web_search", "fetch_page", "none");
 
     private static final int MAX_SEARCH_LIMIT = 8;
+    /** 单次给模型的联网结果上限（与 SearchProvider 内部封顶一致）。 */
+    private static final int MAX_WEB_RESULTS = 10;
+    /** 每条联网结果在提示词里的摘要长度。 */
+    private static final int MAX_WEB_SNIPPET = 120;
     private static final int MAX_SUMMARY_POSTS = 5;
 
     private final AiContextMapper contextMapper;
@@ -67,6 +77,9 @@ public class AgentToolbox {
     private final BoardMapper boardMapper;
     private final ChannelMapper channelMapper;
     private final AgentMemoryService memoryService;
+    private final SearchProvider searchProvider;
+    private final SearchQuota searchQuota;
+    private final PageFetcher pageFetcher;
 
     /**
      * 执行一个动作。
@@ -94,6 +107,8 @@ public class AgentToolbox {
             case "like" -> like(safeArgs, context);
             case "remember" -> remember(safeArgs, context);
             case "recall" -> recall(safeArgs, context);
+            case "web_search" -> webSearch(safeArgs, context);
+            case "fetch_page" -> fetchPage(safeArgs);
             default -> throw new AppException(ErrorCode.FORBIDDEN, "不允许的动作：" + name);
         };
     }
@@ -111,6 +126,80 @@ public class AgentToolbox {
         List<AiContextPost> posts = contextMapper.searchContextPosts(patterns(keyword), channelId,
                 clampInt(args, "limit", 5, 1, MAX_SEARCH_LIMIT));
         return new ToolOutcome(AgentRunTypes.NONE, null, summarizePosts("站内检索结果", posts));
+    }
+
+    /**
+     * 联网搜索（P1）。三种结局：
+     * <ol>
+     *   <li>配额用尽 → 抛 {@link ErrorCode#AGENT_SEARCH_QUOTA_EXCEEDED}（**不静默失败**，让模型/后台看得见）；</li>
+     *   <li>provider=NONE 或搜索失败/空结果 → 退回站内检索，WARN 一行，不阻塞 tick；</li>
+     *   <li>有结果 → 返回前 N 条摘要，并把命中的 url 写进记忆（{@code kind=SOURCE}）供追溯与去重。</li>
+     * </ol>
+     */
+    private ToolOutcome webSearch(Map<String, Object> args, AgentContext context) {
+        String query = str(args, "query", null);
+        if (query == null || query.isBlank()) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR, "web_search 需要 query");
+        }
+        String freshness = str(args, "freshness", null);
+        int limit = clampInt(args, "limit", MAX_WEB_RESULTS, 1, MAX_WEB_RESULTS);
+        if (!searchQuota.tryConsume()) {
+            throw new AppException(ErrorCode.AGENT_SEARCH_QUOTA_EXCEEDED,
+                    "今日联网搜索配额已用尽（" + searchQuota.used() + "/" + searchQuota.limit() + "）");
+        }
+        if (!searchProvider.available()) {
+            log.warn("联网搜索未启用（provider={}），退回站内检索 query={}", searchProvider.providerType(), query);
+            return fallbackToSiteSearch(query, context, "联网搜索未启用，已退回站内检索");
+        }
+        List<SearchResult> results = searchProvider.search(query, freshness, limit);
+        if (results.isEmpty()) {
+            log.warn("联网搜索无结果（或引擎全部失败），退回站内检索 query={}", query);
+            return fallbackToSiteSearch(query, context, "联网搜索无结果，已退回站内检索");
+        }
+        // 记忆：命中的 url 写入 SOURCE，供后续选题去重与内容追溯（docs/12 §5.3）
+        for (SearchResult result : results) {
+            memoryService.remember(context.agentUserId(), AgentMemory.Kind.SOURCE.name(),
+                    truncate(result.title() == null ? result.url() : result.title(), 200) + " " + result.url(),
+                    result.url());
+        }
+        return new ToolOutcome(AgentRunTypes.NONE, null, summarizeSearchResults(query, results));
+    }
+
+    /**
+     * 抓取网页正文（P1）。SSRF 校验在 {@link PageFetcher} 内完成。
+     */
+    private ToolOutcome fetchPage(Map<String, Object> args) {
+        String url = str(args, "url", null);
+        if (url == null || url.isBlank()) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR, "fetch_page 需要 url");
+        }
+        String text = pageFetcher.fetch(url);
+        return new ToolOutcome(AgentRunTypes.NONE, null, "页面正文（" + url + "）：\n" + text);
+    }
+
+    private ToolOutcome fallbackToSiteSearch(String keyword, AgentContext context, String reason) {
+        String channelId = resolveChannelId(null, context);
+        List<AiContextPost> posts = contextMapper.searchContextPosts(patterns(keyword), channelId,
+                MAX_SEARCH_LIMIT);
+        return new ToolOutcome(AgentRunTypes.NONE, null,
+                reason + "\n" + summarizePosts("站内检索结果", posts));
+    }
+
+    private String summarizeSearchResults(String query, List<SearchResult> results) {
+        StringBuilder builder = new StringBuilder("联网搜索「").append(query).append("」（")
+                .append(results.size()).append(" 条）：");
+        for (SearchResult result : results) {
+            builder.append("\n- [").append(nullSafe(result.engine())).append("] ")
+                    .append(nullSafe(result.title()))
+                    .append(" | ").append(result.url());
+            if (result.content() != null && !result.content().isBlank()) {
+                builder.append("\n  ").append(truncate(result.content(), MAX_WEB_SNIPPET));
+            }
+            if (result.publishedDate() != null) {
+                builder.append("\n  发布：").append(result.publishedDate());
+            }
+        }
+        return builder.toString();
     }
 
     private ToolOutcome listChannelPosts(Map<String, Object> args, AgentContext context) {

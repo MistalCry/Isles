@@ -29,6 +29,8 @@ public class AgentMemory {
     private LocalDateTime createdAt;
 
     public enum Kind {
-        TOPIC, OPINION, CATCHPHRASE, FACT
+        TOPIC, OPINION, CATCHPHRASE, FACT,
+        /** 联网搜索命中过的来源 URL（P1 新增）：用于选题去重与内容追溯，不参与话题指纹比较。 */
+        SOURCE
     }
 }
