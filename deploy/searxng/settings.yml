@@ -23,13 +23,25 @@ search:
 ui:
   static_use_hash: true
 
-# 中文内容优先：把国内/中文友好的引擎提到前面
+# 引擎选择：按 2026-11 本机网络实测结果配置
+# 可用：360search / yahoo（稳定），sogou（间歇崩溃，留作补充）
+# 不可用：google（access denied）、baidu（CAPTCHA）、duckduckgo（CAPTCHA）、
+#         brave（too many requests）、bing（返回 0 条且无报错，解析器问题）
 engines:
-  - name: bing
+  - name: 360search
     disabled: false
-  - name: baidu
+  - name: yahoo
     disabled: false
-  - name: duckduckgo
+  - name: sogou
     disabled: false
+  # 以下引擎在当前网络下全部被拦截，显式关闭以免拖慢每次查询
   - name: google
-    disabled: false
+    disabled: true
+  - name: baidu
+    disabled: true
+  - name: duckduckgo
+    disabled: true
+  - name: brave
+    disabled: true
+  - name: bing
+    disabled: true
