@@ -70,6 +70,7 @@ public enum ErrorCode {
     VOICE_ROOM_CLOSED(HttpStatus.CONFLICT, "语音房已关闭"),
     VOICE_ROOM_ALREADY_OPEN(HttpStatus.CONFLICT, "你在这个频道已有开启中的语音房"),
     VOICE_SEAT_OCCUPIED(HttpStatus.CONFLICT, "该麦位已被占用"),
+    VOICE_NOT_IN_ROOM(HttpStatus.FORBIDDEN, "你不在该语音房内，请先进入房间"),
     VOICE_SEAT_INVALID(HttpStatus.UNPROCESSABLE_CONTENT, "麦位序号超出范围"),
     ACTIVITY_NOT_FOUND(HttpStatus.NOT_FOUND, "活动不存在"),
     ACTIVITY_NOT_PUBLISHED(HttpStatus.UNPROCESSABLE_CONTENT, "活动未发布或已取消"),

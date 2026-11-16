@@ -1,8 +1,12 @@
 package com.isles.realtime;
 
+import com.isles.apps.service.VoiceRoomService;
 import com.isles.auth.service.JwtService;
+import com.isles.common.error.AppException;
+import com.isles.common.error.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.MessagingException;
@@ -13,16 +17,25 @@ import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * STOMP 连接鉴权（docs/02 §5.4、docs/07 §2）：
+ * STOMP 连接鉴权与目的地白名单（docs/02 §5.4、docs/07 §2、docs/05 §2.14）：
  * <ul>
  *   <li>CONNECT 帧必须携带 {@code Authorization: Bearer <accessToken>}，校验通过后把 Principal 绑定为 userId；</li>
- *   <li>SUBSCRIBE 仅允许个人队列 {@code /user/queue/dm}、{@code /user/queue/notifications}，
- *       且必须已通过 CONNECT 鉴权（按用户隔离，避免越权订阅他人私信）；</li>
- *   <li>SEND 一律拒绝：写路径统一走 REST，WebSocket 只做下行推送（docs/02 §5.4）。</li>
+ *   <li>SUBSCRIBE 允许两类目的地：
+ *     <ul>
+ *       <li>个人队列 {@code /user/queue/dm}、{@code /user/queue/notifications}（按用户隔离）；</li>
+ *       <li>语音房主题 {@code /topic/voice/{roomId}/signal|state}（**需在房**）。</li>
+ *     </ul>
+ *   </li>
+ *   <li>SEND 允许语音房信令 {@code /app/voice/{roomId}/signal}（**需在房**），其余一律拒绝：
+ *       业务写路径统一走 REST，WebSocket 只承担实时推送与语音信令转发。</li>
  * </ul>
- * 鉴权失败抛 {@link MessagingException}，由 STOMP 协议层回 ERROR 帧并断开连接。
+ *
+ * <p>「在房」的判定见 {@link VoiceRoomService#requireSignalAccess}：房间 OPEN 且（在麦位上 或 走过 join 登记）。
+ * 拒绝时抛 {@link StompAccessDeniedException}，由 {@link StompErrorFrameHandler} 回带 {@code code} 的 ERROR 帧。
  */
 @Component
 public class StompAuthChannelInterceptor implements ChannelInterceptor {
@@ -35,10 +48,22 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private static final Set<String> ALLOWED_SUBSCRIPTIONS = Set.of(
             RealtimePublisher.QUEUE_DM, RealtimePublisher.QUEUE_NOTIFICATIONS);
 
-    private final JwtService jwtService;
+    /** 语音房订阅：{@code /topic/voice/{roomId}/signal|state}。 */
+    private static final Pattern VOICE_TOPIC = Pattern.compile("^/topic/voice/([^/]+)/(signal|state)$");
+    /** 语音房信令发送：{@code /app/voice/{roomId}/signal}。 */
+    private static final Pattern VOICE_SEND = Pattern.compile("^/app/voice/([^/]+)/signal$");
 
-    public StompAuthChannelInterceptor(JwtService jwtService) {
+    private final JwtService jwtService;
+    /**
+     * 用 {@link ObjectProvider} 延迟取：语音房服务依赖实时发布器，实时发布器又依赖消息模板，
+     * 直接构造注入会让 WebSocket 配置与消息基础设施互相等待启动。
+     */
+    private final ObjectProvider<VoiceRoomService> voiceRoomServiceProvider;
+
+    public StompAuthChannelInterceptor(JwtService jwtService,
+                                       ObjectProvider<VoiceRoomService> voiceRoomServiceProvider) {
         this.jwtService = jwtService;
+        this.voiceRoomServiceProvider = voiceRoomServiceProvider;
     }
 
     @Override
@@ -54,13 +79,64 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         } else if (StompCommand.SUBSCRIBE.equals(command)) {
             requireAuthenticated(accessor);
             String destination = accessor.getDestination();
-            if (!isAllowedSubscription(destination)) {
-                throw new MessagingException("不允许订阅该目的地: " + destination);
+            if (isAllowedSubscription(destination)) {
+                return message;
             }
+            Matcher voice = destination == null ? null : VOICE_TOPIC.matcher(destination);
+            if (voice != null && voice.matches()) {
+                requireVoiceAccess(accessor, voice.group(1));
+                return message;
+            }
+            throw new MessagingException("不允许订阅该目的地: " + destination);
         } else if (StompCommand.SEND.equals(command)) {
+            String destination = accessor.getDestination();
+            Matcher signal = destination == null ? null : VOICE_SEND.matcher(destination);
+            if (signal != null && signal.matches()) {
+                requireAuthenticated(accessor);
+                requireVoiceAccess(accessor, signal.group(1));
+                return message;
+            }
             throw new MessagingException("客户端不支持经 WebSocket 发送消息，请使用 REST 接口");
         }
         return message;
+    }
+
+    /**
+     * 语音房目的地校验：必须是已鉴权连接，且「在房」。
+     *
+     * <p>订阅与发送共用本方法——只校验发送会导致非成员直接订阅别人的房间主题，
+     * 白听信令（含 SDP 与 ICE），等于绕过鉴权。
+     */
+    private void requireVoiceAccess(StompHeaderAccessor accessor, String roomId) {
+        String userId = accessor.getUser() == null ? null : accessor.getUser().getName();
+        if (userId == null || userId.isBlank()) {
+            throw new StompAccessDeniedException("UNAUTHORIZED", "语音房信令需要先完成 CONNECT 鉴权");
+        }
+        VoiceRoomService voiceRoomService = voiceRoomServiceProvider.getIfAvailable();
+        if (voiceRoomService == null) {
+            throw new StompAccessDeniedException("ROOM_CLOSED", "语音房服务不可用");
+        }
+        try {
+            voiceRoomService.requireSignalAccess(roomId, userId);
+        } catch (AppException ex) {
+            String code = stompCode(ex.getErrorCode());
+            log.debug("语音房信令被拒绝 roomId={} userId={} code={}", roomId, userId, code);
+            throw new StompAccessDeniedException(code, ex.getMessage());
+        }
+    }
+
+    /**
+     * REST 错误码 → STOMP 错误码。
+     *
+     * <p>语音房这两个码在 STOMP 侧用更短的名字（{@code NOT_IN_ROOM} / {@code ROOM_CLOSED}），
+     * 与前端约定的字面量一致；其余沿用枚举名，保证同一套语义不出现两种拼写。
+     */
+    private String stompCode(ErrorCode errorCode) {
+        return switch (errorCode) {
+            case VOICE_NOT_IN_ROOM -> "NOT_IN_ROOM";
+            case VOICE_ROOM_CLOSED -> "ROOM_CLOSED";
+            default -> errorCode.name();
+        };
     }
 
     /**

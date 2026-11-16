@@ -21,6 +21,7 @@ public enum PlatformRole {
             PlatformPermission.CONFIG_WRITE,
             PlatformPermission.AUDIT_READ,
             PlatformPermission.AI_MANAGE,
+            PlatformPermission.AGENT_MANAGE,
             PlatformPermission.ANNOUNCEMENT_MANAGE,
             PlatformPermission.WORD_MANAGE,
             PlatformPermission.USER_READ,

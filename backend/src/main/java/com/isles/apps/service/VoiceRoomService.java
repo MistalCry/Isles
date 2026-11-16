@@ -58,6 +58,7 @@ public class VoiceRoomService {
     private final UserMapper userMapper;
     private final ChannelAccessService accessService;
     private final RealtimePublisher realtimePublisher;
+    private final VoiceRoomPresence presence;
 
     // ------------------------------------------------------------------
     // 开房 / 查询
@@ -87,6 +88,8 @@ public class VoiceRoomService {
         room.setMaxSeats(request.maxSeats() == null ? DEFAULT_MAX_SEATS : request.maxSeats());
         room.setCreatedAt(now);
         roomMapper.insert(room);
+        // 房主开房即在房：否则刚建好房连信令都订阅不了，前端必须多调一次 join
+        presence.join(room.getId(), userId);
         log.info("语音房：开房 channelId={} roomId={} hostId={}", channelId, room.getId(), userId);
         VoiceRoomDtos.RoomView view = toView(room);
         broadcastState(room.getId(), "ROOM_OPENED", view);
@@ -106,12 +109,47 @@ public class VoiceRoomService {
     }
 
     /**
-     * 进房：只做成员校验并返回房间状态（听众不落库，见类注释）。
+     * 进房：成员校验 + 登记「在房」（听众不落库，但在房登记必须做，
+     * 否则 STOMP 信令无法判断连接主人是否真的在房间里，见 {@link VoiceRoomPresence}）。
      */
     public VoiceRoomDtos.RoomView join(String roomId, String userId) {
         VoiceRoom room = requireOpenRoom(roomId);
         accessService.requireMemberContext(room.getChannelId(), userId);
+        presence.join(roomId, userId);
         return toView(room);
+    }
+
+    /**
+     * 主动退房（听众离开）：清理在房登记。关房由 {@link #close} 整房清理。
+     */
+    public void leaveRoom(String roomId, String userId) {
+        presence.leave(roomId, userId);
+    }
+
+    /**
+     * STOMP 信令通道校验（订阅与发送两条路径都调用）：
+     * <ol>
+     *   <li>房间不存在或已关闭 → {@link ErrorCode#VOICE_ROOM_CLOSED}；</li>
+     *   <li>既不在麦位上、也没有 join 登记 → {@link ErrorCode#VOICE_NOT_IN_ROOM}。</li>
+     * </ol>
+     *
+     * <p>只查「麦位 + 进程内登记」，不查频道成员表：每帧都查库会打爆连接通道，
+     * 而登记只在 join 成功（已校验成员）后写入，等价于成员校验。
+     */
+    public void requireSignalAccess(String roomId, String userId) {
+        VoiceRoom room = roomId == null ? null : roomMapper.selectById(roomId);
+        if (room == null || !VoiceRoom.Status.OPEN.name().equals(room.getStatus())) {
+            throw new AppException(ErrorCode.VOICE_ROOM_CLOSED, "语音房不存在或已关闭");
+        }
+        if (presence.isPresent(roomId, userId)) {
+            return;
+        }
+        if (seatMapper.selectByRoomAndUser(roomId, userId) != null) {
+            // 上过麦但没走 join（例如直接调上麦接口）：补登记，后续帧不再查库
+            presence.join(roomId, userId);
+            return;
+        }
+        throw new AppException(ErrorCode.VOICE_NOT_IN_ROOM);
     }
 
     // ------------------------------------------------------------------
@@ -122,6 +160,7 @@ public class VoiceRoomService {
     public VoiceRoomDtos.RoomView takeSeat(String roomId, int seatIndex, String userId) {
         VoiceRoom room = requireOpenRoom(roomId);
         accessService.requireMemberContext(room.getChannelId(), userId);
+        presence.join(roomId, userId);
         int maxSeats = room.getMaxSeats() == null ? DEFAULT_MAX_SEATS : room.getMaxSeats();
         if (seatIndex < 0 || seatIndex >= maxSeats) {
             throw new AppException(ErrorCode.VOICE_SEAT_INVALID, "麦位序号需在 0-" + (maxSeats - 1) + " 之间");
@@ -200,6 +239,7 @@ public class VoiceRoomService {
         room.setClosedAt(ClockTimes.nowUtc());
         roomMapper.updateById(room);
         int removed = seatMapper.deleteByRoom(roomId);
+        presence.clearRoom(roomId);
         log.info("语音房：关房 roomId={} operator={} 清理麦位={}", roomId, userId, removed);
         VoiceRoomDtos.RoomView view = toView(room);
         broadcastState(roomId, "ROOM_CLOSED", view);

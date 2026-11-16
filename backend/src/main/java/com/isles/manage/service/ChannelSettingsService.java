@@ -1,5 +1,6 @@
 package com.isles.manage.service;
 
+import com.isles.apps.service.ChannelAppDataCleaner;
 import com.isles.channel.audit.AuditLogService;
 import com.isles.channel.audit.ChannelAuditLog;
 import com.isles.channel.dto.ChannelResponse;
@@ -41,6 +42,7 @@ public class ChannelSettingsService {
     private final ChannelAccessService accessService;
     private final ChannelService channelService;
     private final AuditLogService auditLogService;
+    private final ChannelAppDataCleaner appDataCleaner;
 
     /**
      * 修改频道资料；可见性变更需要额外的 channel.visibility 权限。
@@ -205,8 +207,13 @@ public class ChannelSettingsService {
         channel.setDeletedAt(ClockTimes.nowUtc());
         channel.setUpdatedAt(ClockTimes.nowUtc());
         channelMapper.updateById(channel);
+        // 解散是软删除，外键 CASCADE 不会触发：必须显式清理频道级数据（应用/语音房/麦位/活动/报名），
+        // 否则这些行会一直挂在已解散的频道下（K2）
+        ChannelAppDataCleaner.PurgeResult purged = appDataCleaner.purgeChannel(channelId);
         auditLogService.record(channelId, userId, ChannelAuditLog.Action.CHANNEL_DISSOLVE, "CHANNEL", channelId);
-        log.info("解散频道 channelId={} ownerId={}", channelId, userId);
+        log.info("解散频道 channelId={} ownerId={} 清理 apps={} rooms={} seats={} activities={} signups={}",
+                channelId, userId, purged.apps(), purged.rooms(), purged.seats(), purged.activities(),
+                purged.signups());
     }
 
     private long requireDuration(MuteRequest request) {

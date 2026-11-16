@@ -1,6 +1,10 @@
 package com.isles.realtime;
 
+import com.isles.apps.service.VoiceRoomService;
 import com.isles.auth.service.JwtService;
+import com.isles.common.error.AppException;
+import com.isles.common.error.ErrorCode;
+import org.springframework.beans.factory.ObjectProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.Message;
@@ -14,7 +18,11 @@ import org.springframework.security.oauth2.jwt.JwtException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -23,13 +31,18 @@ import static org.mockito.Mockito.when;
 class StompAuthChannelInterceptorTest {
 
     private JwtService jwtService;
+    private VoiceRoomService voiceRoomService;
     private StompAuthChannelInterceptor interceptor;
     private MessageChannel channel;
 
     @BeforeEach
     void setUp() {
         jwtService = mock(JwtService.class);
-        interceptor = new StompAuthChannelInterceptor(jwtService);
+        voiceRoomService = mock(VoiceRoomService.class);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<VoiceRoomService> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(voiceRoomService);
+        interceptor = new StompAuthChannelInterceptor(jwtService, provider);
         channel = mock(MessageChannel.class);
     }
 
@@ -115,6 +128,79 @@ class StompAuthChannelInterceptorTest {
                 .hasMessageContaining("REST");
     }
 
+
+    // ------------------------------------------------------------------
+    // 语音房信令（K1）：订阅与发送两条路径都要校验在房
+    // ------------------------------------------------------------------
+
+    @Test
+    void should_allow_voice_signal_subscribe_when_user_in_room() {
+        Message<?> result = interceptor.preSend(
+                subscribeMessage("/topic/voice/room-1/signal", "user-1"), channel);
+        assertThat(result).isNotNull();
+        verify(voiceRoomService).requireSignalAccess("room-1", "user-1");
+    }
+
+    @Test
+    void should_allow_voice_state_subscribe_when_user_in_room() {
+        Message<?> result = interceptor.preSend(
+                subscribeMessage("/topic/voice/room-1/state", "user-1"), channel);
+        assertThat(result).isNotNull();
+        verify(voiceRoomService).requireSignalAccess("room-1", "user-1");
+    }
+
+    @Test
+    void should_reject_voice_subscribe_when_not_in_room_with_code() {
+        doThrow(new AppException(ErrorCode.VOICE_NOT_IN_ROOM))
+                .when(voiceRoomService).requireSignalAccess("room-1", "user-1");
+
+        assertThatThrownBy(() -> interceptor.preSend(
+                subscribeMessage("/topic/voice/room-1/signal", "user-1"), channel))
+                .isInstanceOf(StompAccessDeniedException.class)
+                .satisfies(ex -> assertThat(((StompAccessDeniedException) ex).getCode())
+                        .isEqualTo("NOT_IN_ROOM"));
+    }
+
+    @Test
+    void should_reject_voice_subscribe_when_room_closed_with_code() {
+        doThrow(new AppException(ErrorCode.VOICE_ROOM_CLOSED))
+                .when(voiceRoomService).requireSignalAccess("room-1", "user-1");
+
+        assertThatThrownBy(() -> interceptor.preSend(
+                subscribeMessage("/topic/voice/room-1/state", "user-1"), channel))
+                .isInstanceOf(StompAccessDeniedException.class)
+                .satisfies(ex -> assertThat(((StompAccessDeniedException) ex).getCode())
+                        .isEqualTo("ROOM_CLOSED"));
+    }
+
+    @Test
+    void should_allow_voice_signal_send_when_user_in_room() {
+        Message<?> result = interceptor.preSend(
+                sendMessage("/app/voice/room-1/signal", "user-1"), channel);
+        assertThat(result).isNotNull();
+        verify(voiceRoomService).requireSignalAccess("room-1", "user-1");
+    }
+
+    @Test
+    void should_reject_voice_signal_send_when_not_in_room() {
+        doThrow(new AppException(ErrorCode.VOICE_NOT_IN_ROOM))
+                .when(voiceRoomService).requireSignalAccess("room-1", "user-1");
+
+        assertThatThrownBy(() -> interceptor.preSend(
+                sendMessage("/app/voice/room-1/signal", "user-1"), channel))
+                .isInstanceOf(StompAccessDeniedException.class)
+                .satisfies(ex -> assertThat(((StompAccessDeniedException) ex).getCode())
+                        .isEqualTo("NOT_IN_ROOM"));
+    }
+
+    @Test
+    void should_reject_other_app_send_destinations() {
+        assertThatThrownBy(() -> interceptor.preSend(sendMessage("/app/dm", "user-1"), channel))
+                .isInstanceOf(MessagingException.class)
+                .hasMessageContaining("REST");
+        verify(voiceRoomService, never()).requireSignalAccess(anyString(), anyString());
+    }
+
     private Message<byte[]> connectMessage(String authorization) {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
         if (authorization != null) {
@@ -126,6 +212,14 @@ class StompAuthChannelInterceptorTest {
 
     private Message<byte[]> subscribeMessage(String destination, String userId) {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
+        accessor.setDestination(destination);
+        accessor.setUser(new StompPrincipal(userId));
+        accessor.setLeaveMutable(true);
+        return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+    }
+
+    private Message<byte[]> sendMessage(String destination, String userId) {
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SEND);
         accessor.setDestination(destination);
         accessor.setUser(new StompPrincipal(userId));
         accessor.setLeaveMutable(true);

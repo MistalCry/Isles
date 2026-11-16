@@ -40,6 +40,13 @@ public final class PlatformAuditActions {
 
     public static final String HOT_KEYWORD_DELETE = "platform.hotkeyword.delete";
 
+    public static final String AGENT_CREATE = "platform.agent.create";
+    public static final String AGENT_UPDATE = "platform.agent.update";
+    public static final String AGENT_DELETE = "platform.agent.delete";
+    public static final String AGENT_PAUSE = "platform.agent.pause";
+    public static final String AGENT_RESUME = "platform.agent.resume";
+    public static final String AGENT_RUN = "platform.agent.run";
+
     private PlatformAuditActions() {
     }
 }

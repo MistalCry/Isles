@@ -40,6 +40,7 @@ class VoiceRoomServiceTest {
     private UserMapper userMapper;
     private ChannelAccessService accessService;
     private RealtimePublisher realtimePublisher;
+    private VoiceRoomPresence presence;
     private VoiceRoomService service;
 
     @BeforeEach
@@ -50,8 +51,9 @@ class VoiceRoomServiceTest {
         userMapper = mock(UserMapper.class);
         accessService = mock(ChannelAccessService.class);
         realtimePublisher = mock(RealtimePublisher.class);
+        presence = new VoiceRoomPresence();
         service = new VoiceRoomService(roomMapper, seatMapper, appMapper, userMapper, accessService,
-                realtimePublisher);
+                realtimePublisher, presence);
     }
 
     @Test
@@ -131,6 +133,71 @@ class VoiceRoomServiceTest {
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
                         .isEqualTo(ErrorCode.VOICE_ROOM_ALREADY_OPEN));
         verify(roomMapper, never()).insert(any(VoiceRoom.class));
+    }
+
+
+    // ------------------------------------------------------------------
+    // 在房校验（K1）：订阅/发送共用的入口
+    // ------------------------------------------------------------------
+
+    @Test
+    void should_allow_signal_when_user_joined() {
+        when(roomMapper.selectById("r1")).thenReturn(room("OPEN", 8));
+        presence.join("r1", "u1");
+
+        service.requireSignalAccess("r1", "u1");
+
+        // 命中登记后不再查麦位表（每帧查库会打爆连接通道）
+        verify(seatMapper, never()).selectByRoomAndUser(anyString(), anyString());
+    }
+
+    @Test
+    void should_allow_signal_when_user_on_seat_without_join() {
+        when(roomMapper.selectById("r1")).thenReturn(room("OPEN", 8));
+        when(seatMapper.selectByRoomAndUser("r1", "u1")).thenReturn(seat("r1", "u1", 1));
+
+        service.requireSignalAccess("r1", "u1");
+
+        // 上过麦也算在房，并补登记
+        assertThat(presence.isPresent("r1", "u1")).isTrue();
+    }
+
+    @Test
+    void should_reject_signal_when_not_in_room() {
+        when(roomMapper.selectById("r1")).thenReturn(room("OPEN", 8));
+        when(seatMapper.selectByRoomAndUser("r1", "u2")).thenReturn(null);
+
+        assertThatThrownBy(() -> service.requireSignalAccess("r1", "u2"))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.VOICE_NOT_IN_ROOM));
+    }
+
+    @Test
+    void should_reject_signal_when_room_closed_or_missing() {
+        when(roomMapper.selectById("r1")).thenReturn(room("CLOSED", 8));
+        when(roomMapper.selectById("r2")).thenReturn(null);
+
+        assertThatThrownBy(() -> service.requireSignalAccess("r1", "u1"))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.VOICE_ROOM_CLOSED));
+        assertThatThrownBy(() -> service.requireSignalAccess("r2", "u1"))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.VOICE_ROOM_CLOSED));
+    }
+
+    @Test
+    void should_clear_presence_when_room_closed() {
+        when(roomMapper.selectById("r1")).thenReturn(room("OPEN", 8));
+        when(seatMapper.deleteByRoom("r1")).thenReturn(1);
+        when(seatMapper.selectByRoom("r1")).thenReturn(List.of());
+        presence.join("r1", "u1");
+
+        service.close("r1", "host-1");
+
+        assertThat(presence.isPresent("r1", "u1")).isFalse();
     }
 
     private VoiceRoom room(String status, int maxSeats) {

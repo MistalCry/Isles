@@ -44,6 +44,8 @@ public class Post {
     private Long shareCount;
     private Boolean isPinned;
     private Boolean isEssence;
+    /** 是否 AI 代理生成（V13）：前台必须展示 AI 徽章，不可关闭（docs/12 §6）。 */
+    private Boolean isAiGenerated;
     private LocalDateTime pinnedAt;
     private String status;
     private LocalDateTime createdAt;

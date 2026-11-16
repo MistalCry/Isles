@@ -29,6 +29,8 @@ public class Comment {
     private String emoji;
     private Long likeCount;
     private String status;
+    /** 是否 AI 代理生成（V13）。 */
+    private Boolean isAiGenerated;
     private LocalDateTime createdAt;
     private LocalDateTime deletedAt;
 

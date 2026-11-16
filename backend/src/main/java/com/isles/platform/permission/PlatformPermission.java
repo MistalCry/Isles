@@ -51,7 +51,10 @@ public enum PlatformPermission {
     WORD_MANAGE("管理敏感词库"),
 
     /** 查看平台数据与趋势。 */
-    STATS_READ("查看平台数据");
+    STATS_READ("查看平台数据"),
+
+    /** 管理 AI 用户代理（人设/启停/运行日志/手动触发）。 */
+    AGENT_MANAGE("管理 AI 代理");
 
     private final String label;
 

@@ -140,6 +140,8 @@ public class PostService {
         post.setShareCount(0L);
         post.setIsPinned(false);
         post.setIsEssence(false);
+        // AI 标识（V13）：代理账号产出的内容必须可识别，前台据此展示徽章
+        post.setIsAiGenerated(isAgentAccount(userId));
         post.setStatus(Post.Status.PUBLISHED.name());
         post.setCreatedAt(now);
         post.setUpdatedAt(now);
@@ -482,5 +484,17 @@ public class PostService {
 
     private long hotScore(Post post) {
         return post.getViewCount() + post.getLikeCount() * 3 + post.getCommentCount() * 5;
+    }
+
+    /**
+     * 作者是否为 AI 代理账号（V13）：创建内容时查一次主键，成本可忽略；
+     * 判定失败一律按「非代理」处理（宁可少打标也不误标真人）。
+     */
+    private boolean isAgentAccount(String userId) {
+        if (userId == null) {
+            return false;
+        }
+        com.isles.user.entity.User author = userMapper.selectById(userId);
+        return author != null && Boolean.TRUE.equals(author.getIsAgent());
     }
 }

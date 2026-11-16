@@ -56,6 +56,13 @@ public class VoiceRoomController {
         return voiceRoomService.join(roomId, currentUserProvider.requireUserId());
     }
 
+    /** 退房：清理「在房」登记（关房时由服务端整房清理）。 */
+    @DeleteMapping("/voice-rooms/{roomId}/join")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void leave(@PathVariable String roomId) {
+        voiceRoomService.leaveRoom(roomId, currentUserProvider.requireUserId());
+    }
+
     /** 上麦：指定麦位，抢座冲突返回 409。 */
     @PostMapping("/voice-rooms/{roomId}/seats")
     public VoiceRoomDtos.RoomView takeSeat(@PathVariable String roomId,

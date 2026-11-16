@@ -6,6 +6,9 @@ import com.isles.admin.mapper.AdminReportMapper;
 import com.isles.admin.mapper.AdminStatsMapper;
 import com.isles.admin.mapper.AdminTrendMapper;
 import com.isles.admin.mapper.AdminUserMapper;
+import com.isles.agent.mapper.AgentMemoryMapper;
+import com.isles.agent.mapper.AgentProfileMapper;
+import com.isles.agent.mapper.AgentRunMapper;
 import com.isles.apps.mapper.ActivitySignupMapper;
 import com.isles.apps.mapper.ChannelActivityMapper;
 import com.isles.apps.mapper.ChannelAppMapper;
@@ -58,7 +61,11 @@ class AiMapperSqlSmokeTest {
             VoiceRoomMapper.class,
             VoiceRoomSeatMapper.class,
             ChannelActivityMapper.class,
-            ActivitySignupMapper.class);
+            ActivitySignupMapper.class,
+            // V13：AI 代理
+            AgentProfileMapper.class,
+            AgentMemoryMapper.class,
+            AgentRunMapper.class);
 
     /**
      * 非 {@code <script>} 包裹的 SQL 是纯文本，MyBatis 不会解码 XML 实体；
@@ -109,5 +116,9 @@ class AiMapperSqlSmokeTest {
         assertThat(configuration.hasStatement("com.isles.apps.mapper.VoiceRoomSeatMapper.selectByRoom")).isTrue();
         assertThat(configuration.hasStatement("com.isles.apps.mapper.ChannelActivityMapper.selectDueReminders")).isTrue();
         assertThat(configuration.hasStatement("com.isles.apps.mapper.ActivitySignupMapper.selectGoing")).isTrue();
+        assertThat(configuration.hasStatement("com.isles.agent.mapper.AgentProfileMapper.selectActive")).isTrue();
+        assertThat(configuration.hasStatement("com.isles.agent.mapper.AgentMemoryMapper.countByFingerprint")).isTrue();
+        assertThat(configuration.hasStatement("com.isles.agent.mapper.AgentRunMapper.countOutputSinceAll")).isTrue();
+        assertThat(configuration.hasStatement("com.isles.agent.mapper.AgentRunMapper.selectPage")).isTrue();
     }
 }

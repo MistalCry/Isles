@@ -148,6 +148,8 @@ public class CommentService {
         comment.setEmoji(emoji.isEmpty() ? null : jsonSupport.toJson(emoji));
         comment.setLikeCount(0L);
         comment.setStatus(Comment.Status.PUBLISHED.name());
+        // AI 标识（V13）
+        comment.setIsAiGenerated(isAgentAccount(userId));
         comment.setCreatedAt(now);
         commentMapper.insert(comment);
         postMapper.addCommentCount(postId, 1);
@@ -308,5 +310,17 @@ public class CommentService {
 
     private String truncate(String value, int maxLength) {
         return value.length() <= maxLength ? value : value.substring(0, maxLength);
+    }
+
+    /**
+     * 作者是否为 AI 代理账号（V13）：创建内容时查一次主键，成本可忽略；
+     * 判定失败一律按「非代理」处理（宁可少打标也不误标真人）。
+     */
+    private boolean isAgentAccount(String userId) {
+        if (userId == null) {
+            return false;
+        }
+        com.isles.user.entity.User author = userMapper.selectById(userId);
+        return author != null && Boolean.TRUE.equals(author.getIsAgent());
     }
 }

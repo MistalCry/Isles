@@ -74,6 +74,12 @@ public final class SettingDefinitions {
                     "单用户同时进行的流式提问数", 1, 5),
             bool("ai.assistant.schedulerEnabled", SettingGroup.AI, "频道助手自动任务", "true", false,
                     "关闭后仅保留手动试运行，定时任务不再执行"),
+            bool("agent.enabled", SettingGroup.AI, "AI 代理总开关", "false", false,
+                    "kill switch：关闭后调度器立即不再挑选任何代理（已发出的内容保留）"),
+            number("agent.dailyPostLimit", SettingGroup.AI, "AI 代理每日发帖总上限", "20", false,
+                    "全平台代理每日发帖总数上限，防止冷启动期内容刷屏", 0, 500),
+            number("agent.dailyTokenBudget", SettingGroup.AI, "AI 代理每日 token 预算", "200000", false,
+                    "全平台代理每日 token 消耗上限，超限自动停止挑选", 0, 100000000),
             number("ai.default.timeoutSeconds", SettingGroup.AI, "模型调用超时（秒）", "60", false,
                     "单次模型调用的默认超时，模型配置可覆盖", 5, 600),
 

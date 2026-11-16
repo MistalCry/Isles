@@ -1,6 +1,7 @@
 package com.isles.config;
 
 import com.isles.realtime.StompAuthChannelInterceptor;
+import com.isles.realtime.StompErrorFrameHandler;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,6 +21,7 @@ import java.util.Arrays;
  *   <li>端点 {@code /ws}，原生 WebSocket（不启用 SockJS）；</li>
  *   <li>CONNECT 帧鉴权见 {@link StompAuthChannelInterceptor}（Principal = userId）；</li>
  *   <li>下行队列 {@code /user/queue/dm}、{@code /user/queue/notifications}；</li>
+ *   <li>语音房信令 {@code /app/voice/{roomId}/signal} → {@code /topic/voice/{roomId}/signal|state}；</li>
  *   <li>心跳 10s/10s、单帧 16KB、发送缓冲与超时有上限（docs/00 §10 背压与载荷约束）。</li>
  * </ul>
  * 写路径仍走 REST：WebSocket 只做服务端下行推送，断线后客户端按游标补拉。
@@ -53,6 +55,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // 原生 WebSocket：浏览器无法在握手请求上设置 Authorization 头，鉴权改在 CONNECT 帧完成
         registry.addEndpoint("/ws").setAllowedOriginPatterns(allowedOrigins);
+        // ERROR 帧补 code 头：语音房被拒时前端要能区分「不在房」与「房已关」
+        registry.setErrorHandler(new StompErrorFrameHandler());
     }
 
     @Override
