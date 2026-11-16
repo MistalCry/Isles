@@ -186,9 +186,14 @@ async function loadPost(): Promise<void> {
   }
 }
 
-/** 从通知跳转时定位到对应评论（FR-NTF-03）。 */
+/**
+ * 定位到指定评论（FR-NTF-03）：
+ * - 通知跳转带 `?commentId=`
+ * - 卡片「最高赞评论」带 `#comment-<id>`
+ */
 function highlightTargetComment(): void {
-  const commentId = String(route.query.commentId ?? '')
+  const hashId = route.hash.startsWith('#comment-') ? route.hash.slice('#comment-'.length) : ''
+  const commentId = String(route.query.commentId ?? '') || hashId
   if (!commentId) return
   let attempts = 0
   const tryLocate = (): void => {

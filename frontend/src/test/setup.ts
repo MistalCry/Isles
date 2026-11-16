@@ -28,9 +28,11 @@ config.global.plugins = [i18n, createPinia(), router]
 config.global.directives = { loading: {} }
 
 config.global.stubs = {
+  // 把 to 透传到 data-to：测试可断言「点了会去哪」，不必解析路由
   RouterLink: {
     props: ['to'],
-    template: '<a class="router-link-stub"><slot /></a>',
+    template:
+      '<a class="router-link-stub" :data-to="typeof to === \'string\' ? to : JSON.stringify(to)"><slot /></a>',
   },
   'el-icon': { template: '<i class="el-icon-stub"><slot /></i>' },
   // type 透传到 DOM：举报状态/内容状态的用例靠它断言标签配色
@@ -63,6 +65,14 @@ config.global.stubs = {
     template: '<span class="el-switch-stub">{{ activeText }}</span>',
   },
   'el-slider': { template: '<div class="el-slider-stub"></div>' },
+  'el-select': {
+    props: ['modelValue', 'placeholder', 'disabled'],
+    template: '<div class="el-select-stub"><slot /></div>',
+  },
+  'el-option': {
+    props: ['label', 'value'],
+    template: '<span class="el-option-stub">{{ label }}</span>',
+  },
   'el-skeleton': { props: ['rows', 'animated'], template: '<div class="el-skeleton-stub" />' },
   'el-drawer': {
     props: ['modelValue', 'title', 'size'],

@@ -185,6 +185,7 @@ onMounted(load)
       :description="t('admin.content.emptyHint')"
     />
     <template v-else-if="data">
+      <div class="admin-table-scroll">
       <el-table :data="data.items" class="admin-table" row-key="id">
         <el-table-column :label="t('admin.content.title')" min-width="260">
           <template #default="{ row }">
@@ -205,7 +206,7 @@ onMounted(load)
         <el-table-column :label="t('common.time')" width="170">
           <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column :label="t('common.actions')" width="150" align="right">
+        <el-table-column :label="t('common.actions')" width="150" align="right" fixed="right">
           <template #default="{ row }">
             <el-button
               v-if="row.status !== 'HIDDEN'"
@@ -230,6 +231,7 @@ onMounted(load)
           </template>
         </el-table-column>
       </el-table>
+      </div>
       <footer class="admin-pager">
         <span>{{ t('common.totalCount', { n: data.total }) }}</span>
         <el-pagination

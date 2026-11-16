@@ -33,13 +33,22 @@ export function validateMediaFile(file: File): string | null {
   return null
 }
 
+/**
+ * 上传超时：按 0.5MB/s 的保守带宽估算，至少给 120 秒。
+ * 固定 120s 会让大视频在慢网上必然超时（200MB 视频要 400s 左右）。
+ */
+export function uploadTimeoutMs(sizeBytes: number): number {
+  const estimated = Math.ceil((sizeBytes / (0.5 * 1024 * 1024)) * 1000)
+  return Math.max(120_000, estimated)
+}
+
 export async function uploadMedia(file: File, onProgress?: (percent: number) => void): Promise<MediaItem> {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('type', detectMediaType(file) === 'VIDEO' ? 'video' : 'image')
 
   const { data } = await http.post<unknown>('/media/upload', formData, {
-    timeout: 120000,
+    timeout: uploadTimeoutMs(file.size),
     onUploadProgress: (event) => {
       if (event.total && onProgress) {
         onProgress(Math.round((event.loaded / event.total) * 100))

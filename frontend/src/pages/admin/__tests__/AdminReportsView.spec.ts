@@ -56,6 +56,12 @@ const PAGE = {
   size: 20,
 }
 
+let lastWrapper: Awaited<ReturnType<typeof mount>> | null = null
+
+function wrapperTextOfLastMount(): string {
+  return lastWrapper?.text() ?? ''
+}
+
 async function mountView() {
   mocks.identity.value = MODERATOR
   mocks.listAdminReports.mockResolvedValue(PAGE)
@@ -65,6 +71,7 @@ async function mountView() {
     global: { plugins: [ElementPlus] },
   })
   await flushPromises()
+  lastWrapper = wrapper
   return wrapper
 }
 
@@ -101,6 +108,25 @@ describe('AdminReportsView 举报状态列', () => {
     expect(buttons[0].attributes('disabled')).toBeUndefined()
     expect(buttons[1].attributes('disabled')).toBeDefined()
     expect(buttons[2].attributes('disabled')).toBeDefined()
+  })
+
+  it('默认筛选「待处理」：进页面就只拉 PENDING，不必先手动切', async () => {
+    await mountView()
+    const firstCall = mocks.listAdminReports.mock.calls[0][0]
+    expect(firstCall.status).toBe('PENDING')
+    expect(firstCall.page).toBe(1)
+    // 筛选下拉默认展示「待处理」
+    expect(wrapperTextOfLastMount()).toContain('待处理')
+  })
+
+  it('操作列存在且钉在右侧（横向滚动不会把处置入口藏起来）', async () => {
+    const wrapper = await mountView()
+    const headers = wrapper.findAll('.el-table__header th')
+    const actionHeader = headers.at(-1)!
+    expect(actionHeader.text()).toContain('操作')
+    expect(actionHeader.classes()).toContain('el-table-fixed-column--right')
+    // 其余列不应被钉住
+    expect(headers[0].classes()).not.toContain('el-table-fixed-column--right')
   })
 
   it('没有 REPORT_HANDLE 的角色看到全禁用的处置按钮', async () => {

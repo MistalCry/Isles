@@ -206,3 +206,10 @@ select {
     gap: var(--isles-space-3);
   }
 }
+
+/* 后台表格统一横向滚动容器：表格 min-content 不再把整页顶宽，fixed 列才能钉在可视区 */
+.admin-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}

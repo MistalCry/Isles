@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { IMAGE_ACCEPT, MEDIA_ACCEPT, REPORT_REASON_CODES, VIDEO_ACCEPT, reportReasonLabel } from '@/constants/app'
-import { detectMediaType, isPreviewUnsupported, validateMediaFile } from '@/api/media'
+import { detectMediaType, isPreviewUnsupported, uploadTimeoutMs, validateMediaFile } from '@/api/media'
 import { setLocale } from '@/i18n'
 
 /** 构造 File 只需要 name/type/size，测试环境不必真读内容 */
@@ -68,6 +68,13 @@ describe('上传格式（accept 与校验）', () => {
     expect(validateMediaFile(fakeFile('a.pdf', 'application/pdf'))).not.toBeNull()
     const huge = fakeFile('big.png', 'image/png', 11 * 1024 * 1024)
     expect(validateMediaFile(huge)).not.toBeNull()
+  })
+
+  it('上传超时按 0.5MB/s 估算，且不低于 120 秒', () => {
+    // 小文件走保底 120s
+    expect(uploadTimeoutMs(1024)).toBe(120_000)
+    // 200MB ≈ 400s，不再被固定 120s 卡死
+    expect(uploadTimeoutMs(200 * 1024 * 1024)).toBe(400_000)
   })
 
   it('HEIC 被标记为「无法预览」，用于提示按原图上传', () => {

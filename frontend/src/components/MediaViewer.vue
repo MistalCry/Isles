@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowLeft, ArrowRight, Close, VideoPlay } from '@element-plus/icons-vue'
 import type { MediaItem } from '@/types/models'
 
@@ -12,11 +12,20 @@ const props = withDefaults(
     compact?: boolean
     /** 单图最大高度（px）：私信气泡等窄容器传更小的值 */
     maxHeight?: number
+    /**
+     * 是否可点击看大图。列表卡片里传 false：整卡是一个链接，
+     * 点媒体应该进详情页而不是弹灯箱（否则点击被灯箱截走）。
+     */
+    interactive?: boolean
+    /** 被折叠的数量：在最后一个格子上盖「+N」，提示还有多少没展示 */
+    overflowCount?: number
   }>(),
   {
     media: () => [],
     compact: false,
     maxHeight: 420,
+    interactive: true,
+    overflowCount: 0,
   },
 )
 
@@ -32,11 +41,55 @@ const gridClass = computed(() => {
   return 'media-viewer--grid'
 })
 
+/**
+ * 视频懒播放：列表里一屏可能有多个视频，全部 autoplay 会同时出声/抢带宽。
+ * 进入视口（≥50%）才播，离开立即暂停；不支持 IntersectionObserver 的环境保持暂停。
+ */
+const videoEls = new Map<number, HTMLVideoElement>()
+let videoObserver: IntersectionObserver | null = null
+
+function setVideoRef(el: unknown, index: number): void {
+  const video = el instanceof HTMLVideoElement ? el : null
+  if (!video) {
+    videoEls.delete(index)
+    return
+  }
+  videoEls.set(index, video)
+  videoObserver?.observe(video)
+}
+
+function ensureObserver(): void {
+  if (videoObserver || typeof IntersectionObserver === 'undefined') return
+  videoObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        const video = entry.target as HTMLVideoElement
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+          // 自动播放被浏览器策略拦截时静默失败，用户仍可点播放
+          void video.play().catch(() => undefined)
+        } else if (!video.paused) {
+          video.pause()
+        }
+      }
+    },
+    { threshold: [0, 0.5, 1] },
+  )
+  videoEls.forEach((video) => videoObserver?.observe(video))
+}
+
 function openLightbox(item: MediaItem): void {
   const index = images.value.findIndex((image) => image.url === item.url)
   activeImageIndex.value = index >= 0 ? index : 0
   lightboxOpen.value = true
 }
+
+onMounted(ensureObserver)
+
+onBeforeUnmount(() => {
+  videoObserver?.disconnect()
+  videoObserver = null
+  videoEls.clear()
+})
 
 function closeLightbox(): void {
   lightboxOpen.value = false
@@ -88,22 +141,28 @@ const activeImage = computed(() => images.value[activeImageIndex.value] ?? null)
     :style="{ '--media-max-height': `${maxHeight}px` }"
   >
     <template v-for="(item, index) in items" :key="`${item.url}-${index}`">
-      <button
+      <component
+        :is="interactive ? 'button' : 'div'"
         v-if="item.type === 'IMAGE'"
-        type="button"
+        :type="interactive ? 'button' : undefined"
         class="media-viewer__cell media-viewer__image"
-        :aria-label="t('media.viewer.viewNth', { n: index + 1 })"
-        @click="openLightbox(item)"
+        :class="{ 'is-static': !interactive }"
+        :aria-label="interactive ? t('media.viewer.viewNth', { n: index + 1 }) : undefined"
+        @click="interactive && openLightbox(item)"
       >
         <img :src="item.thumbUrl || item.url" :alt="t('media.viewer.postPhoto', { n: index + 1 })" loading="lazy" />
-      </button>
+        <span
+          v-if="overflowCount > 0 && index === items.length - 1"
+          class="media-viewer__more"
+        >+{{ overflowCount }}</span>
+      </component>
 
       <div v-else class="media-viewer__cell media-viewer__video">
         <video
+          :ref="(el) => setVideoRef(el, index)"
           :src="item.url"
           :poster="item.thumbUrl || undefined"
           controls
-          autoplay
           muted
           loop
           playsinline
@@ -112,6 +171,10 @@ const activeImage = computed(() => images.value[activeImageIndex.value] ?? null)
         >{{ t('media.viewer.unsupported') }}</video>
         <span class="media-viewer__video-tip" aria-hidden="true">
           <el-icon><VideoPlay /></el-icon>{{ t('media.viewer.mutedPlaying') }}</span>
+        <span
+          v-if="overflowCount > 0 && index === items.length - 1"
+          class="media-viewer__more"
+        >+{{ overflowCount }}</span>
       </div>
     </template>
   </div>
@@ -223,6 +286,24 @@ const activeImage = computed(() => images.value[activeImageIndex.value] ?? null)
   height: 100%;
   object-fit: cover;
   background: #0d1b21;
+}
+
+.media-viewer__more {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 1px 6px;
+  color: #fff;
+  font-size: var(--isles-font-xs);
+  font-weight: 600;
+  line-height: 1.6;
+  background: rgb(0 0 0 / 55%);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.media-viewer__cell.is-static {
+  cursor: pointer;
 }
 
 .media-viewer__video-tip {

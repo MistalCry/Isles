@@ -192,6 +192,9 @@ post: {
     moveRight: "右移",
     uploading: "上传中…",
   },
+  cardMoreMedia: "还有 {n} 张媒体，点击查看详情",
+  topComment: "最高赞评论",
+  viewAllComments: "查看全部 {n} 条评论",
 },
 editor: {
   placeholder: "写下你想分享的内容…",
@@ -269,6 +272,9 @@ media: {
   sizeLimit: "{type}大小不能超过 {max}MB",
   heicNoPreview: "该格式不支持预览，将按原图上传",
   formatsHint: "支持 JPG / PNG / GIF / WebP / AVIF / BMP / HEIC 与 MP4 / WebM / MOV / M4V",
+  uploadPercent: "上传中 {percent}%",
+  uploadRetry: "重试上传",
+  uploadFailedRetry: "上传失败，可重试",
 },
 mention: {
   hint: "选择后会在光标处插入「{'@'}昵称」",
@@ -1200,6 +1206,8 @@ admin: {
     targetType: "目标类型",
     targetPost: "帖子",
     targetComment: "评论",
+    emptyPending: "没有待处理举报",
+    emptyPendingHint: "所有举报都已处理完，辛苦了。",
   },
   users: {
     title: "用户管理",

@@ -40,6 +40,9 @@ const emit = defineEmits<{
 const auth = useAuthStore()
 const draft = ref('')
 const uploading = ref(false)
+/** 上传进度与失败重试 */
+const uploadPercent = ref(0)
+const failedUpload = ref<File | null>(null)
 const fileInput = ref<HTMLInputElement>()
 const scrollRef = ref<HTMLElement | null>(null)
 
@@ -99,19 +102,36 @@ async function handleImagePick(event: Event): Promise<void> {
   if (mediaApi.isPreviewUnsupported(file)) {
     ElMessage.info(t('media.heicNoPreview'))
   }
+  await uploadFile(file)
+}
+
+/** 单个文件上传：带百分比，失败时记住文件供「重试」 */
+async function uploadFile(file: File): Promise<void> {
   uploading.value = true
+  uploadPercent.value = 0
+  failedUpload.value = null
   try {
-    const media = await mediaApi.uploadMedia(file)
+    const media = await mediaApi.uploadMedia(file, (percent) => {
+      uploadPercent.value = percent
+    })
     emit('send', {
       type: 'IMAGE',
       media: [media],
       clientMessageId: createClientMessageId(),
     })
   } catch {
-    // 拦截器已提示
+    // 拦截器已提示；保留文件以便重试
+    failedUpload.value = file
   } finally {
     uploading.value = false
+    uploadPercent.value = 0
   }
+}
+
+async function retryUpload(): Promise<void> {
+  const file = failedUpload.value
+  if (!file) return
+  await uploadFile(file)
 }
 
 watch(
@@ -230,7 +250,12 @@ onMounted(() => {
             </button>
           </div>
         </el-popover>
-        <el-button text size="small" :icon="Picture" :loading="uploading" @click="triggerFilePick">{{ t('common.image') }}</el-button>
+        <el-button text size="small" :icon="Picture" :loading="uploading" @click="triggerFilePick">
+          {{ uploading ? t('media.uploadPercent', { percent: uploadPercent }) : t('common.image') }}
+        </el-button>
+        <el-button v-if="failedUpload && !uploading" text size="small" @click="retryUpload">
+          {{ t('media.uploadRetry') }}
+        </el-button>
         <el-button
           class="chat-panel__send"
           type="primary"

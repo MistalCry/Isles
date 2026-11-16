@@ -23,7 +23,8 @@ const { t } = useI18n()
 const { identity } = useAdminAccess()
 const canHandle = computed(() => hasPermission(identity.value, 'REPORT_HANDLE'))
 
-const status = ref('')
+/** 首次进入默认看「待处理」：管理员打开举报页就是要清待办 */
+const status = ref<string>('PENDING')
 const targetType = ref('')
 const keyword = ref('')
 const page = ref(1)
@@ -147,6 +148,7 @@ onMounted(load)
         @clear="search"
       />
       <el-select v-model="status" :placeholder="t('common.allStatus')" clearable class="admin-filters__select" @change="search">
+        <el-option :label="t('common.all')" value="" />
         <el-option :label="t('admin.reportStatus.pending')" value="PENDING" />
         <el-option :label="t('admin.reportStatus.accepted')" value="ACCEPTED" />
         <el-option :label="t('admin.reportStatus.rejected')" value="REJECTED" />
@@ -180,10 +182,11 @@ onMounted(load)
     <ErrorState v-else-if="error" :message="error" @retry="load" />
     <EmptyState
       v-else-if="data && data.items.length === 0"
-      :title="t('admin.reports.empty')"
-      :description="t('admin.reports.emptyHint')"
+      :title="status === 'PENDING' ? t('admin.reports.emptyPending') : t('admin.reports.empty')"
+      :description="status === 'PENDING' ? t('admin.reports.emptyPendingHint') : t('admin.reports.emptyHint')"
     />
     <template v-else-if="data">
+      <div class="admin-table-scroll">
       <el-table :data="data.items" class="admin-table" row-key="id">
         <el-table-column prop="id" :label="t('admin.reports.id')" width="200" show-overflow-tooltip />
         <el-table-column :label="t('admin.reports.target')" min-width="160">
@@ -217,7 +220,8 @@ onMounted(load)
         <el-table-column :label="t('common.time')" width="160">
           <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column :label="t('common.actions')" width="100" align="right">
+        <!-- 钉在右侧：表格总宽超出容器时，处置入口不能被横向滚动藏起来 -->
+        <el-table-column :label="t('common.actions')" width="120" align="right" fixed="right">
           <template #default="{ row }">
             <el-button
               size="small"
@@ -231,6 +235,7 @@ onMounted(load)
           </template>
         </el-table-column>
       </el-table>
+      </div>
       <footer class="admin-pager">
         <span>{{ t('common.totalCount', { n: data.total }) }}</span>
         <el-pagination

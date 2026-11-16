@@ -48,14 +48,36 @@ const authorName = computed(
 const roleName = computed(
   () => props.post.author.channelRole?.name ?? props.post.author.roles?.[0]?.name ?? '',
 )
-const media = computed(() => sortMedia(props.post.media).slice(0, 9))
+/** 有封面就只展示封面，媒体区整体不渲染（避免一条多图长文占满一屏） */
+const hasCover = computed(() => Boolean(props.post.coverUrl))
+const totalMedia = computed(() => sortMedia(props.post.media).length)
+/** 无封面时最多展示 3 张，其余用「+N」提示 */
+const media = computed(() => (hasCover.value ? [] : sortMedia(props.post.media).slice(0, 3)))
+const overflowCount = computed(() => Math.max(0, totalMedia.value - media.value.length))
 const postPath = computed(() => ({ name: 'post' as const, params: { id: props.post.id } }))
+/** 点最高赞评论时直达详情页对应评论（锚点由 CommentItem 的 id 提供） */
+const topCommentLink = computed(() => {
+  const comment = props.post.topComment
+  if (!comment) return postPath.value
+  return { name: 'post' as const, params: { id: props.post.id }, hash: `#comment-${comment.id}` }
+})
+const topCommentAuthor = computed(() => {
+  const author = props.post.topComment?.author
+  return author ? author.nickname || author.username : ''
+})
+const topCommentExcerpt = computed(() => {
+  const comment = props.post.topComment
+  if (!comment) return ''
+  const text = comment.content?.trim() || (comment.emoji?.join(' ') ?? '')
+  return excerpt(text, 60)
+})
 const channelPath = computed(() => ({
   name: 'channel' as const,
   params: { id: props.post.channelId },
 }))
 const channelName = computed(() => props.post.channel?.name ?? t('common.channel'))
-const excerptText = computed(() => excerpt(props.post.content, 220))
+/** 有标题时正文只是补充，压到 2 行；无标题的短帖保留 3 行 */
+const excerptText = computed(() => excerpt(props.post.content, props.post.title ? 120 : 220))
 
 watch(
   () => props.post.likeCount,
@@ -144,10 +166,26 @@ function handleAdminAction(action: string): void {
 
     <RouterLink :to="postPath" class="post-card__content">
       <h2 v-if="post.title" class="post-card__title line-clamp-2">{{ post.title }}</h2>
-      <p class="post-card__excerpt line-clamp-3">{{ excerptText }}</p>
+      <p class="post-card__excerpt" :class="post.title ? 'line-clamp-2' : 'line-clamp-3'">{{ excerptText }}</p>
     </RouterLink>
 
-    <MediaViewer :media="media" />
+    <!-- 整卡进详情：媒体不可点开灯箱，否则点击会被灯箱截走 -->
+    <RouterLink
+      v-if="!hasCover && media.length > 0"
+      :to="postPath"
+      class="post-card__media"
+      :aria-label="overflowCount > 0 ? t('post.cardMoreMedia', { n: overflowCount }) : undefined"
+    >
+      <MediaViewer :media="media" :interactive="false" :overflow-count="overflowCount" />
+    </RouterLink>
+
+    <RouterLink v-if="post.topComment" :to="topCommentLink" class="post-card__top-comment">
+      <span class="post-card__top-comment-label">{{ t('post.topComment') }}</span>
+      <span class="post-card__top-comment-body">
+        <strong v-if="topCommentAuthor">{{ topCommentAuthor }}：</strong>{{ topCommentExcerpt }}
+      </span>
+      <span class="post-card__top-comment-more">{{ t('post.viewAllComments', { n: post.commentCount }) }}</span>
+    </RouterLink>
 
     <footer class="post-card__footer">
       <button
@@ -189,6 +227,7 @@ function handleAdminAction(action: string): void {
       v-model="commentsOpen"
       :post="post"
       :comment-count="commentCount"
+      :can-comment="post.channel?.isJoined !== false"
       @created="handleCommentCreated"
     />
 
@@ -293,6 +332,51 @@ function handleAdminAction(action: string): void {
 .post-card__content {
   display: block;
   color: inherit;
+}
+
+.post-card__top-comment {
+  display: flex;
+  gap: var(--isles-space-2);
+  align-items: baseline;
+  margin-top: var(--isles-space-2);
+  padding: var(--isles-space-2) var(--isles-space-3);
+  font-size: var(--isles-font-sm);
+  color: var(--isles-text-secondary);
+  background: var(--isles-surface-muted);
+  border-radius: var(--isles-radius-md);
+
+  &:hover {
+    background: var(--isles-hover);
+  }
+}
+
+.post-card__top-comment-label {
+  flex: none;
+  color: var(--isles-text-muted);
+  font-size: var(--isles-font-xs);
+}
+
+.post-card__top-comment-body {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  strong {
+    color: var(--isles-text);
+  }
+}
+
+.post-card__top-comment-more {
+  flex: none;
+  color: var(--isles-primary);
+  font-size: var(--isles-font-xs);
+}
+
+.post-card__media {
+  display: block;
+  margin-top: var(--isles-space-2);
 }
 
 .post-card__cover {

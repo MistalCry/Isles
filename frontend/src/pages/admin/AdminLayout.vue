@@ -171,10 +171,22 @@ onMounted(loadIdentity)
     flex-direction: column;
   }
 
+  /* 列方向 + align-items:flex-start 时子项按内容宽度撑开，表格 min-content 会把整页顶宽 */
+  .admin-content {
+    width: 100%;
+    min-width: 0;
+  }
+
   .admin-nav {
     flex-direction: row;
     width: 100%;
     overflow-x: auto;
+  }
+
+  /* 横向排布时不让菜单项被压扁（否则中文会竖排成一列字） */
+  .admin-nav__item {
+    flex: none;
+    white-space: nowrap;
   }
 }
 </style>

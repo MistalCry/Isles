@@ -302,6 +302,7 @@ onMounted(load)
         :description="t('admin.words.emptyHint')"
       />
       <template v-else-if="data">
+      <div class="admin-table-scroll">
         <el-table :data="data.items" class="admin-table" row-key="id">
           <el-table-column prop="word" :label="t('admin.words.word')" min-width="180" />
           <el-table-column :label="t('admin.words.category')" width="130">
@@ -324,7 +325,7 @@ onMounted(load)
           <el-table-column :label="t('common.time')" width="170">
             <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
           </el-table-column>
-          <el-table-column :label="t('common.actions')" width="130" align="right">
+          <el-table-column :label="t('common.actions')" width="130" align="right" fixed="right">
             <template #default="{ row }">
               <el-button size="small" link type="primary" @click="openEdit(row as AdminSensitiveWord)">
                 {{ t('common.edit') }}
@@ -335,6 +336,7 @@ onMounted(load)
             </template>
           </el-table-column>
         </el-table>
+      </div>
         <footer class="admin-pager">
           <span>{{ t('common.totalCount', { n: data.total }) }}</span>
           <el-pagination
@@ -377,6 +379,7 @@ onMounted(load)
         :description="t('admin.words.hitsEmptyHint')"
       />
       <template v-else-if="hits">
+      <div class="admin-table-scroll">
         <el-table :data="hits.items" class="admin-table" row-key="id">
           <el-table-column prop="word" :label="t('admin.words.word')" min-width="140" />
           <el-table-column :label="t('admin.words.hitScene')" width="120">
@@ -395,6 +398,7 @@ onMounted(load)
             <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
           </el-table-column>
         </el-table>
+      </div>
         <footer class="admin-pager">
           <span>{{ t('common.totalCount', { n: hits.total }) }}</span>
           <el-pagination

@@ -25,6 +25,7 @@ import {
   type AiConversation,
   type AiMessage,
   type AiScope,
+  type AiSource,
   type StreamHandlers,
 } from '@/api/ai'
 import { AppError, resolveErrorMessage } from '@/api/client'
@@ -91,6 +92,9 @@ const loadingOlder = ref(false)
 const input = ref('')
 const pendingImages = ref<PendingImage[]>([])
 const uploading = ref(false)
+/** 上传进度与失败重试 */
+const uploadPercent = ref(0)
+const failedUpload = ref<File | null>(null)
 const streaming = ref(false)
 const streamError = ref<string | null>(null)
 const currentAssistantId = ref<string | null>(null)
@@ -369,8 +373,18 @@ async function runStream(start: StreamStarter): Promise<void> {
   const controller = new AbortController()
   abortController.value = controller
 
+  /** meta 里的关键词兜底来源：只在没有 sources 事件时回填（见 onDone） */
+  let metaSources: AiSource[] = []
+  /**
+   * 本次流是否收到过 sources 事件。
+   * 契约：sources 是唯一信号，后端每次必发；收到后即便数组为空也不再用 meta 兜底，
+   * 否则工具模式下「检索为空」会被关键词来源污染成「错的来源」。
+   */
+  let sourcesEventReceived = false
+
   const handlers: StreamHandlers = {
     onMeta: (meta) => {
+      metaSources = meta.sources ?? []
       currentAssistantId.value = meta.messageId
       const placeholder: AiMessage = {
         id: meta.messageId,
@@ -379,7 +393,8 @@ async function runStream(start: StreamStarter): Promise<void> {
         content: '',
         reasoningContent: null,
         images: [],
-        sources: meta.sources ?? [],
+        // 工具模式下 meta.sources 是关键词兜底，先留空；真实来源由 sources 事件整体替换
+        sources: [],
         model: meta.model,
         tokenIn: null,
         tokenOut: null,
@@ -388,6 +403,13 @@ async function runStream(start: StreamStarter): Promise<void> {
       }
       messages.value = [...messages.value, placeholder]
       scrollToBottom()
+    },
+    onSources: (payload) => {
+      sourcesEventReceived = true
+      const message = findMessage(currentAssistantId.value)
+      if (!message) return
+      // 整体替换而不是追加：多次工具轮次会重复推送，追加会出现重复条目
+      message.sources = payload.sources
     },
     onDelta: (delta) => {
       const message = findMessage(currentAssistantId.value)
@@ -404,6 +426,11 @@ async function runStream(start: StreamStarter): Promise<void> {
     onDone: (done) => {
       const message = findMessage(done.messageId)
       if (!message) return
+      // 兜底只服务「没收到 sources 事件」的链路（未开工具调用 / 网络中断在半路）：
+      // 一旦收到过事件，就以事件为准，哪怕它是空数组。
+      if (!sourcesEventReceived && metaSources.length > 0) {
+        message.sources = metaSources
+      }
       message.status = done.status
       message.tokenIn = done.tokenIn ?? message.tokenIn
       message.tokenOut = done.tokenOut ?? message.tokenOut
@@ -491,16 +518,33 @@ async function handleFileChange(event: Event): Promise<void> {
     if (isPreviewUnsupported(file)) {
       ElMessage.info(t('media.heicNoPreview'))
     }
-    uploading.value = true
-    try {
-      const media = await uploadMedia(file)
-      if (media.url) pendingImages.value = [...pendingImages.value, { url: media.url, name: file.name }]
-    } catch (cause) {
-      ElMessage.error(resolveErrorMessage(cause, t('editor.imageUploadFailed')))
-    } finally {
-      uploading.value = false
-    }
+    await uploadOne(file)
   }
+}
+
+/** 单个文件上传：带百分比，失败时记住文件供「重试」 */
+async function uploadOne(file: File): Promise<void> {
+  uploading.value = true
+  uploadPercent.value = 0
+  failedUpload.value = null
+  try {
+    const media = await uploadMedia(file, (percent) => {
+      uploadPercent.value = percent
+    })
+    if (media.url) pendingImages.value = [...pendingImages.value, { url: media.url, name: file.name }]
+  } catch (cause) {
+    ElMessage.error(resolveErrorMessage(cause, t('editor.imageUploadFailed')))
+    failedUpload.value = file
+  } finally {
+    uploading.value = false
+    uploadPercent.value = 0
+  }
+}
+
+async function retryUpload(): Promise<void> {
+  const file = failedUpload.value
+  if (!file) return
+  await uploadOne(file)
 }
 
 function removeImage(index: number): void {
@@ -694,8 +738,14 @@ function retryMessages(): void {
                 @click="triggerUpload"
               >
                 <el-icon :size="16"><Picture /></el-icon>
-                <span v-if="uploading">{{ t('common.uploading') }}</span>
+                <span v-if="uploading">{{ t('media.uploadPercent', { percent: uploadPercent }) }}</span>
               </button>
+              <button
+                v-if="failedUpload && !uploading"
+                type="button"
+                class="tool-btn"
+                @click="retryUpload"
+              >{{ t('media.uploadRetry') }}</button>
               <input
                 ref="fileInput"
                 type="file"

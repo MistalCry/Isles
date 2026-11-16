@@ -46,6 +46,9 @@ const boardId = ref(props.defaultBoardId || props.boards[0]?.id || '')
 const mediaItems = ref<MediaItem[]>([])
 const coverUrl = ref<string | null>(null)
 const uploading = ref(false)
+/** 当前文件的上传进度（0-100）与失败待重试文件 */
+const uploadPercent = ref(0)
+const failedUpload = ref<File | null>(null)
 const submitting = ref(false)
 const editorRef = ref<{ insertText: (text: string) => void } | null>(null)
 const errorMessage = ref<string | null>(null)
@@ -94,17 +97,36 @@ async function handleFiles(event: Event): Promise<void> {
       // HEIC 等格式浏览器无法预览，明确告知「按原图上传」，避免用户以为是失败
       ElMessage.info(t('media.heicNoPreview'))
     }
-    uploading.value = true
-    errorMessage.value = null
-    try {
-      const uploaded = await mediaApi.uploadMedia(file)
-      mediaItems.value.push(uploaded)
-    } catch (err) {
-      errorMessage.value = resolveErrorMessage(err, t('comment.mediaUploadFailed'))
-    } finally {
-      uploading.value = false
-    }
+    await uploadFile(file)
   }
+}
+
+/** 单个文件上传：带百分比，失败时记住文件供「重试」 */
+async function uploadFile(file: File): Promise<boolean> {
+  uploading.value = true
+  uploadPercent.value = 0
+  errorMessage.value = null
+  failedUpload.value = null
+  try {
+    const uploaded = await mediaApi.uploadMedia(file, (percent) => {
+      uploadPercent.value = percent
+    })
+    mediaItems.value.push(uploaded)
+    return true
+  } catch (err) {
+    errorMessage.value = resolveErrorMessage(err, t('comment.mediaUploadFailed'))
+    failedUpload.value = file
+    return false
+  } finally {
+    uploading.value = false
+    uploadPercent.value = 0
+  }
+}
+
+async function retryUpload(): Promise<void> {
+  const file = failedUpload.value
+  if (!file) return
+  await uploadFile(file)
 }
 
 function removeMedia(index: number): void {
@@ -236,7 +258,11 @@ function insertMention(payload: { id: string; name: string }): void {
         @click="triggerFilePicker"
       >
         <el-icon><Picture /></el-icon>
-        {{ uploading ? t('common.uploading') : t('post.mediaLabel') }}
+        {{ uploading ? t('media.uploadPercent', { percent: uploadPercent }) : t('post.mediaLabel') }}
+      </button>
+
+      <button v-if="failedUpload && !uploading" type="button" class="composer-btn composer-btn--text" @click="retryUpload">
+        {{ t('media.uploadRetry') }}
       </button>
 
       <span v-if="mediaItems.length > 0" class="muted post-composer__count">

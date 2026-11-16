@@ -100,6 +100,7 @@ onMounted(load)
     <ErrorState v-else-if="error" :message="error" @retry="load" />
     <EmptyState v-else-if="items.length === 0" :title="t('admin.audit.empty')" :description="t('admin.audit.emptyHint')" />
     <template v-else>
+      <div class="admin-table-scroll">
       <el-table :data="items" class="admin-table" row-key="id">
         <el-table-column :label="t('common.time')" width="170">
           <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
@@ -128,6 +129,7 @@ onMounted(load)
           <template #default="{ row }">{{ row.ip || '—' }}</template>
         </el-table-column>
       </el-table>
+      </div>
       <footer class="admin-pager">
         <span>{{ t('common.totalCount', { n: total }) }}</span>
         <el-pagination

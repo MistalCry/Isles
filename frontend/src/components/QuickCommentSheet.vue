@@ -13,6 +13,8 @@ const props = defineProps<{
   modelValue: boolean
   post: Post
   commentCount?: number
+  /** 非频道成员不能发言：弹窗里直接禁掉输入，别等提交才 403 */
+  canComment?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -59,6 +61,7 @@ function handleCreated(comment: Comment): void {
       :post-author-id="post.author.id"
       :channel-id="post.channelId"
       :comment-count="totalComments"
+      :can-comment="canComment !== false"
       embedded
       @created="handleCreated"
     />

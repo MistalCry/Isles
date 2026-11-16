@@ -63,6 +63,9 @@ const submitting = ref(false)
 const mediaItems = ref<MediaItem[]>([])
 const emojis = ref<string[]>([])
 const uploading = ref(false)
+/** 上传进度与失败重试 */
+const uploadPercent = ref(0)
+const failedUpload = ref<File | null>(null)
 const fileInput = ref<HTMLInputElement>()
 const inputRef = ref<InputInstance>()
 const likingIds = reactive(new Set<string>())
@@ -127,15 +130,34 @@ async function handleFiles(event: Event): Promise<void> {
       // HEIC 等格式浏览器无法预览，明确告知「按原图上传」，避免用户以为是失败
       ElMessage.info(t('media.heicNoPreview'))
     }
-    uploading.value = true
-    try {
-      mediaItems.value.push(await mediaApi.uploadMedia(file))
-    } catch (err) {
-      ElMessage.error(resolveErrorMessage(err, t('comment.mediaUploadFailed')))
-    } finally {
-      uploading.value = false
-    }
+    await uploadFile(file)
   }
+}
+
+/** 单个文件上传：带百分比，失败时记住文件供「重试」 */
+async function uploadFile(file: File): Promise<void> {
+  uploading.value = true
+  uploadPercent.value = 0
+  failedUpload.value = null
+  try {
+    mediaItems.value.push(
+      await mediaApi.uploadMedia(file, (percent) => {
+        uploadPercent.value = percent
+      }),
+    )
+  } catch (err) {
+    ElMessage.error(resolveErrorMessage(err, t('comment.mediaUploadFailed')))
+    failedUpload.value = file
+  } finally {
+    uploading.value = false
+    uploadPercent.value = 0
+  }
+}
+
+async function retryUpload(): Promise<void> {
+  const file = failedUpload.value
+  if (!file) return
+  await uploadFile(file)
 }
 
 function removeMedia(index: number): void {
@@ -353,7 +375,10 @@ const placeholder = () => (auth.isAuthenticated ? t('comment.placeholder') : t('
               @click="triggerFilePicker"
             >
               <el-icon :size="15"><Picture /></el-icon>
-              <span v-if="uploading">{{ t('common.uploading') }}</span>
+              <span v-if="uploading">{{ t('media.uploadPercent', { percent: uploadPercent }) }}</span>
+            </button>
+            <button v-if="failedUpload && !uploading" type="button" class="comment-composer__tool" @click="retryUpload">
+              {{ t('media.uploadRetry') }}
             </button>
             <span v-if="mediaItems.length > 0" class="muted">{{ mediaItems.length }} / {{ MAX_MEDIA_COUNT }}</span>
             <span class="muted">{{ t('comment.shortcutHint') }}</span>

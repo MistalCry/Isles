@@ -269,9 +269,18 @@ export function searchItemToChannel(value: unknown): ChannelSummary {
   }
 }
 
-/** 搜索结果条目（SearchItemResponse，type=POST）→ 帖子卡片模型。 */
+/**
+ * 搜索结果条目（SearchItemResponse，type=POST）→ 帖子卡片模型。
+ *
+ * <p>搜索接口的字段是逐步补齐的（coverUrl / media 可能还没有），
+ * 这里一律做容错映射：拿不到就保持空，不能因为字段缺失把整页搜崩。
+ */
 export function searchItemToPost(value: unknown): Post {
   const raw = record(value) ?? {}
+  const rawMedia = Array.isArray(raw.media) ? raw.media : []
+  const media = rawMedia
+    .map((item) => toMediaItem(item))
+    .filter((item) => Boolean(item.url))
   const channelId = str(raw.channelId) ?? ''
   const channelName = str(raw.channelName)
   const boardId = str(raw.boardId)
@@ -286,8 +295,9 @@ export function searchItemToPost(value: unknown): Post {
     title: str(raw.title),
     content: str(raw.summary) ?? '',
     contentFormat: 'PLAIN',
-    media: [],
-    coverUrl: null,
+    media,
+    // 后端可能叫 coverUrl，也可能只给缩略图字段
+    coverUrl: str(raw.coverUrl) ?? str(raw.coverThumbUrl) ?? null,
     likeCount: num(raw.likeCount),
     commentCount: num(raw.commentCount),
     viewCount: 0,

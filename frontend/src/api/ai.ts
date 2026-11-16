@@ -105,8 +105,19 @@ export interface StreamError {
   message: string
 }
 
+export interface StreamSourcesEvent {
+  sources: AiSource[]
+  /** 工具调用轮数（开启工具调用时才有） */
+  toolRounds?: number
+}
+
 export interface StreamHandlers {
   onMeta?: (meta: StreamMeta) => void
+  /**
+   * 工具调用模式下，后端在检索完成后推送真实命中来源。
+   * 与 meta.sources（关键词兜底）互斥：收到本事件即应整体替换，而不是追加。
+   */
+  onSources?: (payload: StreamSourcesEvent) => void
   onDelta?: (content: string) => void
   onReasoning?: (content: string) => void
   onDone?: (done: StreamDone) => void
@@ -508,6 +519,11 @@ function dispatchEvent(event: StreamEvent, handlers: StreamHandlers): void {
     case 'meta':
       handlers.onMeta?.(payload as StreamMeta)
       break
+    case 'sources': {
+      const data = payload as { sources?: AiSource[]; toolRounds?: number }
+      handlers.onSources?.({ sources: data.sources ?? [], toolRounds: data.toolRounds })
+      break
+    }
     case 'delta':
       handlers.onDelta?.((payload as { content?: string }).content ?? '')
       break

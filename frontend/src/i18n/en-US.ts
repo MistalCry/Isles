@@ -192,6 +192,9 @@ post: {
     moveRight: "Move right",
     uploading: "Uploading…",
   },
+  cardMoreMedia: "{n} more attachments — open the post to view",
+  topComment: "Top comment",
+  viewAllComments: "View all {n} comments",
 },
 editor: {
   placeholder: "Write what you want to share…",
@@ -269,6 +272,9 @@ media: {
   sizeLimit: "{type} must be at most {max}MB",
   heicNoPreview: "Preview isn't supported for this format; it will be uploaded as-is",
   formatsHint: "JPG / PNG / GIF / WebP / AVIF / BMP / HEIC and MP4 / WebM / MOV / M4V",
+  uploadPercent: "Uploading {percent}%",
+  uploadRetry: "Retry upload",
+  uploadFailedRetry: "Upload failed — you can retry",
 },
 mention: {
   hint: "Inserts “{'@'}name” at the cursor",
@@ -1200,6 +1206,8 @@ admin: {
     targetType: "Target type",
     targetPost: "Post",
     targetComment: "Comment",
+    emptyPending: "No pending reports",
+    emptyPendingHint: "Everything is handled — nice work.",
   },
   users: {
     title: "Users",

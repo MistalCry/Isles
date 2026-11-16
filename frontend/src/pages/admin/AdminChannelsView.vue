@@ -110,6 +110,7 @@ onMounted(load)
       :description="t('common.retryHint')"
     />
     <template v-else>
+      <div class="admin-table-scroll">
       <el-table :data="data.items" class="admin-table" row-key="id">
         <el-table-column :label="t('common.channel')" min-width="220">
           <template #default="{ row }">
@@ -137,7 +138,7 @@ onMounted(load)
         <el-table-column :label="t('admin.channels.createdAt')" width="160">
           <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column :label="t('common.actions')" width="120" align="right">
+        <el-table-column :label="t('common.actions')" width="120" align="right" fixed="right">
           <template #default="{ row }">
             <el-button
               size="small"
@@ -150,6 +151,7 @@ onMounted(load)
           </template>
         </el-table-column>
       </el-table>
+      </div>
       <footer class="admin-pager">
         <span>{{ t('common.totalCount', { n: data.total }) }}</span>
         <el-pagination
