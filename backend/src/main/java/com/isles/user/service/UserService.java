@@ -104,7 +104,8 @@ public class UserService {
                 memberInfo == null ? null : memberInfo.channelId(),
                 memberInfo == null ? null : memberInfo.joinedAt(),
                 memberInfo == null ? null : memberInfo.roleName(),
-                memberInfo == null ? null : memberInfo.memberStatus());
+                memberInfo == null ? null : memberInfo.memberStatus(),
+                Boolean.TRUE.equals(user.getIsAgent()));
     }
 
     /**
@@ -146,6 +147,7 @@ public class UserService {
                 user.getSignature(),
                 user.getGender(),
                 user.getRegion(),
-                ClockTimes.toInstant(user.getCreatedAt()));
+                ClockTimes.toInstant(user.getCreatedAt()),
+                Boolean.TRUE.equals(user.getIsAgent()));
     }
 }

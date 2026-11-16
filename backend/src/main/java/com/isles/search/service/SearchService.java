@@ -322,7 +322,9 @@ public class SearchService {
                 channel.getMemberCount(), null, null, null, null, null, null, null, null,
                 ClockTimes.toInstant(channel.getCreatedAt()),
                 // 频道没有帖子封面语义：用频道封面/头像给前端做背景图
-                channel.getCoverUrl(), List.of());
+                channel.getCoverUrl(), List.of(),
+                // 频道结果不是内容，AI 标识一律 false（代理账号建频道属 P3，本轮不做）
+                false, false);
     }
 
     /**
@@ -385,7 +387,9 @@ public class SearchService {
                 author == null ? null : author.getAvatarUrl(),
                 post.getBoardId(), board == null ? null : board.getName(),
                 ClockTimes.toInstant(post.getCreatedAt()),
-                post.getCoverUrl(), media);
+                post.getCoverUrl(), media,
+                Boolean.TRUE.equals(post.getIsAiGenerated()),
+                author != null && Boolean.TRUE.equals(author.getIsAgent()));
     }
 
     /** 搜索结果一次查询出来的关联数据。 */

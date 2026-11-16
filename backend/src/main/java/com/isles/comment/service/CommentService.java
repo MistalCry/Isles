@@ -250,7 +250,10 @@ public class CommentService {
                 comment.getLikeCount(),
                 liked,
                 ClockTimes.toInstant(comment.getCreatedAt()),
-                replies);
+                replies,
+                // AI 标识：内容级 + 作者级（作者由调用方批量加载）
+                Boolean.TRUE.equals(comment.getIsAiGenerated()),
+                author != null && Boolean.TRUE.equals(author.getIsAgent()));
     }
 
     private Post requireVisiblePost(String postId, String viewerId) {

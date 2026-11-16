@@ -459,7 +459,10 @@ public class PostService {
                     Boolean.TRUE.equals(post.getIsEssence()),
                     post.getStatus(),
                     ClockTimes.toInstant(post.getCreatedAt()),
-                    toTopComment(topComments.get(post.getId()), authors, likedTopCommentIds)));
+                    toTopComment(topComments.get(post.getId()), authors, likedTopCommentIds),
+                    // AI 标识：内容级标记 + 作者级标记（作者已在上面批量加载，不额外查库）
+                    Boolean.TRUE.equals(post.getIsAiGenerated()),
+                    author != null && Boolean.TRUE.equals(author.getIsAgent())));
         }
         return responses;
     }

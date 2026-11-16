@@ -117,6 +117,11 @@ public class AgentRuntime {
             return new AgentDtos.RunNowResponse(AgentRun.Status.SKIPPED.name(),
                     "AI 代理总开关已关闭（agent.enabled=false）", null);
         }
+        if (!AgentProfile.Status.ACTIVE.name().equals(profile.getStatus())) {
+            // 已暂停的代理不允许被手动唤醒：只回原因，不写日志行
+            return new AgentDtos.RunNowResponse(AgentRun.Status.SKIPPED.name(),
+                    "代理已暂停（status=" + profile.getStatus() + "），请先恢复再运行", null);
+        }
         AgentRun run = runOne(profile, true);
         auditService.record(operatorId, null, PlatformAuditActions.AGENT_RUN, "AGENT", agentUserId,
                 Map.of("status", run == null ? "SKIPPED" : run.getStatus()));
@@ -172,6 +177,11 @@ public class AgentRuntime {
      * @return 已落库的运行日志；kill switch 关闭时返回 null
      */
     public AgentRun runOne(AgentProfile profile, boolean manual) {
+        if (!AgentProfile.Status.ACTIVE.name().equals(profile.getStatus())) {
+            // 双保险：调度路径由 shouldWake 挡过，手动路径由 runNow 挡过，这里再挡一次
+            log.debug("AI 代理已暂停，跳过 agentId={} status={}", profile.getUserId(), profile.getStatus());
+            return null;
+        }
         LocalDateTime startedAt = ClockTimes.nowUtc();
         AgentRun run = new AgentRun();
         run.setId(UlidGenerator.generate());
@@ -187,7 +197,14 @@ public class AgentRuntime {
             if (!runGuard.allowed()) {
                 return finish(run, AgentRun.Status.SKIPPED, null, null, runGuard.reason(), null, 0, 0);
             }
-            AiModelConfig model = modelConfigService.resolveDefault();
+            AiModelConfig model;
+            try {
+                model = modelConfigService.resolveDefault();
+            } catch (AppException ex) {
+                // 零启用模型时 resolveDefault 会抛业务异常：按降级处理为 SKIPPED，不记 FAILED
+                log.debug("AI 代理无可用模型，跳过 agentId={} reason={}", profile.getUserId(), ex.getMessage());
+                return finish(run, AgentRun.Status.SKIPPED, null, null, "未配置可用的 AI 模型", null, 0, 0);
+            }
             if (model == null) {
                 // 降级：没有可用模型时只记 SKIPPED，debug 级别，不刷 ERROR
                 log.debug("AI 代理无可用模型，跳过 agentId={}", profile.getUserId());

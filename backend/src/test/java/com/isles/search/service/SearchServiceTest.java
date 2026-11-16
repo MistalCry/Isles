@@ -108,6 +108,26 @@ class SearchServiceTest {
     // 构造
     // ------------------------------------------------------------------
 
+
+    /** 搜索结果也是帖子卡片：AI 标识必须与 PostResponse 一致。 */
+    @Test
+    void should_expose_ai_flags_in_search_items() {
+        Post agentPost = post("p1", null);
+        agentPost.setIsAiGenerated(true);
+        when(postMapper.searchVisiblePosts("%camping%", null, 11)).thenReturn(List.of(agentPost));
+        when(channelMapper.selectBatchIds(anyCollection())).thenReturn(List.of(channel("ch-1")));
+        User agent = author("u-1");
+        agent.setIsAgent(true);
+        when(userMapper.selectBatchIds(anyCollection())).thenReturn(List.of(agent));
+        when(boardMapper.selectBatchIds(anyCollection())).thenReturn(List.of(board("b-1", "ch-1")));
+        when(postMediaMapper.selectByPostIds(anyCollection())).thenReturn(List.of());
+
+        PageResult<SearchItemResponse> page = searchService.search("camping", "post", "latest", null, 10, "u-2");
+
+        assertThat(page.items().get(0).isAiGenerated()).isTrue();
+        assertThat(page.items().get(0).authorIsAgent()).isTrue();
+    }
+
     private Post post(String id, String coverUrl) {
         Post post = new Post();
         post.setId(id);

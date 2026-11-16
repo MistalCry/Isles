@@ -170,12 +170,12 @@ class AgentToolboxTest {
     private PostResponse post(String id, String title) {
         return new PostResponse(id, "ch-1", "露营岛", null, "board-1", "综合", "agent-1", "岛民小蓝", null,
                 title, "正文", "PLAIN", null, List.of(), 0, 0, 0, 0, false, false, false,
-                "PUBLISHED", Instant.now(), null);
+                "PUBLISHED", Instant.now(), null, true, true);
     }
 
     private CommentResponse comment(String id) {
         return new CommentResponse(id, "post-1", null, "agent-1", "岛民小蓝", null, null, null,
-                "这个清单挺实用", List.of(), List.of(), 0, false, Instant.now(), List.of());
+                "这个清单挺实用", List.of(), List.of(), 0, false, Instant.now(), List.of(), true, true);
     }
 
     private AiContextPost contextPost(String id, String title) {

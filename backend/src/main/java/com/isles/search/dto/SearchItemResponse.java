@@ -13,6 +13,9 @@ import java.util.List;
  *
  * <p>媒体：{@code coverUrl} 为帖子显式封面；{@code media} 只含**首图**（post_media 中 sort 最小的一张），
  * 避免搜索结果因媒体列表膨胀；两者都为空时前端走纯文字卡片。
+ *
+ * <p>AI 标识（docs/12 §6）：{@code isAiGenerated} 帖子由 AI 代理生成，{@code authorIsAgent} 作者是代理账号。
+ * 搜索结果也是帖子卡片，合规标识必须一致，所以这两个字段与 {@code PostResponse} 同名同义。
  */
 public record SearchItemResponse(
         String type,
@@ -34,7 +37,9 @@ public record SearchItemResponse(
         String boardName,
         Instant createdAt,
         String coverUrl,
-        List<MediaItem> media) {
+        List<MediaItem> media,
+        boolean isAiGenerated,
+        boolean authorIsAgent) {
 
     public SearchItemResponse {
         media = media == null ? List.of() : List.copyOf(media);

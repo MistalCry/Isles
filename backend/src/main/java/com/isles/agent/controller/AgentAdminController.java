@@ -27,7 +27,15 @@ import java.util.Map;
  * 平台后台 AI 用户代理管理（V13 / docs/05 §2.15、docs/12 §7）。
  *
  * <p>权限点 {@code AGENT_MANAGE}（超管与运营默认拥有）。所有写操作写平台审计日志。
- * <p>路径里的 {@code {id}} 是**代理账号 id**（{@code users.id}），不是人设行 id——前台按用户维度操作更直观。
+ *
+ * <h2>两个 id 的语义（务必区分，测试同学踩过）</h2>
+ * <ul>
+ *   <li><b>路径参数 {@code {id}}</b>：一律是<b>代理账号 id</b>（{@code users.id}）。创建接口返回的
+ *       {@code userId} 就是它；{@code run-now} / {@code pause} / {@code resume} / {@code runs} 全部按它定位。</li>
+ *   <li><b>{@link AgentDtos.AgentView#id()}</b>：<b>人设行 id</b>（{@code agent_profiles.id}），
+ *       只标识人设这一行，<b>不能</b>当作路径参数回传（拿它调接口会 404：人设 id 查不到账号）。</li>
+ * </ul>
+ * 前端列表请统一用 {@code AgentView.userId} 作为操作主键。
  */
 @RestController
 @RequestMapping("/api/v1/admin/agents")

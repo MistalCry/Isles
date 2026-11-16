@@ -157,6 +157,44 @@ class CommentServiceTest {
         verify(commentMapper, never()).insert(any(Comment.class));
     }
 
+
+    /** AI 标识：代理账号评论必须带 isAiGenerated + authorIsAgent。 */
+    @Test
+    void should_expose_ai_flags_for_agent_comment() {
+        when(postMapper.selectById("post-1")).thenReturn(post());
+        when(accessService.requireVisibleChannel("ch-1", "user-2")).thenReturn(channel());
+        when(accessService.requireInteractionPermission("ch-1", "user-2", ChannelPermissions.COMMENT_CREATE))
+                .thenReturn(context());
+        when(commentMapper.insert(any(Comment.class))).thenReturn(1);
+        when(postMapper.addCommentCount("post-1", 1)).thenReturn(1);
+        User agent = commenter();
+        agent.setIsAgent(true);
+        when(userMapper.selectById("user-2")).thenReturn(agent);
+
+        CommentResponse response = commentService.createComment("post-1",
+                new CreateCommentRequest("代理评论", null, null, null, null), "user-2");
+
+        assertThat(response.isAiGenerated()).isTrue();
+        assertThat(response.authorIsAgent()).isTrue();
+    }
+
+    @Test
+    void should_not_flag_human_comment_as_ai() {
+        when(postMapper.selectById("post-1")).thenReturn(post());
+        when(accessService.requireVisibleChannel("ch-1", "user-2")).thenReturn(channel());
+        when(accessService.requireInteractionPermission("ch-1", "user-2", ChannelPermissions.COMMENT_CREATE))
+                .thenReturn(context());
+        when(commentMapper.insert(any(Comment.class))).thenReturn(1);
+        when(postMapper.addCommentCount("post-1", 1)).thenReturn(1);
+        when(userMapper.selectById("user-2")).thenReturn(commenter());
+
+        CommentResponse response = commentService.createComment("post-1",
+                new CreateCommentRequest("真人评论", null, null, null, null), "user-2");
+
+        assertThat(response.isAiGenerated()).isFalse();
+        assertThat(response.authorIsAgent()).isFalse();
+    }
+
     private Post post() {
         Post post = new Post();
         post.setId("post-1");

@@ -1,5 +1,6 @@
 package com.isles.agent.service;
 
+import com.isles.agent.dto.AgentDtos;
 import com.isles.agent.entity.AgentProfile;
 import com.isles.agent.entity.AgentRun;
 import com.isles.agent.mapper.AgentProfileMapper;
@@ -166,6 +167,43 @@ class AgentRuntimeTest {
         paused.setStatus("PAUSED");
 
         assertThat(runtime.shouldWake(paused, java.time.LocalDateTime.now())).isFalse();
+    }
+
+
+    // ------------------------------------------------------------------
+    // D1 / D2 回归锁（第 16 轮补丁）
+    // ------------------------------------------------------------------
+
+    @Test
+    void should_not_run_paused_agent_via_run_now() {
+        AgentProfile paused = profile();
+        paused.setStatus("PAUSED");
+        when(profileService.requireProfile("agent-1")).thenReturn(paused);
+        when(guard.enabled()).thenReturn(true);
+
+        AgentDtos.RunNowResponse response = runtime.runNow("agent-1", "admin-1");
+
+        assertThat(response.status()).isEqualTo(AgentRun.Status.SKIPPED.name());
+        assertThat(response.reason()).contains("已暂停");
+        assertThat(response.run()).isNull();
+        // 与 kill switch 同语义：不执行、不写运行日志
+        verify(runMapper, never()).insert(any(AgentRun.class));
+        verify(planner, never()).plan(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void should_record_skipped_when_model_resolution_throws() {
+        when(guard.enabled()).thenReturn(true);
+        when(guard.checkRun()).thenReturn(AgentGuard.GuardResult.ok());
+        // 零启用模型时 resolveDefault 直接抛业务异常（AiModelConfigService:127-140）
+        when(modelConfigService.resolveDefault()).thenThrow(new com.isles.common.error.AppException(
+                com.isles.common.error.ErrorCode.BUSINESS_RULE_VIOLATION, "尚未配置可用的 AI 模型"));
+
+        AgentRun run = runtime.runOne(profile(), true);
+
+        assertThat(run.getStatus()).isEqualTo(AgentRun.Status.SKIPPED.name());
+        assertThat(run.getError()).contains("未配置可用的 AI 模型");
+        verify(planner, never()).plan(any(), any(), any(), any(), any());
     }
 
     private void stubHappyPath() {

@@ -85,7 +85,7 @@ class AuthServiceTest {
     void should_register_new_user_when_username_available() {
         User user = user(1L);
         UserResponse response = new UserResponse("user-1", "vrfan", "VR 爱好者", null, null, "UNKNOWN", null,
-                Instant.now());
+                Instant.now(), false);
         when(userService.existsByUsername("vrfan")).thenReturn(false);
         when(passwordEncoder.encode("S3cure-pass")).thenReturn("bcrypt-hash");
         when(userService.createUser("vrfan", "bcrypt-hash", "VR 爱好者")).thenReturn(user);
@@ -134,7 +134,7 @@ class AuthServiceTest {
     void should_issue_tokens_when_login_success() {
         User user = user(1L);
         UserResponse response = new UserResponse("user-1", "vrfan", "VR 爱好者", null, null, "UNKNOWN", null,
-                Instant.now());
+                Instant.now(), false);
         when(userService.findByUsername("vrfan")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("S3cure-pass", "bcrypt-hash")).thenReturn(true);
         when(jwtService.generateAccessToken("user-1", "vrfan")).thenReturn("access-token");

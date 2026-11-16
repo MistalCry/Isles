@@ -201,6 +201,6 @@ class ContentManageServiceTest {
     private PostResponse postResponse() {
         return new PostResponse("post-1", "ch-1", "频道", "/avatar.png", "board-1", "综合讨论",
                 "author-1", "作者", null, null, "帖子正文", "PLAIN", null, List.of(),
-                1, 0, 0, 0, false, true, false, "PUBLISHED", Instant.now(), null);
+                1, 0, 0, 0, false, true, false, "PUBLISHED", Instant.now(), null, false, false);
     }
 }

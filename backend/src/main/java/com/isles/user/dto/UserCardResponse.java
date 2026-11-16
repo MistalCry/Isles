@@ -16,5 +16,7 @@ public record UserCardResponse(
         String channelId,
         Instant joinedAt,
         String roleName,
-        String memberStatus) {
+        String memberStatus,
+        /** 是否 AI 代理账号（合规标识，历史数据为 false） */
+        boolean isAgent) {
 }

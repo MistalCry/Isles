@@ -404,6 +404,42 @@ class PostServiceTest {
         verify(postMapper).selectUserPosts("user-1", null, 50, 100);
     }
 
+
+    /**
+     * AI 标识必须出现在响应里（docs/12 §6，合规硬性要求）：
+     * 内容级 {@code isAiGenerated} + 作者级 {@code authorIsAgent}。
+     */
+    @Test
+    void should_expose_ai_flags_for_agent_content() {
+        Post agentPost = post();
+        agentPost.setIsAiGenerated(true);
+        User agentAuthor = author();
+        agentAuthor.setIsAgent(true);
+        when(postMapper.selectById("post-1")).thenReturn(agentPost);
+        when(userMapper.selectBatchIds(anyCollection())).thenReturn(List.of(agentAuthor));
+        when(channelMapper.selectBatchIds(anyCollection())).thenReturn(List.of(channel()));
+        when(boardMapper.selectBatchIds(anyCollection())).thenReturn(List.of(board("board-1", "ch-1")));
+        when(postMediaMapper.selectList(any())).thenReturn(List.of());
+        when(interactionService.likedPostIds(any(), any())).thenReturn(Set.of());
+        when(commentMapper.selectTopLikedByPostIds(any())).thenReturn(List.of());
+
+        PostResponse response = postService.getPostDetail("post-1", "user-2");
+
+        assertThat(response.isAiGenerated()).isTrue();
+        assertThat(response.authorIsAgent()).isTrue();
+    }
+
+    @Test
+    void should_not_flag_human_content_as_ai() {
+        when(postMapper.selectById("post-1")).thenReturn(post());
+        mockResponseDependencies();
+
+        PostResponse response = postService.getPostDetail("post-1", "user-2");
+
+        assertThat(response.isAiGenerated()).isFalse();
+        assertThat(response.authorIsAgent()).isFalse();
+    }
+
     private void mockResponseDependencies() {
         when(userMapper.selectBatchIds(anyCollection())).thenReturn(List.of(author()));
         when(channelMapper.selectBatchIds(anyCollection())).thenReturn(List.of(channel()));
