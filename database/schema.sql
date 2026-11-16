@@ -2,13 +2,13 @@
 -- 群岛（Isles）数据库结构（仅结构，不含任何数据）
 --
 -- 适用：MySQL 8.0+（utf8mb4 / utf8mb4_0900_ai_ci）
--- 生成：mysqldump --no-data（V1–V8 迁移全部应用后的结构）
+-- 生成：mysqldump --no-data（V1–V9 迁移全部应用后的结构）
 -- 表数：39 张（不含 Flyway 的 flyway_schema_history）
 --       V1–V4：核心/管理/AI/社交；V5：思考模式；V6：平台后台；V7：公告与敏感词；
---       V8：频道助手可选模型 + AI 工具调用开关（仅加列，不新增表）
+--       V8：频道助手可选模型 + AI 工具调用开关；V9：任务日志记录模型（均只加列，不新增表）
 --
 -- 两种初始化方式（二选一）：
---   A. 推荐：只建空库，启动后端由 Flyway 自动执行 V1–V8 迁移
+--   A. 推荐：只建空库，启动后端由 Flyway 自动执行 V1–V9 迁移
 --        CREATE DATABASE my_social_channel DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 --   B. 手工导入本文件（表已建好），启动后端时必须关闭 Flyway，否则会重复建表报错：
 --        CREATE DATABASE my_social_channel DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
@@ -149,6 +149,8 @@ CREATE TABLE `ai_task_logs` (
   `post_id` char(26) DEFAULT NULL,
   `comment_id` char(26) DEFAULT NULL,
   `error_message` varchar(1000) DEFAULT NULL,
+  `model_config_id` char(26) DEFAULT NULL COMMENT '本次使用的模型配置；配置删除后置空',
+  `model` varchar(128) DEFAULT NULL COMMENT '模型 ID 快照（来自 ai_model_configs.model）',
   `started_at` datetime(3) DEFAULT NULL,
   `finished_at` datetime(3) DEFAULT NULL,
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -159,8 +161,10 @@ CREATE TABLE `ai_task_logs` (
   KEY `fk_ai_task_logs_setting` (`setting_id`),
   KEY `fk_ai_task_logs_post` (`post_id`),
   KEY `fk_ai_task_logs_comment` (`comment_id`),
+  KEY `idx_ai_task_logs_model_config` (`model_config_id`),
   CONSTRAINT `fk_ai_task_logs_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT `fk_ai_task_logs_comment` FOREIGN KEY (`comment_id`) REFERENCES `comments` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+  CONSTRAINT `fk_ai_task_logs_model_config` FOREIGN KEY (`model_config_id`) REFERENCES `ai_model_configs` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
   CONSTRAINT `fk_ai_task_logs_post` FOREIGN KEY (`post_id`) REFERENCES `posts` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
   CONSTRAINT `fk_ai_task_logs_setting` FOREIGN KEY (`setting_id`) REFERENCES `channel_ai_settings` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='频道助手任务执行日志';
@@ -1112,4 +1116,4 @@ CREATE TABLE `users` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-11-16  1:43:14
+-- Dump completed on 2026-11-16  3:49:45

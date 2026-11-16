@@ -9,6 +9,25 @@
 
 ### Added
 
+- **帖子卡片展示最高赞评论**：列表返回的 `topComment` 渲染在卡片底部（作者 + 摘要 + 查看全部 N 条），
+  点击直达详情并高亮定位该评论；无评论不占位。
+- **上传进度与重试**：发帖/评论/私信/AI 面板四处显示上传百分比，失败可重试；
+  超时按文件大小动态计算（`max(120s, size/0.5MB/s)`），200MB 视频不再被固定 120 秒卡死。
+- **视频懒播放**：`MediaViewer` 去掉无条件 `autoplay`，改用 IntersectionObserver，进入视口才播、离开暂停。
+- **前端 ESLint + Prettier**：flat config + `.prettierrc`，新增 `pnpm lint` / `pnpm format`，
+  lint 不阻断构建（当前 0 error / 12 warning）。
+- **敏感词处理模式**：新增配置项 `content.sensitiveWord.mode`（`REVIEW` / `MASK` / `BLOCK`，默认 REVIEW）；
+  MASK 只替换富文本文本节点，BLOCK 返回 422 `SENSITIVE_WORD_BLOCKED`。
+- **浏览量口径**：作者本人查看不计；同一会话 30 分钟内重复访问只计一次（登录按 userId、匿名按 IP+UA 指纹；
+  多实例各实例独立计数，已在 docs/11 标注为已知限制）。
+- **搜索返回封面与首图**：`SearchItemResponse` 新增 `coverUrl` 与 `media[]`（仅首图），
+  并修掉搜索结果的频道/作者/板块 N+1 查询。
+- **公告站内通知**：`placement=INBOX` 的公告发布时按 id 游标分批写系统通知（每批 500、单条多行 INSERT），
+  BANNER/MODAL 不写站内信。
+- **任务日志可追溯**：V9 给 `ai_task_logs` 加 `model_config_id` / `model`，`TaskLogResponse` 透出，
+  频道指定模型与回落默认都能核对。
+- 测试：`content-regression.mjs`（浏览量/敏感词三模式/搜索封面）、卡片 topComment、视频懒播、上传超时、
+  弹窗评论权限、来源事件边界；前端 136 例 / 后端 301 例。
 - **平台后台前端补全**：配置中心（元数据驱动，按 `type` 渲染控件、单键/批量保存、恢复默认、变更历史）、
   管理员授权（远程搜索用户选择器）、审计日志、内容治理（帖子/评论下架与恢复）、敏感词库（CRUD/导入/试算/命中）、
   公告管理、概览趋势与热词，后台共 11 个页面；菜单按 `permissions` 显隐，侧边栏新增「进入后台」。
@@ -99,6 +118,12 @@
 
 ### Fixed
 
+- 修复 **AI 回答来源在「检索命中为空」时仍显示关键词兜底来源**：`sources` 事件定为唯一信号，
+  前端仅在**完全未收到事件**时才回退 `meta.sources`；`meta.sources` 仅作兼容保留。
+- 修复**后台 5 个列表页窄屏撑宽**：内容治理/敏感词/审计/用户/频道统一横向滚动容器，操作列固定右侧，
+  不再把整页撑到 1100px+ 导致按钮被挤出屏幕。
+- 修复**非频道成员可在卡片弹窗写完评论才被 403**：按加入状态直接禁用输入并提示加入。
+- 修复**搜索结果永远没有缩略图**：适配层不再硬编码 `media: []` / `coverUrl: null`。
 - 修复**举报提交报「参数校验错误」**：举报原因改为提交代码（`SPAM/ABUSE/PORN/ILLEGAL/OTHER`），
   文案仅用于展示；后台与频道管理中心的举报列表不再显示裸枚举，目标类型与处置动作一并中文化。
 - 补齐**评论举报入口**（此前只有帖子可举报），支持楼中楼。
@@ -194,6 +219,11 @@
 
 ### Changed
 
+- 敏感词命中记录的 `action` 改为记录**本次实际处理方式**（REVIEW/MASK/BLOCK），不再固定取词条自身配置；
+  行为判定以全局 `content.sensitiveWord.mode` 为准，避免词条与全局两套规则打架。
+- 搜索接口的 `media` 只返回首图（`post_media` 中 sort 最小的一张），避免搜索卡片响应膨胀；
+  帖子详情仍返回完整媒体列表。
+- `database/schema.sql` 重导为 V1–V9（39 表，含 `ai_task_logs` 两个模型列）。
 - 举报页状态改用 `ACCEPTED`/`REJECTED` 并映射中文，新增目标类型与关键字筛选、处置动作选择；
   平台后台不再依赖 `DISMISSED`/`RESOLVED` 兼容垫片。
 - `/platform/config` 缓存策略改为 `no-store, must-revalidate`，后台保存即时生效（原先 60 秒内读旧值）。

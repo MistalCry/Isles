@@ -59,6 +59,7 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 | 413 | `MEDIA_TOO_LARGE` | 上传超限 |
 | 422 | `BUSINESS_RULE_VIOLATION` / `OWNER_CANNOT_LEAVE` | 业务规则不满足 |
 | 422 | `REPORT_TARGET_INVALID` | 举报目标不存在或不可见（帖子/评论已删除、频道不可见、目标类型不匹配） |
+| 422 | `SENSITIVE_WORD_BLOCKED` | 内容命中敏感词且平台处理方式为 `BLOCK`（`details` 不返回词库，提示里最多列 3 个命中词） |
 | 429 | `RATE_LIMITED` | 触发限流 |
 | 500 | `INTERNAL_ERROR` | 服务端异常 |
 
@@ -232,7 +233,7 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 | POST | `/ai/conversations` | 新建会话 | 登录 |
 | GET / PATCH / DELETE | `/ai/conversations/{id}` | 详情 / 重命名 / 删除 | 本人 |
 | GET | `/ai/conversations/{id}/messages` | 会话消息 | 本人 |
-| POST | `/ai/conversations/{id}/messages/stream` | 提问（SSE：`meta`/`delta`/`reasoning`/`sources`/`done`/`error`） | 本人 |
+| POST | `/ai/conversations/{id}/messages/stream` | 提问（SSE：`meta`/`delta`/`reasoning`/`sources`/`done`/`error`；**`sources` 每次回答必发，0 命中为空数组**） | 本人 |
 | POST | `/ai/conversations/{id}/regenerate` | 重新生成最后一条回答（SSE） | 本人 |
 | POST | `/ai/messages/{id}/edit-stream` | 编辑历史提问并重发（SSE，截断后续） | 本人 |
 | POST | `/ai/messages/{id}/stop` | 停止生成 | 本人 |
@@ -305,7 +306,7 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 | GET | `/admin/announcements` | 公告列表（`status`/`page`/`size`） | `CONFIG_READ` |
 | POST | `/admin/announcements` | 新建公告（草稿） | `ANNOUNCEMENT_MANAGE` |
 | PUT | `/admin/announcements/{id}` | 编辑公告 | `ANNOUNCEMENT_MANAGE` |
-| POST | `/admin/announcements/{id}/publish` | 发布（未排期则立即生效） | `ANNOUNCEMENT_MANAGE` |
+| POST | `/admin/announcements/{id}/publish` | 发布（未排期则立即生效）；`placement=INBOX` 时向全站活跃用户分批写系统通知 | `ANNOUNCEMENT_MANAGE` |
 | POST | `/admin/announcements/{id}/archive` | 归档（已发布需先归档才能删除） | `ANNOUNCEMENT_MANAGE` |
 | DELETE | `/admin/announcements/{id}` | 删除（仅草稿/归档） | `ANNOUNCEMENT_MANAGE` |
 | GET | `/admin/sensitive-words` | 词库列表（`keyword`/`page`/`size`） | `CONFIG_READ` |
@@ -318,8 +319,9 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 | GET | `/admin/hot-keywords` | 热词列表（按搜索次数倒序） | `STATS_READ` |
 | DELETE | `/admin/hot-keywords/{id}` | 下线热词（清理刷量词） | `CONFIG_WRITE` |
 
-> 敏感词当前为 **REVIEW 模式**：发帖/评论命中后只记录到 `sensitive_word_hits`，不阻断发布；
-> 词条的 `action` 已预留 `BLOCK`/`MASK`，待运营确认后再启用。
+> 敏感词处理方式由配置项 `content.sensitiveWord.mode` 决定（默认 `REVIEW`）：
+> `REVIEW` 只记录命中、`MASK` 把命中词替换为 `***` 后入库、`BLOCK` 直接 422 拒绝发布。
+> 命中记录 `sensitive_word_hits.action` 保存**本次实际处理方式**（便于运营核对），词条自身的 `action` 仅作分类标记。
 
 **AI 配置**
 
@@ -460,6 +462,8 @@ Retry-After: 37
 - 工具执行失败/参数非法/帖子不可见都返回结构化 `{"error":...,"message":...}` 给模型，不打断对话。
 - **来源引用**由工具实际命中的帖子生成（去重），不再预置上下文；`meta.sources` 先给关键词兜底结果，
   工具跑完后再下发 `event: sources` 覆盖（并落库为最终引用）。未命中时沿用关键词结果，引用不会为空。
+- `event: sources` **无条件发送**（工具模式与非工具模式都发；0 命中时 `sources: []`）。
+  前端应把它当作「引用可展示」的唯一信号，不要依赖 `meta.sources`。
 
 ## 4. 响应模型（实际契约）
 
@@ -476,12 +480,14 @@ Retry-After: 37
 | `PostResponse` | `id`、`channelId`、`channelName`、`channelAvatarUrl`、`boardId`、`boardName`、`authorId`、`authorNickname`、`authorAvatarUrl`、`title`、`content`、`contentFormat`、`coverUrl`、`media[]`、`viewCount`、`likeCount`、`commentCount`、`shareCount`、`liked`、`pinned`、`essence`、`status`、`createdAt`、`topComment` |
 | `TopCommentResponse` | `id`、`postId`、`authorId`、`authorNickname`、`authorAvatarUrl`、`content`、`likeCount`、`liked`、`createdAt`；帖子列表每帖返回 1 条最高赞评论（无评论为 `null`），批量查询不产生 N+1 |
 | `CommentResponse` | `id`、`postId`、`parentId`、`authorId`、`authorNickname`、`authorAvatarUrl`、`replyToUserId`、`replyToNickname`、`content`、`media[]`、`emoji[]`、`likeCount`、`liked`、`createdAt`、`replies[]` |
-| `SearchItemResponse` | `type`、`id`、`title`、`summary`、`channelId`、`channelName`、`channelAvatarUrl`、`avatarUrl`、`memberCount`、`likeCount`、`commentCount`、作者与板块字段、`createdAt` |
+| `SearchItemResponse` | `type`、`id`、`title`、`summary`、`channelId`、`channelName`、`channelAvatarUrl`、`avatarUrl`、`memberCount`、`likeCount`、`commentCount`、作者与板块字段、`createdAt`、`coverUrl`、`media[]` |
+| ↳ `coverUrl` / `media` | 帖子结果带封面与**首图**（`post_media` 中 `sort` 最小的一张，`media` 最多 1 项）；频道结果 `coverUrl` 为频道封面、`media` 为空。批量查询，不产生 N+1 |
 | `MemberResponse` | `userId`、`username`、`nickname`、`avatarUrl`、`roleId`、`roleName`、`status`、`mutedUntil`、`muted`、`joinedAt` |
 | `RoleResponse` | `id`、`channelId`、`name`、`description`、`permissions[]`、`scopeBoardId`、`scopeBoardName`、`system`、`sort`、`memberCount` |
 | `ReportResponse` | `id`、`reporterId`、`reporterNickname`、`channelId`、`targetType`、`targetId`、`targetPreview`、`reason`、`status`、`handleAction`、`handleNote`、`handledAt`、`createdAt` |
 | `AuditLogResponse` | `id`、`channelId`、`actorId`、`actorNickname`、`action`、`targetType`、`targetId`、`detail`、`ip`、`createdAt` |
 | `StatsOverviewResponse` | `channelId`、`memberCount`、`postCount`、`yesterday`、`memberDelta`、`postDelta` |
+| `TaskLogResponse` | `id`、`channelId`、`taskType`、`frequencyKey`、`status`、`resultText`、`postId`、`commentId`、`errorMessage`、`startedAt`、`finishedAt`、`createdAt`、`modelConfigId`、`model`（后两个为本次任务实际使用的模型；未配置模型时为 `null`，配置被删除后 `modelConfigId` 为 `null` 但 `model` 保留快照） |
 | `SelectableModelResponse` | `id`、`name`、`model`、`visionEnabled`、`reasoningEnabled`、`isDefault`（频道可选模型，不含 Base URL/密钥） |
 | `AssistantSettingsResponse` | 原有字段 + `modelConfigId`（空=跟随平台默认）；`updatedAt` 之后追加，前端按字段名读取 |
 | `AssistantSettingsResponse` | `channelId`、`assistantUserId`、`nickname`、`avatarUrl`、`coverUrl`、`bio`、`persona`、`enabled`、六个任务开关、`dailySummaryHour`、三个每日频率 |
