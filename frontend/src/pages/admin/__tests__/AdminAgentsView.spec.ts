@@ -120,6 +120,24 @@ beforeEach(() => {
     size: 20,
   })
   mocks.getAgentSwitches.mockResolvedValue({ enabled: true, dailyPostLimit: 20, dailyTokenBudget: 200000 })
+  mocks.listAdminSettings.mockResolvedValue([
+    {
+      group: 'AI',
+      label: 'AI',
+      items: [
+        {
+          key: 'agent.search.provider',
+          group: 'AI',
+          label: 'AI 代理联网搜索',
+          type: 'ENUM',
+          value: 'SEARXNG',
+          defaultValue: 'NONE',
+          overridden: true,
+          publicVisible: false,
+        },
+      ],
+    },
+  ])
   mocks.listAdminChannels.mockResolvedValue({ items: [], total: 0, page: 1, size: 100 })
   mocks.pauseAdminAgent.mockResolvedValue(undefined)
   mocks.resumeAdminAgent.mockResolvedValue(undefined)
@@ -177,6 +195,83 @@ describe('AdminAgentsView', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('已跳过')
     expect(wrapper.text()).toContain('总开关已关闭')
+  })
+
+  it('页头显示联网搜索已启用（SearXNG）', async () => {
+    const wrapper = await mountView()
+    expect(wrapper.text()).toContain('联网搜索：已启用（SearXNG）')
+    expect(wrapper.text()).not.toContain('只能用站内检索')
+  })
+
+  it('agent.search.provider=NONE 时提示未配置且只能站内检索', async () => {
+    mocks.listAdminSettings.mockResolvedValue([
+      {
+        group: 'AI',
+        label: 'AI',
+        items: [
+          {
+            key: 'agent.search.provider',
+            group: 'AI',
+            label: 'AI 代理联网搜索',
+            type: 'ENUM',
+            value: 'NONE',
+            defaultValue: 'NONE',
+            overridden: false,
+            publicVisible: false,
+          },
+        ],
+      },
+    ])
+    const wrapper = await mountView()
+    expect(wrapper.text()).toContain('联网搜索：未配置')
+    expect(wrapper.text()).toContain('只能用站内检索，无法联网找话题')
+  })
+
+  it('读不到配置项时不误报「未配置」，显示状态未知', async () => {
+    mocks.listAdminSettings.mockRejectedValue(new Error('403'))
+    const wrapper = await mountView()
+    expect(wrapper.text()).toContain('联网搜索：状态未知')
+    expect(wrapper.text()).not.toContain('联网搜索：未配置')
+  })
+
+  it('运行日志里的 web_search 结构化展示查询词、命中条数与标题', async () => {
+    mocks.listAdminAgentRuns.mockResolvedValue({
+      items: [
+        {
+          id: 'run-search',
+          agentId: AGENT.userId,
+          startedAt: '2026-11-16T09:00:00Z',
+          status: 'SUCCESS',
+          outputType: 'NONE',
+          tokensIn: 200,
+          tokensOut: 30,
+          toolCallsJson: {
+            action: 'web_search',
+            args: { query: '海岛建筑 热点' },
+            summary: '联网检索完成',
+            results: [
+              { title: 'A 岛新地标' },
+              { title: 'B 岛红石农场' },
+              { title: 'C 岛交通改造' },
+              { title: 'D 岛不该出现' },
+            ],
+          },
+        },
+      ],
+      total: 1,
+      page: 1,
+      size: 20,
+    })
+    const wrapper = await mountView()
+    await wrapper.findAll('button').find((b) => b.text().trim() === '日志')!.trigger('click')
+    await flushPromises()
+    const text = wrapper.text()
+    expect(text).toContain('联网搜索')
+    expect(text).toContain('海岛建筑 热点')
+    expect(text).toContain('命中 4 条')
+    // 标题只渲染前 3 条（原始 JSON 折叠里仍有全量，所以这里数列表项而不是搜文本）
+    const titles = wrapper.findAll('.tool-call__title-list li').map((item) => item.text())
+    expect(titles).toEqual(['A 岛新地标', 'B 岛红石农场', 'C 岛交通改造'])
   })
 
   it('运行一次 / 暂停分别调用对应接口', async () => {

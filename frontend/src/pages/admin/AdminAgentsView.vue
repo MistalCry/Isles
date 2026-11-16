@@ -28,7 +28,8 @@ import {
   type AgentTone,
   type AgentUser,
 } from './agentApi'
-import { listAdminChannels, type AdminChannel } from './adminApi'
+import { listAdminChannels, listAdminSettings, type AdminChannel } from './adminApi'
+import { isFetchCall, isWebSearchCall, parseToolCalls, type ToolCallView } from './toolCalls'
 
 const { t } = useI18n()
 const { identity } = useAdminAccess()
@@ -47,6 +48,30 @@ const globalEnabled = ref<boolean | null>(null)
 const dailyPostLimit = ref(0)
 const dailyTokenBudget = ref(0)
 const busyId = ref<string | null>(null)
+
+/**
+ * 联网搜索配置 agent.search.provider（NONE / SEARXNG）。
+ * null = 读不到配置项，页面显示「状态未知」而不是误报「未配置」。
+ */
+const searchProvider = ref<string | null>(null)
+const searchLoaded = ref(false)
+
+const SEARCH_PROVIDER_LABELS: Record<string, string> = { SEARXNG: 'SearXNG', TAVILY: 'Tavily' }
+
+const searchState = computed(() => {
+  if (!searchLoaded.value) {
+    return { kind: 'loading', tagType: 'info' as const, label: t('admin.agents.searchLoading') }
+  }
+  const provider = (searchProvider.value ?? '').trim().toUpperCase()
+  if (!provider) {
+    return { kind: 'unknown', tagType: 'info' as const, label: t('admin.agents.searchUnknown') }
+  }
+  if (provider === 'NONE' || provider === 'OFF' || provider === 'DISABLED') {
+    return { kind: 'off', tagType: 'info' as const, label: t('admin.agents.searchOff') }
+  }
+  const name = SEARCH_PROVIDER_LABELS[provider] ?? provider
+  return { kind: 'on', tagType: 'success' as const, label: t('admin.agents.searchEnabled', { provider: name }) }
+})
 
 const createOpen = ref(false)
 const creating = ref(false)
@@ -168,6 +193,19 @@ async function loadGlobalSwitch(): Promise<void> {
     return
   }
   globalEnabled.value = null
+}
+
+/** 联网搜索开关读配置中心（需要 CONFIG_READ；读不到就显示「状态未知」） */
+async function loadSearchProvider(): Promise<void> {
+  try {
+    const groups = await listAdminSettings()
+    const item = groups.flatMap((group) => group.items ?? []).find((entry) => entry.key === 'agent.search.provider')
+    searchProvider.value = item ? String(item.value ?? '') : null
+  } catch {
+    searchProvider.value = null
+  } finally {
+    searchLoaded.value = true
+  }
 }
 
 async function load(): Promise<void> {
@@ -374,6 +412,7 @@ async function openRuns(agent: AgentUser): Promise<void> {
   runsError.value = null
   runsOpen.value = true
   runsLoading.value = true
+  toolCallCache.clear()
   try {
     // 注意：子资源接口认的是 userId，不是列表里的 id（人设 id）
     const result = await listAdminAgentRuns(agent.userId, { page: 1, size: 30 })
@@ -383,6 +422,21 @@ async function openRuns(agent: AgentUser): Promise<void> {
   } finally {
     runsLoading.value = false
   }
+}
+
+/** 每条日志的 tool_calls_json 只解析一次（模板里会渲染多次） */
+const toolCallCache = new Map<string, ToolCallView[]>()
+
+function toolCalls(run: AgentRun): ToolCallView[] {
+  const cached = toolCallCache.get(run.id)
+  if (cached) return cached
+  const parsed = parseToolCalls(run.toolCallsJson)
+  toolCallCache.set(run.id, parsed)
+  return parsed
+}
+
+function toolCallTitle(call: ToolCallView): string {
+  return call.name ? toolLabel(call.name) : t('admin.agents.toolCallUnknown')
 }
 
 function prettyJson(value: unknown): string {
@@ -424,6 +478,7 @@ function outputLabel(type: AgentRun['outputType']): string {
 
 onMounted(() => {
   void loadGlobalSwitch()
+  void loadSearchProvider()
   void load()
 })
 </script>
@@ -434,6 +489,15 @@ onMounted(() => {
       <div>
         <h2 class="admin-section-title">{{ t('admin.layout.agents') }}</h2>
         <p class="admin-section-subtitle">{{ t('admin.agents.subtitle') }}</p>
+        <div class="admin-agents__search">
+          <el-tag size="small" :type="searchState.tagType" effect="plain">{{ searchState.label }}</el-tag>
+          <span v-if="searchState.kind === 'off'" class="admin-agents__search-hint">
+            {{ t('admin.agents.searchOffHint') }}
+          </span>
+          <span v-else-if="searchState.kind === 'unknown'" class="admin-agents__search-hint">
+            {{ t('admin.agents.searchUnknownHint') }}
+          </span>
+        </div>
       </div>
       <div class="admin-agents__head-actions">
         <el-tag v-if="globalEnabled !== null" :type="globalEnabled ? 'success' : 'danger'" effect="plain">
@@ -701,7 +765,55 @@ onMounted(() => {
               <pre class="agent-run__json">{{ prettyJson(run.planJson) }}</pre>
             </el-collapse-item>
             <el-collapse-item v-if="run.toolCallsJson" :title="t('admin.agents.toolCalls')" :name="`tools-${run.id}`">
-              <pre class="agent-run__json">{{ prettyJson(run.toolCallsJson) }}</pre>
+              <ul v-if="toolCalls(run).length > 0" class="tool-calls">
+                <li v-for="(call, index) in toolCalls(run)" :key="`${run.id}-${index}`" class="tool-call">
+                  <div class="tool-call__head">
+                    <strong class="tool-call__name">{{ toolCallTitle(call) }}</strong>
+                    <code v-if="call.name" class="tool-call__raw-name">{{ call.name }}</code>
+                    <el-tag v-if="call.hitCount !== null && isWebSearchCall(call)" size="small" effect="plain">
+                      {{ t('admin.agents.toolCallHits', { n: call.hitCount }) }}
+                    </el-tag>
+                    <el-tag v-if="call.charCount !== null && isFetchCall(call)" size="small" effect="plain">
+                      {{ t('admin.agents.toolCallChars', { n: call.charCount }) }}
+                    </el-tag>
+                  </div>
+
+                  <dl v-if="call.query || call.freshness || call.url" class="tool-call__fields">
+                    <template v-if="call.query">
+                      <dt>{{ t('admin.agents.toolCallQuery') }}</dt>
+                      <dd>{{ call.query }}</dd>
+                    </template>
+                    <template v-if="call.freshness">
+                      <dt>{{ t('admin.agents.toolCallFreshness') }}</dt>
+                      <dd>{{ call.freshness }}</dd>
+                    </template>
+                    <template v-if="call.url">
+                      <dt>{{ t('admin.agents.toolCallUrl') }}</dt>
+                      <dd class="tool-call__url">{{ call.url }}</dd>
+                    </template>
+                  </dl>
+
+                  <el-collapse v-if="call.titles.length > 0" class="tool-call__titles">
+                    <el-collapse-item
+                      :title="t('admin.agents.toolCallTitles', { n: call.titles.length })"
+                      :name="`titles-${run.id}-${index}`"
+                    >
+                      <ol class="tool-call__title-list">
+                        <li v-for="(title, order) in call.titles" :key="order">{{ title }}</li>
+                      </ol>
+                    </el-collapse-item>
+                  </el-collapse>
+
+                  <p v-if="call.summary" class="tool-call__summary">{{ call.summary }}</p>
+
+                  <el-collapse class="tool-call__raw">
+                    <el-collapse-item :title="t('admin.agents.toolCallRaw')" :name="`raw-${run.id}-${index}`">
+                      <pre class="agent-run__json">{{ prettyJson(call.raw) }}</pre>
+                    </el-collapse-item>
+                  </el-collapse>
+                </li>
+              </ul>
+              <pre v-else class="agent-run__json">{{ prettyJson(run.toolCallsJson) }}</pre>
             </el-collapse-item>
           </el-collapse>
         </li>
@@ -723,6 +835,19 @@ onMounted(() => {
 
 .admin-agents__alert {
   margin-bottom: var(--isles-space-3);
+}
+
+.admin-agents__search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--isles-space-2);
+  align-items: center;
+  margin-top: var(--isles-space-2);
+}
+
+.admin-agents__search-hint {
+  color: var(--isles-text-muted);
+  font-size: var(--isles-font-xs);
 }
 
 .agent-cell {
@@ -855,5 +980,110 @@ onMounted(() => {
   border-radius: var(--isles-radius-sm);
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+.tool-calls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--isles-space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.tool-call {
+  padding: var(--isles-space-2) var(--isles-space-3);
+  background: var(--isles-surface);
+  border: 1px solid var(--isles-border);
+  border-radius: var(--isles-radius-sm);
+}
+
+.tool-call__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--isles-space-2);
+  align-items: center;
+  font-size: var(--isles-font-sm);
+}
+
+.tool-call__raw-name {
+  color: var(--isles-text-muted);
+  font-family: var(--isles-font-mono, monospace);
+  font-size: 11px;
+}
+
+.tool-call__fields {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px var(--isles-space-2);
+  margin: var(--isles-space-2) 0 0;
+  font-size: var(--isles-font-xs);
+
+  dt {
+    color: var(--isles-text-muted);
+  }
+
+  dd {
+    margin: 0;
+    word-break: break-all;
+  }
+}
+
+.tool-call__url {
+  font-family: var(--isles-font-mono, monospace);
+}
+
+.tool-call__titles {
+  margin-top: var(--isles-space-2);
+  border-top: none;
+
+  :deep(.el-collapse-item__header) {
+    height: 28px;
+    font-size: var(--isles-font-xs);
+  }
+
+  :deep(.el-collapse-item__wrap) {
+    background: transparent;
+  }
+}
+
+.tool-call__title-list {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--isles-text-secondary);
+  font-size: var(--isles-font-xs);
+
+  li {
+    margin-bottom: 2px;
+    word-break: break-word;
+  }
+}
+
+.tool-call__summary {
+  display: -webkit-box;
+  margin-top: var(--isles-space-2);
+  overflow: hidden;
+  color: var(--isles-text-secondary);
+  font-size: var(--isles-font-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* fetch_page 的摘要就是整页正文，这里截 3 行，全文看「原始 JSON」 */
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.tool-call__raw {
+  margin-top: 2px;
+  border-top: none;
+
+  :deep(.el-collapse-item__header) {
+    height: 26px;
+    color: var(--isles-text-muted);
+    font-size: 11px;
+  }
+
+  :deep(.el-collapse-item__wrap) {
+    background: transparent;
+  }
 }
 </style>
