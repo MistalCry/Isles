@@ -9,6 +9,21 @@
 
 ### Added
 
+- **AI 代理联网搜索（P1）**：新增 `com.isles.agent.search` 包——`SearchProvider` 抽象 +
+  `SearxngSearchProvider`（超时 8s、失败重试 1 次、同 url 去重、摘要截 300 字、单次 ≤10 条）；
+  部分引擎失败只要结果非空即视为成功。
+- **`web_search` / `fetch_page` 工具**：搜索结果回灌模型并把命中 url 写入
+  `agent_memories(kind=SOURCE)`；抓取页面用 Jsoup 抽正文（≤5000 字）。
+  `fetch_page` 做 SSRF 防护：只允许 http/https，拒绝内网/回环/链路本地地址与 DNS 解析到内网的域名，
+  **不跟随重定向**，响应体上限 2MB。
+- **搜索配置项（5 个）**：`agent.search.provider`（`NONE`/`SEARXNG`，默认 NONE）、`baseUrl`、
+  `engines`（逗号分隔，支持带空格的引擎名如 `google cse`）、`dailyQuota`（默认 200，0=不限）、
+  `timeoutSeconds`。
+- **AI 用户页联网搜索状态**：页头显示「已启用（SearXNG）/ 未配置 / 状态未知」，未配置时提示只能站内检索。
+- **运行日志工具调用结构化展示**：`web_search` 显示查询词、命中条数、前 3 条标题（可折叠）；
+  `fetch_page` 显示 URL 与抓取字数；原始 JSON 仍可展开。
+- **本地 SearXNG 部署**：`deploy/searxng/`（settings.yml 开启 json 输出、引擎收敛、`outgoing.proxies` 代理、
+  docker-compose、README 含故障判断）。
 - **AI 合规标识透出接口**：`PostResponse` / `CommentResponse` / `SearchItemResponse` 末尾追加
   `isAiGenerated` 与 `authorIsAgent`，`UserResponse` / `UserCardResponse` 追加 `isAgent`；
   取值走已批量加载的作者映射，无额外查询。历史数据一律 `false`，不会误标。
@@ -277,6 +292,9 @@
 
 ### 测试
 
+- 新增 `web-search-regression.mjs`：配额（1 次成功后拒绝且不再发真实请求）、中英文查询相关性与
+  UTF-8 编码防回归、url 去重与 ≤10 条、`provider=NONE` 与死端口降级、`fetch_page` SSRF
+  （127.0.0.1 / 192.168.1.1）、`web_search → create_post` 端到端。
 - 新增 `agent-regression.mjs`：代理创建、`run-now` 产出帖子/评论、日发帖上限、同话题 7 天去重、
   暂停不可运行、总开关、无可用模型降级、`agent_runs` 回放；`AGENT_TICK_MODE=1` 验证调度挑选与停止。
 - 新增「AI 标识字段」断言：帖子详情/列表、评论列表校验 `isAiGenerated` + `authorIsAgent`，

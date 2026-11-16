@@ -6870,5 +6870,61 @@
   "admin.agents.runSkippedNoReason": [
     "本次未执行（未记录原因）",
     "Skipped (no reason recorded)"
+  ],
+  "admin.agents.searchEnabled": [
+    "联网搜索：已启用（{provider}）",
+    "Web search: enabled ({provider})"
+  ],
+  "admin.agents.searchOff": [
+    "联网搜索：未配置",
+    "Web search: not configured"
+  ],
+  "admin.agents.searchUnknown": [
+    "联网搜索：状态未知",
+    "Web search: status unknown"
+  ],
+  "admin.agents.searchLoading": [
+    "联网搜索：读取中",
+    "Web search: loading"
+  ],
+  "admin.agents.searchOffHint": [
+    "Agent 只能用站内检索，无法联网找话题",
+    "Agents can only search on-site, so they cannot look up topics online."
+  ],
+  "admin.agents.searchUnknownHint": [
+    "读不到 agent.search.provider，请确认配置读取权限",
+    "Cannot read agent.search.provider; check config read permission."
+  ],
+  "admin.agents.toolCallUnknown": [
+    "未知工具",
+    "Unknown tool"
+  ],
+  "admin.agents.toolCallHits": [
+    "命中 {n} 条",
+    "{n} results"
+  ],
+  "admin.agents.toolCallChars": [
+    "抓取 {n} 字",
+    "{n} chars"
+  ],
+  "admin.agents.toolCallQuery": [
+    "查询词",
+    "Query"
+  ],
+  "admin.agents.toolCallFreshness": [
+    "时效",
+    "Freshness"
+  ],
+  "admin.agents.toolCallUrl": [
+    "地址",
+    "URL"
+  ],
+  "admin.agents.toolCallTitles": [
+    "前 {n} 条标题",
+    "Top {n} titles"
+  ],
+  "admin.agents.toolCallRaw": [
+    "原始 JSON",
+    "Raw JSON"
   ]
 }

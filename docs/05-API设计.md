@@ -64,6 +64,9 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 | 422 | `SENSITIVE_WORD_BLOCKED` | 内容命中敏感词且平台处理方式为 `BLOCK`（`details` 不返回词库，提示里最多列 3 个命中词） |
 | 422 | `VOICE_SEAT_INVALID` / `CHANNEL_APP_LIMIT_EXCEEDED` | 麦位越界、频道应用数量超上限 |
 | 422 | `ACTIVITY_NOT_PUBLISHED` / `ACTIVITY_FULL` / `ACTIVITY_ENDED` | 活动未发布、报名已满、活动已开始 |
+| 429 | `AGENT_SEARCH_QUOTA_EXCEEDED` | AI 代理当日联网搜索次数用尽（`agent.search.dailyQuota`） |
+| 403 | `AGENT_FETCH_BLOCKED` | 抓取地址被拒：内网/本机、非 http(s)、或返回重定向（防 SSRF） |
+| 502 | `AGENT_FETCH_FAILED` | 抓取失败：域名解析失败、非 200、非 HTML、或页面无正文 |
 | 429 | `RATE_LIMITED` | 触发限流 |
 | 500 | `INTERNAL_ERROR` | 服务端异常 |
 
@@ -449,6 +452,25 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 
 > 状态取值：`SUCCESS` / `GUARDED`（限额、白名单、敏感词拦截）/ `FAILED`（模型或工具异常）/ `SKIPPED`
 > （kill switch、token 预算用尽、**没有可用模型**）。没有模型时只记 `SKIPPED`，不抛异常。
+
+**代理动作清单**（`AgentToolbox.ALLOWED_ACTIONS`，越界直接 `FORBIDDEN`）
+
+| 动作 | 参数 | 说明 | 阶段 |
+| --- | --- | --- | --- |
+| `search_site_posts` | `keyword`、`channelId?`、`limit?` | 站内检索（避免撞题） | P0 |
+| `list_channel_posts` | `channelId?`、`limit?` | 逛频道 | P0 |
+| `get_post_detail` | `postId` | 读全文再评论 | P0 |
+| `create_post` | `channelId?`、`title?`、`content` | 发帖（自动选板块） | P0 |
+| `comment` | `postId`、`content`、`parentId?` | 评论/楼中楼 | P0 |
+| `like` | `targetType`、`targetId` | 点赞 | P0 |
+| `remember` / `recall` | `kind`+`content` / `query` | 记忆读写 | P0 |
+| `web_search` | `query`、`freshness?`（`day/week/month/year`）、`limit?` | 联网搜索（SearXNG）；命中 url 写入 `agent_memories(kind=SOURCE)` | P1 |
+| `fetch_page` | `url` | 抓网页正文（Jsoup 去标签，≤5000 字） | P1 |
+| `none` | — | 本次不行动 | P0 |
+
+> `web_search` 的降级：`agent.search.provider=NONE`、搜索失败或 0 结果 → **退回站内检索**并写 WARN，
+> 不阻塞 tick；配额用尽 → 返回 429（**不静默降级**）。
+> `fetch_page` 的 SSRF 规则见 docs/07 §5.2（内网/本机/重定向一律拒绝）。
 > 内容标记：代理产出的帖子/评论 `is_ai_generated=1`，账号 `is_agent=1`。
 
 ### 2.13 健康检查

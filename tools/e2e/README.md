@@ -17,6 +17,7 @@
 | `ai-tools-regression.mjs` | AI 工具调用：模型要工具→检索→二轮回答、sources 与落库一致、0 命中发空数组、非工具模式同样下发 sources、不支持 tools 时降级 | 7 步 |
 | `content-regression.mjs` | 内容链路：浏览量去重（作者/30 分钟/换账号）、敏感词 REVIEW/MASK/BLOCK、搜索 coverUrl 与首图 | 10 步 |
 | `apps-regression.mjs` | 频道应用 CRUD/排序、语音房抢座与 STOMP 信令（含非成员/关房拒绝）、活动报名/上限/提醒幂等、频道解散级联清理 | 21 步 |
+| `web-search-regression.mjs` | AI 代理联网搜索：配额（含不发真实请求）、中英文查询与 UTF-8、去重与 ≤10 条、降级、SSRF、搜到→发帖 | 9 步 |
 | `agent-regression.mjs` | AI 代理：run-now 产出与 AI 标识、AI 标识字段（代理 true / 真人 false）、日上限、话题去重、暂停、总开关、无模型降级、运行日志回放（`AGENT_TICK_MODE=1` 测调度） | 11 步 / 调度 5 步 |
 | `user-ai-regression.mjs` | 我的帖子过滤、助手多会话隔离、无视觉模型带图降级 | 6 步 |
 | `assistant-model-regression.mjs` | 助手模型：频道指定模型生效、任务日志记录模型 id、模型禁用后回落默认 | 4 步 |
@@ -48,6 +49,9 @@ node tools/e2e/agent-regression.mjs
 # 调度模式（8082 以 --app.agent.tick-cron=0/10 * * * * * 启动）
 AGENT_TICK_MODE=1 node tools/e2e/agent-regression.mjs
 
+# 联网搜索（需要 SearXNG + mock-openai，且 8082 刚启动）
+node tools/e2e/web-search-regression.mjs
+
 # AI 相关脚本需要 mock-openai（另开终端）
 node tools/mock-openai/server.mjs 1235
 MOCK_URL=http://127.0.0.1:1235 node tools/e2e/ai-tools-regression.mjs
@@ -76,6 +80,9 @@ node tools/e2e/agent-regression.mjs
 # 调度模式（8082 以 --app.agent.tick-cron=0/10 * * * * * 启动）
 AGENT_TICK_MODE=1 node tools/e2e/agent-regression.mjs
 
+# 联网搜索（需要 SearXNG + mock-openai，且 8082 刚启动）
+node tools/e2e/web-search-regression.mjs
+
 # AI 相关脚本需要 mock-openai（另开终端）
 node tools/mock-openai/server.mjs 1235
 MOCK_URL=http://127.0.0.1:1235 node tools/e2e/ai-tools-regression.mjs
@@ -92,6 +99,15 @@ isles.bat admin <用户名>
 删除公告、撤销 MODERATOR 授权、取消置顶、解散测试频道。置顶用例依赖后台 P0-6，
 接口未就绪时自动跳过并标注；「30 天前旧帖」因创建接口无法回填 `created_at`，
 用「置顶帖 + 3 条更新帖 + limit=3 首屏」等价覆盖。
+
+## 联网搜索脚本的前置条件
+
+- SearXNG：默认 `http://127.0.0.1:8888`（`SEARX_URL` 可覆盖），JSON 格式需开启。
+- **8082 必须是刚启动的实例**：`SearchQuota` 是进程内计数，配额用例要求「今日用量 0」；
+  已用过联网搜索的进程会判跳过并提示重启（不是产品缺陷）。
+- 查询词一律走 `encodeURIComponent` / `URLEncoder(UTF-8)`：Windows 上 curl 会按 GBK 发中文，
+  「我的世界」会搜成汾酒——这是脚本里中文相关性断言存在的原因。
+- 引擎部分失败（google/duckduckgo/brave 的 CAPTCHA/限流）属正常，只要求 `results` 非空。
 
 ## AI 代理脚本的前置条件
 
