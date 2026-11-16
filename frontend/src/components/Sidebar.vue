@@ -9,6 +9,7 @@ import { ElMessage } from 'element-plus'
 import {
   ChatDotRound,
   Compass,
+  Document,
   HomeFilled,
   HotWater,
   Plus,
@@ -278,6 +279,19 @@ watch(
         </div>
       </section>
 
+      <!-- 「我的频道」下面：我的帖子（登录后可见） -->
+      <section v-if="isAuthenticated" class="sidebar__section sidebar__section--tight">
+        <button
+          type="button"
+          class="nav-item"
+          :class="{ 'is-active': isActive('my-posts') }"
+          @click="goTo('my-posts')"
+        >
+          <el-icon><Document /></el-icon>
+          <span>{{ t('nav.myPosts') }}</span>
+        </button>
+      </section>
+
       <section v-if="showCurrentChannel && currentChannel" class="sidebar__section">
         <div class="section-head">
           <span class="section-title section-title--static">
@@ -479,6 +493,13 @@ watch(
   margin-top: var(--isles-space-5);
   padding-top: var(--isles-space-3);
   border-top: 1px solid var(--isles-border);
+}
+
+/* 紧贴上一块的单项入口（如「我的帖子」）：不要再加一条分割线 */
+.sidebar__section--tight {
+  margin-top: var(--isles-space-1);
+  padding-top: 0;
+  border-top: none;
 }
 
 .section-head {

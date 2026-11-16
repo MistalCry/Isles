@@ -212,7 +212,10 @@ function highlightTargetComment(): void {
 }
 
 onMounted(() => {
-  void loadPost()
+  void loadPost().then(() => {
+    // 从「我的帖子」点编辑进来（/posts/{id}?edit=1）：加载完直接打开编辑弹窗
+    if (route.query.edit === '1' && isAuthor.value) openEdit()
+  })
 })
 
 watch(

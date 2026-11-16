@@ -72,6 +72,14 @@ export async function getChannelPosts(channelId: string, query: ChannelPostQuery
   return toPage(extractPage<unknown>(data), toPost)
 }
 
+/** 频道置顶帖：后端已把置顶帖从 latest/essence 列表排除，置顶区单独取。 */
+export async function getPinnedPosts(channelId: string, limit = 20): Promise<Post[]> {
+  const { data } = await http.get(`/channels/${encodeURIComponent(channelId)}/posts/pinned`, {
+    params: { limit },
+  })
+  return (extractPage<unknown>(data).items ?? []).map(toPost)
+}
+
 export async function createChannelPost(channelId: string, payload: CreatePostPayload): Promise<Post> {
   const { data } = await http.post(`/channels/${encodeURIComponent(channelId)}/posts`, payload)
   return toPost(data)

@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
-import { Client, type IMessage } from '@stomp/stompjs'
+import { Client, type IMessage, type StompSubscription } from '@stomp/stompjs'
 import { useAuthStore } from './auth'
 import { useDmStore } from './dm'
 import { useNotificationStore } from './notifications'
@@ -19,6 +19,12 @@ export const useRealtimeStore = defineStore('realtime', () => {
   const lastConnectedAt = ref<number | null>(null)
 
   let client: Client | null = null
+  /** 连接建立前登记的订阅：连上后自动补订阅（语音房等场景会在连接中就订阅） */
+  const pendingSubscriptions: Array<{
+    destination: string
+    handler: (body: unknown) => void
+    handle?: StompSubscription
+  }> = []
 
   function parseBody(message: IMessage): unknown {
     try {
@@ -66,6 +72,10 @@ export const useRealtimeStore = defineStore('realtime', () => {
         client?.subscribe('/user/queue/notifications', (message) => {
           useNotificationStore().handleIncoming(parseBody(message))
         })
+        for (const entry of pendingSubscriptions) {
+          if (entry.handle) continue
+          entry.handle = client?.subscribe(entry.destination, (message) => entry.handler(parseBody(message)))
+        }
         syncAfterReconnect()
       },
       onWebSocketClose: () => {
@@ -84,11 +94,37 @@ export const useRealtimeStore = defineStore('realtime', () => {
     client.activate()
   }
 
+  /**
+   * 订阅任意主题（语音房信令/状态）。
+   * 未连接时先登记，CONNECTED 后自动补订阅；返回取消函数。
+   */
+  function subscribe(destination: string, handler: (body: unknown) => void): () => void {
+    const entry = { destination, handler } as (typeof pendingSubscriptions)[number]
+    if (client?.connected) {
+      entry.handle = client.subscribe(destination, (message) => handler(parseBody(message)))
+    } else {
+      pendingSubscriptions.push(entry)
+    }
+    return () => {
+      entry.handle?.unsubscribe()
+      const index = pendingSubscriptions.indexOf(entry)
+      if (index >= 0) pendingSubscriptions.splice(index, 1)
+    }
+  }
+
+  /** 发送到 /app/**；未连接时直接丢弃（语音房会提示信令未就绪） */
+  function publish(destination: string, body: unknown): boolean {
+    if (!client?.connected) return false
+    client.publish({ destination, body: JSON.stringify(body) })
+    return true
+  }
+
   function disconnect(): void {
     if (client) {
       void client.deactivate()
       client = null
     }
+    for (const entry of pendingSubscriptions) entry.handle = undefined
     connected.value = false
     connecting.value = false
   }
@@ -100,5 +136,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
     lastConnectedAt,
     connect,
     disconnect,
+    subscribe,
+    publish,
   }
 })

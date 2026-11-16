@@ -5,6 +5,8 @@ import { useRouter } from 'vue-router'
 import {
   ArrowLeft,
   DataAnalysis,
+  Grid,
+  Calendar,
   Document,
   Files,
   HomeFilled,
@@ -104,6 +106,18 @@ const navItems = computed<NavItem[]>(() => [
     label: t('manage.nav.reports'),
     icon: Warning,
     allowed: hasChannelPermission(props.permissions, CHANNEL_PERMISSIONS.CONTENT_MANAGE),
+  },
+  {
+    key: 'apps',
+    label: t('manage.nav.apps'),
+    icon: Grid,
+    allowed: hasChannelPermission(props.permissions, CHANNEL_PERMISSIONS.CHANNEL_SETTINGS),
+  },
+  {
+    key: 'activities',
+    label: t('manage.nav.activities'),
+    icon: Calendar,
+    allowed: hasChannelPermission(props.permissions, CHANNEL_PERMISSIONS.CHANNEL_SETTINGS),
   },
   {
     key: 'assistant',

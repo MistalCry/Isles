@@ -18,6 +18,8 @@ import ManageDataView from './manage/ManageDataView.vue'
 import ManageLogsView from './manage/ManageLogsView.vue'
 import ManageReportsView from './manage/ManageReportsView.vue'
 import ManageAssistantView from './manage/ManageAssistantView.vue'
+import ManageAppsView from './manage/ManageAppsView.vue'
+import ManageActivitiesView from './manage/ManageActivitiesView.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 
@@ -33,7 +35,19 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const errorStatus = ref(0)
 
-const validSections = ['home', 'profile', 'content', 'members', 'boards', 'data', 'logs', 'reports', 'assistant']
+const validSections = [
+  'home',
+  'profile',
+  'content',
+  'members',
+  'boards',
+  'data',
+  'logs',
+  'reports',
+  'assistant',
+  'apps',
+  'activities',
+]
 
 const channelId = computed(() => String(route.params.channelId ?? ''))
 const activeSection = computed(() => {
@@ -58,6 +72,8 @@ const sectionComponents: Record<string, Component> = {
   logs: ManageLogsView,
   reports: ManageReportsView,
   assistant: ManageAssistantView,
+  apps: ManageAppsView,
+  activities: ManageActivitiesView,
 }
 const sectionComponent = computed(() => sectionComponents[activeSection.value] ?? ManageHomeView)
 

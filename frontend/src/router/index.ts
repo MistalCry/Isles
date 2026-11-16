@@ -47,6 +47,18 @@ const routes: RouteRecordRaw[] = [
     meta: { title: t('common.channel') },
   },
   {
+    path: '/channels/:id/voice-room',
+    name: 'voice-room',
+    component: () => import('@/pages/VoiceRoomView.vue'),
+    meta: { title: t('voice.title') },
+  },
+  {
+    path: '/channels/:id/apps/:appId',
+    name: 'channel-app',
+    component: () => import('@/pages/ChannelAppView.vue'),
+    meta: { title: t('channel.apps.title') },
+  },
+  {
     path: '/posts/:id',
     name: 'post',
     component: () => import('@/pages/PostDetailView.vue'),
@@ -63,6 +75,12 @@ const routes: RouteRecordRaw[] = [
     name: 'my-channels',
     component: () => import('@/pages/MyChannelsView.vue'),
     meta: { title: t('nav.myChannels'), requiresAuth: true },
+  },
+  {
+    path: '/my-posts',
+    name: 'my-posts',
+    component: () => import('@/pages/MyPostsView.vue'),
+    meta: { title: t('nav.myPosts'), requiresAuth: true },
   },
   {
     path: '/messages',

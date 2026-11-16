@@ -10,7 +10,8 @@ import { getAccessToken } from './token'
  * SSE 事件命名：meta / delta / reasoning / done / error。
  */
 
-export type AiScope = 'GLOBAL' | 'CHANNEL'
+/** CHANNEL_ASSISTANT：频道助手（会话按 用户 × 频道 隔离） */
+export type AiScope = 'GLOBAL' | 'CHANNEL' | 'CHANNEL_ASSISTANT'
 export type AiMessageRole = 'USER' | 'ASSISTANT' | 'SYSTEM'
 export type AiMessageStatus = 'COMPLETED' | 'STREAMING' | 'ABORTED' | 'FAILED'
 export type AiTaskType =
@@ -81,6 +82,8 @@ export interface AiMessage {
   tokenIn?: number | null
   tokenOut?: number | null
   status: AiMessageStatus
+  /** 后端提示（如「当前模型不支持图片，已忽略历史消息里的图片」） */
+  notice?: string | null
   createdAt?: string | null
 }
 
@@ -90,6 +93,8 @@ export interface StreamMeta {
   model: string
   sources: AiSource[]
   deepThinking: boolean
+  /** 模型能力不匹配等提示（可选，后端不带时前端自行兜底） */
+  notice?: string | null
 }
 
 export interface StreamDone {
@@ -254,6 +259,21 @@ export async function listConversations(params: {
   return { items: data.items ?? [], nextCursor: data.nextCursor ?? null }
 }
 
+/**
+ * 历史消息容错：切换到无视觉模型时后端会剥离图片（images 可能为 null），
+ * 并可能带回一条提示文案，统一收敛到 notice。
+ */
+export function normalizeAiMessage(value: unknown): AiMessage {
+  const raw = (value ?? {}) as Record<string, unknown>
+  const notice = raw.notice ?? raw.warning ?? raw.systemNotice
+  return {
+    ...(raw as unknown as AiMessage),
+    images: Array.isArray(raw.images) ? (raw.images as string[]) : [],
+    sources: Array.isArray(raw.sources) ? (raw.sources as AiSource[]) : [],
+    notice: typeof notice === 'string' && notice.trim() ? notice : null,
+  }
+}
+
 export async function createConversation(payload: {
   scope: AiScope
   channelId?: string | null
@@ -286,7 +306,7 @@ export async function listMessages(
     `/ai/conversations/${encodeURIComponent(conversationId)}/messages`,
     { params: { cursor: params.cursor ?? undefined, limit: params.limit } },
   )
-  return { items: data.items ?? [], nextCursor: data.nextCursor ?? null }
+  return { items: (data.items ?? []).map(normalizeAiMessage), nextCursor: data.nextCursor ?? null }
 }
 
 // ---------------------------------------------------------------------------

@@ -41,6 +41,8 @@ const showTyping = computed(
 )
 const reasoning = computed(() => props.message.reasoningContent?.trim() ?? '')
 const hasContent = computed(() => Boolean(props.message.content?.trim()))
+/** 后端提示（如切换无视觉模型后忽略历史图片），仅助手消息展示 */
+const notice = computed(() => (isUser.value ? '' : (props.message.notice ?? '').trim()))
 
 function beginEdit(): void {
   if (!props.editable || props.streaming) return
@@ -80,6 +82,8 @@ function submitEdit(): void {
         <el-tag v-if="isFailed" size="small" type="danger" effect="plain">{{ t('ai.message.failed') }}</el-tag>
         <el-tag v-if="message.model" size="small" effect="plain">{{ message.model }}</el-tag>
       </header>
+
+      <p v-if="notice" class="ai-message__notice">{{ notice }}</p>
 
       <div v-if="!isUser && reasoning" class="ai-message__reasoning">
         <button type="button" class="reasoning-toggle" @click="reasoningOpen = !reasoningOpen">
@@ -248,6 +252,16 @@ function submitEdit(): void {
   object-fit: cover;
   border-radius: var(--isles-radius-sm);
   border: 1px solid var(--isles-border);
+}
+
+.ai-message__notice {
+  padding: var(--isles-space-2) var(--isles-space-3);
+  margin-bottom: var(--isles-space-2);
+  color: var(--isles-text-secondary);
+  font-size: var(--isles-font-xs);
+  background: var(--isles-surface-muted);
+  border-left: 3px solid var(--isles-warning, #f59f00);
+  border-radius: var(--isles-radius-sm);
 }
 
 .ai-message__reasoning {

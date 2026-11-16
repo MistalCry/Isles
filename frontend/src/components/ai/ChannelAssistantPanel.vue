@@ -116,9 +116,9 @@ watch(
         v-else
         :channel-id="channelId"
         :channel-name="channelName"
-        scope="CHANNEL"
+        scope="CHANNEL_ASSISTANT"
         compact
-        :show-session-sidebar="false"
+        :show-session-sidebar="true"
         :assistant-name="assistantName"
         :assistant-avatar-url="assistantAvatar"
       />
@@ -127,10 +127,11 @@ watch(
 </template>
 
 <style scoped lang="scss">
+/* 带会话列表，需要比纯聊天面板宽一些 */
 .channel-assistant {
   display: flex;
   flex-direction: column;
-  width: 380px;
+  width: 660px;
   max-width: calc(100vw - 32px);
   height: 560px;
   max-height: calc(100vh - 120px);
@@ -214,8 +215,15 @@ watch(
   overflow: hidden;
 
   :deep(.ai-chat) {
+    gap: var(--isles-space-2);
     height: 100%;
     min-height: 0;
+  }
+
+  /* 面板里空间有限：会话列表收窄，只保留标题与操作 */
+  :deep(.ai-session-sidebar) {
+    width: 168px;
+    min-width: 140px;
   }
 
   :deep(.ai-chat__main) {

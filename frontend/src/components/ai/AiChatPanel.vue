@@ -76,7 +76,12 @@ const {
 } = storeToRefs(aiStore)
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
-const assistantDisplayName = computed(() => props.assistantName || (props.scope === 'CHANNEL' ? t('ai.chat.assistant') : t('ai.chat.ask')))
+/** 频道内（含频道助手）与全局问问的文案/示例不同 */
+const isChannelScope = computed(() => props.scope === 'CHANNEL' || props.scope === 'CHANNEL_ASSISTANT')
+
+const assistantDisplayName = computed(
+  () => props.assistantName || (isChannelScope.value ? t('ai.chat.assistant') : t('ai.chat.ask')),
+)
 
 const conversations = ref<AiConversation[]>([])
 const activeConversation = ref<AiConversation | null>(null)
@@ -103,13 +108,13 @@ const scrollRef = ref<HTMLElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 
 const examples = computed(() =>
-  props.scope === 'CHANNEL'
+  isChannelScope.value
     ? [t('ai.chat.suggestChannel1'), t('ai.chat.suggestChannel2'), t('ai.chat.suggestChannel3')]
     : [t('ai.chat.suggestGlobal1'), t('ai.chat.suggestGlobal2'), t('ai.chat.suggestGlobal3')],
 )
 
 const placeholder = computed(() =>
-  props.scope === 'CHANNEL'
+  isChannelScope.value
     ? t('ai.chat.askChannel', { name: assistantDisplayName.value })
     : t('ai.chat.placeholder'),
 )
@@ -395,6 +400,8 @@ async function runStream(start: StreamStarter): Promise<void> {
         images: [],
         // 工具模式下 meta.sources 是关键词兜底，先留空；真实来源由 sources 事件整体替换
         sources: [],
+        // 无视觉模型时后端可能回一条「已忽略图片」的提示，直接展示在气泡里
+        notice: meta.notice ?? null,
         model: meta.model,
         tokenIn: null,
         tokenOut: null,
@@ -610,7 +617,7 @@ function retryMessages(): void {
 <template>
   <div class="ai-chat" :class="{ 'ai-chat--compact': compact }">
     <AiSessionSidebar
-      v-if="showSessionSidebar && !compact"
+      v-if="showSessionSidebar"
       :conversations="conversations"
       :active-id="activeConversation?.id ?? null"
       :loading="conversationLoading"
