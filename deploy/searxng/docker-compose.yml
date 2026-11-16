@@ -9,4 +9,11 @@ services:
       - ./settings.yml:/etc/searxng/settings.yml:ro
     environment:
       - SEARXNG_BASE_URL=http://127.0.0.1:8888/
+      # 代理：取自同目录 .env 的 SEARXNG_HTTPS_PROXY，留空即直连。
+      # Windows 上 host.docker.internal 指向宿主机；Linux 用下面的 extra_hosts 兜底。
+      - HTTP_PROXY=${SEARXNG_HTTP_PROXY:-}
+      - HTTPS_PROXY=${SEARXNG_HTTPS_PROXY:-}
+      - NO_PROXY=localhost,127.0.0.1,searxng
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
