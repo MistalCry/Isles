@@ -25,10 +25,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -51,6 +53,7 @@ class CommentServiceTest {
     private NotificationService notificationService;
     private CommentService commentService;
     private AuditLogService auditLogService;
+    private com.isles.platform.wordfilter.SensitiveWordService sensitiveWordService;
 
     @BeforeEach
     void setUp() {
@@ -61,9 +64,13 @@ class CommentServiceTest {
         interactionService = mock(InteractionService.class);
         notificationService = mock(NotificationService.class);
         auditLogService = mock(AuditLogService.class);
+        sensitiveWordService = mock(com.isles.platform.wordfilter.SensitiveWordService.class);
+        when(sensitiveWordService.inspect(any(), anyBoolean())).thenAnswer(invocation ->
+                new com.isles.platform.wordfilter.SensitiveWordService.Inspection(
+                        invocation.getArgument(0), List.of(), "REVIEW"));
         commentService = new CommentService(commentMapper, postMapper, userMapper, accessService,
                 interactionService, notificationService, new JsonSupport(), auditLogService, mock(ApplicationEventPublisher.class), mock(MentionService.class),
-                mock(com.isles.platform.wordfilter.SensitiveWordService.class));
+                sensitiveWordService);
     }
 
     @Test

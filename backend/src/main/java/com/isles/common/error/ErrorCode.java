@@ -63,6 +63,7 @@ public enum ErrorCode {
     REPORT_ALREADY_EXISTS(HttpStatus.CONFLICT, "你已举报过该内容，请等待处理"),
     REPORT_ALREADY_HANDLED(HttpStatus.CONFLICT, "该举报已处理"),
     SENSITIVE_WORD_DUPLICATE(HttpStatus.CONFLICT, "该敏感词已存在"),
+    SENSITIVE_WORD_BLOCKED(HttpStatus.UNPROCESSABLE_CONTENT, "内容包含敏感词"),
     ALREADY_FRIENDS(HttpStatus.CONFLICT, "你们已经是好友"),
     FRIEND_REQUEST_PENDING(HttpStatus.CONFLICT, "已有待处理的好友申请"),
     CONFLICT(HttpStatus.CONFLICT, "资源冲突"),

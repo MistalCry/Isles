@@ -4,6 +4,8 @@ import com.isles.common.error.AppException;
 import com.isles.common.error.ErrorCode;
 import com.isles.common.id.UlidGenerator;
 import com.isles.common.time.ClockTimes;
+import com.isles.notification.entity.Notification;
+import com.isles.notification.service.NotificationService;
 import com.isles.platform.audit.PlatformAuditActions;
 import com.isles.platform.audit.PlatformAuditService;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,9 @@ import java.util.Map;
  *
  * <p>状态机：{@code DRAFT} →（发布）{@code PUBLISHED} →（归档）{@code ARCHIVED}，归档后可重新发布。
  * 已发布的公告必须先归档才能删除，避免误删正在展示的内容。
+ *
+ * <p>发布副作用：{@code placement=INBOX} 的公告会向全站活跃用户各写一条系统通知（分批写入）。
+ * {@code BANNER}/{@code MODAL} 是前台展示位，由公告组件渲染，不再重复写站内信（避免双重打扰）。
  */
 @Service
 @RequiredArgsConstructor
@@ -35,6 +40,7 @@ public class AnnouncementService {
 
     private final AnnouncementMapper announcementMapper;
     private final PlatformAuditService auditService;
+    private final NotificationService notificationService;
 
     public AnnouncementDtos.AnnouncementPage list(String status, Integer page, Integer size) {
         int pageNo = page == null || page <= 0 ? 1 : page;
@@ -124,8 +130,29 @@ public class AnnouncementService {
         announcementMapper.updateById(announcement);
         audit(PlatformAuditActions.ANNOUNCEMENT_PUBLISH, announcement, operatorId,
                 Map.of("startAt", String.valueOf(announcement.getStartAt())));
+        broadcastToInbox(announcement);
         log.info("平台公告：发布 id={}", id);
         return toView(announcement);
+    }
+
+    /**
+     * 站内信：仅 {@code placement=INBOX} 才写；通知失败不回滚发布（公告已对外生效，通知可补发）。
+     */
+    private void broadcastToInbox(Announcement announcement) {
+        if (!Announcement.Placement.INBOX.name().equals(announcement.getPlacement())) {
+            return;
+        }
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("announcementId", announcement.getId());
+            payload.put("placement", announcement.getPlacement());
+            payload.put("level", announcement.getLevel());
+            int sent = notificationService.broadcastSystem(Notification.Type.SYSTEM, announcement.getTitle(),
+                    announcement.getContent(), payload);
+            log.info("平台公告：站内信群发完成 id={} sent={}", announcement.getId(), sent);
+        } catch (RuntimeException ex) {
+            log.warn("平台公告：站内信群发失败 id={}", announcement.getId(), ex);
+        }
     }
 
     @Transactional

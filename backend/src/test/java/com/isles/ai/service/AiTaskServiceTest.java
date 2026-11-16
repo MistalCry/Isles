@@ -191,6 +191,10 @@ class AiTaskServiceTest {
         // 用的是频道指定模型，不是平台默认
         verify(modelConfigService).providerFor(channelModel);
         verify(modelConfigService, never()).providerFor(defaultModel);
+        // 日志要能回答「这次用的是哪个模型」
+        AiTaskLog logged = captureInsertedLog();
+        assertThat(logged.getModelConfigId()).isEqualTo("cfg-ch");
+        assertThat(logged.getModel()).isEqualTo("channel-model");
     }
 
     @Test
@@ -217,6 +221,10 @@ class AiTaskServiceTest {
 
         assertThat(response.status()).isEqualTo(AiTaskLog.Status.FAILED.name());
         verify(modelConfigService).providerFor(defaultModel);
+        // 回落时日志记录默认模型，而不是已失效的频道配置 id
+        AiTaskLog logged = captureInsertedLog();
+        assertThat(logged.getModelConfigId()).isEqualTo("cfg-1");
+        assertThat(logged.getModel()).isEqualTo("test-model");
     }
 
     private ChannelAiSetting setting(String taskType, int perDay) {
@@ -243,6 +251,13 @@ class AiTaskServiceTest {
         config.setEnabled(true);
         config.setMaxTokens(1024);
         return config;
+    }
+
+
+    private AiTaskLog captureInsertedLog() {
+        ArgumentCaptor<AiTaskLog> captor = ArgumentCaptor.forClass(AiTaskLog.class);
+        verify(taskLogMapper).insert(captor.capture());
+        return captor.getValue();
     }
 
     private AiContextPost post() {

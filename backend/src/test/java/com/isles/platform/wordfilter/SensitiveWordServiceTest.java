@@ -60,8 +60,13 @@ class SensitiveWordServiceTest {
     void should_record_hits_for_published_content() {
         when(wordMapper.selectEnabled()).thenReturn(List.of(word("w-1", "敏感", "REVIEW")));
 
-        service.scanAndRecord("POST", "post-1", "user-1", "这是一段敏感内容", false);
+        SensitiveWordService.Inspection inspection = service.inspect("这是一段敏感内容", false);
+        service.recordHits("POST", "post-1", "user-1", inspection);
 
+        // REVIEW：内容原样返回
+        assertThat(inspection.text()).isEqualTo("这是一段敏感内容");
+        assertThat(inspection.hits()).hasSize(1);
+        assertThat(inspection.mode()).isEqualTo("REVIEW");
         verify(hitMapper, times(1)).insert(any(SensitiveWordHit.class));
     }
 
@@ -69,8 +74,11 @@ class SensitiveWordServiceTest {
     void should_skip_scanning_when_disabled() {
         when(settingService.getBoolean("content.sensitiveWord.enabled")).thenReturn(false);
 
-        service.scanAndRecord("POST", "post-1", "user-1", "敏感内容", false);
+        SensitiveWordService.Inspection inspection = service.inspect("敏感内容", false);
+        service.recordHits("POST", "post-1", "user-1", inspection);
 
+        assertThat(inspection.hasHits()).isFalse();
+        assertThat(inspection.text()).isEqualTo("敏感内容");
         verify(wordMapper, never()).selectEnabled();
         verify(hitMapper, never()).insert(any(SensitiveWordHit.class));
     }
@@ -79,9 +87,48 @@ class SensitiveWordServiceTest {
     void should_extract_text_from_html_before_matching() {
         when(wordMapper.selectEnabled()).thenReturn(List.of(word("w-1", "违禁", "REVIEW")));
 
-        service.scanAndRecord("POST", "post-1", "user-1", "<p>含<b>违禁</b>词</p>", true);
+        SensitiveWordService.Inspection inspection = service.inspect("<p>含<b>违禁</b>词</p>", true);
 
-        verify(hitMapper).insert(any(SensitiveWordHit.class));
+        assertThat(inspection.hits()).hasSize(1);
+    }
+
+    @Test
+    void should_mask_hit_words_in_plain_text() {
+        when(settingService.getString("content.sensitiveWord.mode")).thenReturn("MASK");
+        when(wordMapper.selectEnabled()).thenReturn(List.of(word("w-1", "BadWord", "REVIEW")));
+
+        SensitiveWordService.Inspection inspection = service.inspect("this has badword inside", false);
+
+        assertThat(inspection.text()).isEqualTo("this has *** inside");
+        assertThat(inspection.hits()).hasSize(1);
+        assertThat(inspection.mode()).isEqualTo("MASK");
+    }
+
+    @Test
+    void should_mask_only_text_nodes_in_html() {
+        when(settingService.getString("content.sensitiveWord.mode")).thenReturn("MASK");
+        when(wordMapper.selectEnabled()).thenReturn(List.of(word("w-1", "违禁", "REVIEW")));
+
+        SensitiveWordService.Inspection inspection = service.inspect(
+                "<p>含<b>违禁</b>词</p><a href=\"/s?q=违禁\">链接</a>", true);
+
+        assertThat(inspection.text()).contains("***").contains("含<b>***</b>词");
+        // 属性里的同名文本不能被改写，否则会破坏链接
+        assertThat(inspection.text()).contains("/s?q=违禁");
+    }
+
+    @Test
+    void should_block_and_report_hit_words() {
+        when(settingService.getString("content.sensitiveWord.mode")).thenReturn("BLOCK");
+        when(wordMapper.selectEnabled()).thenReturn(List.of(word("w-1", "违禁", "REVIEW")));
+
+        assertThatThrownBy(() -> service.inspect("这里含违禁词", false))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> {
+                    assertThat(((AppException) ex).getErrorCode()).isEqualTo(ErrorCode.SENSITIVE_WORD_BLOCKED);
+                    assertThat(ex.getMessage()).contains("违禁");
+                });
+        verify(hitMapper, never()).insert(any(SensitiveWordHit.class));
     }
 
     @Test

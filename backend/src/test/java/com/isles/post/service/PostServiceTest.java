@@ -38,18 +38,16 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * 发帖权限/禁言/板块归属与浏览量单元测试。
@@ -66,6 +64,7 @@ class PostServiceTest {
     private InteractionService interactionService;
     private ChannelViewService channelViewService;
     private AuditLogService auditLogService;
+    private com.isles.platform.wordfilter.SensitiveWordService sensitiveWordService;
     private PostService postService;
 
     @BeforeEach
@@ -80,10 +79,15 @@ class PostServiceTest {
         interactionService = mock(InteractionService.class);
         channelViewService = mock(ChannelViewService.class);
         auditLogService = mock(AuditLogService.class);
+        sensitiveWordService = mock(com.isles.platform.wordfilter.SensitiveWordService.class);
+        // 默认：不命中，原文入库（REVIEW 语义）；需要 MASK/BLOCK 的用例单独打桩
+        when(sensitiveWordService.inspect(any(), anyBoolean())).thenAnswer(invocation ->
+                new com.isles.platform.wordfilter.SensitiveWordService.Inspection(
+                        invocation.getArgument(0), List.of(), "REVIEW"));
         postService = new PostService(postMapper, postMediaMapper, commentMapper,
                 channelMapper, boardMapper, userMapper,
                 accessService, interactionService, channelViewService, auditLogService, mock(MentionService.class),
-                mock(com.isles.platform.wordfilter.SensitiveWordService.class));
+                sensitiveWordService);
     }
 
     @Test
@@ -329,6 +333,55 @@ class PostServiceTest {
         // 字段策略回归锁：去掉 ALWAYS 后上面的 null 会被 updateById 静默丢弃
         assertThat(updateStrategyOf("coverUrl")).isEqualTo(FieldStrategy.ALWAYS);
         assertThat(updateStrategyOf("title")).isEqualTo(FieldStrategy.ALWAYS);
+    }
+
+
+    /** 作者自己刷新详情不应增加浏览量（热度公式不被自刷污染）。 */
+    @Test
+    void should_not_count_view_when_author_views_own_post() {
+        when(postMapper.selectById("post-1")).thenReturn(post());
+        mockResponseDependencies();
+
+        PostResponse response = postService.getPostDetail("post-1", "user-1");
+
+        verify(interactionService, never()).incrementViewCount("post-1");
+        verify(channelViewService, never()).recordView(any(), any(), any());
+        assertThat(response.viewCount()).isEqualTo(5L);
+    }
+
+    /** 同一会话 30 分钟内重复访问只计一次。 */
+    @Test
+    void should_count_view_once_within_dedupe_window() {
+        when(postMapper.selectById("post-1")).thenReturn(post());
+        mockResponseDependencies();
+
+        postService.getPostDetail("post-1", "user-2");
+        postService.getPostDetail("post-1", "user-2");
+        postService.getPostDetail("post-1", "user-2");
+
+        verify(interactionService, times(1)).incrementViewCount("post-1");
+        verify(channelViewService, times(1)).recordView("ch-1", "post-1", "user-2");
+    }
+
+    /** 不同用户各自计一次。 */
+    @Test
+    void should_count_view_for_different_viewers() {
+        when(postMapper.selectById("post-1")).thenReturn(post());
+        mockResponseDependencies();
+
+        postService.getPostDetail("post-1", "user-2");
+        postService.getPostDetail("post-1", "user-3");
+
+        verify(interactionService, times(2)).incrementViewCount("post-1");
+    }
+
+    private void mockResponseDependencies() {
+        when(userMapper.selectBatchIds(anyCollection())).thenReturn(List.of(author()));
+        when(channelMapper.selectBatchIds(anyCollection())).thenReturn(List.of(channel()));
+        when(boardMapper.selectBatchIds(anyCollection())).thenReturn(List.of(board("board-1", "ch-1")));
+        when(postMediaMapper.selectList(any())).thenReturn(List.of());
+        when(interactionService.likedPostIds(any(), any())).thenReturn(Set.of());
+        when(commentMapper.selectTopLikedByPostIds(any())).thenReturn(List.of());
     }
 
     private FieldStrategy updateStrategyOf(String fieldName) {

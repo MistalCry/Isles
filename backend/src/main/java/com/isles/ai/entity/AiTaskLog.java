@@ -30,6 +30,10 @@ public class AiTaskLog {
     private String postId;
     private String commentId;
     private String errorMessage;
+    /** 本次任务实际使用的模型配置（V9）；配置被删除后置空，历史日志仍保留 {@code model} 快照 */
+    private String modelConfigId;
+    /** 模型 ID 快照（V9），来自 {@code ai_model_configs.model} */
+    private String model;
     private LocalDateTime startedAt;
     private LocalDateTime finishedAt;
     private LocalDateTime createdAt;

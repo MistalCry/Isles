@@ -50,7 +50,10 @@ public final class SettingDefinitions {
             number("content.report.autoHideThreshold", SettingGroup.CONTENT, "举报自动隐藏阈值", "5", false,
                     "同一内容累计被举报达到该数量后自动隐藏，0 表示不自动处理", 0, 100),
             bool("content.sensitiveWord.enabled", SettingGroup.CONTENT, "敏感词扫描", "true", false,
-                    "开启后发帖/评论会记录命中词（REVIEW 模式，不阻断发布）"),
+                    "开启后发帖/评论会按下方「敏感词处理方式」处理命中词"),
+            option("content.sensitiveWord.mode", SettingGroup.CONTENT, "敏感词处理方式", "REVIEW", false,
+                    "REVIEW=只记录命中不阻断；MASK=命中词替换为 *** 后入库；BLOCK=直接拒绝发布（422）",
+                    List.of("REVIEW", "MASK", "BLOCK")),
 
             // ---- 互动与发现 ----
             number("interaction.feed.pageSize", SettingGroup.INTERACTION, "动态流每页条数", "20", false,
@@ -126,6 +129,15 @@ public final class SettingDefinitions {
                                             boolean publicVisible, String description, int min, int max) {
         return new SettingDefinition(key, group.key(), label, SettingType.INT, defaultValue, publicVisible,
                 description, min, max, List.of());
+    }
+
+    /**
+     * 枚举型文本配置：{@code type=STRING} + {@code allowedValues} 白名单，后台渲染为下拉框。
+     */
+    private static SettingDefinition option(String key, SettingGroup group, String label, String defaultValue,
+                                            boolean publicVisible, String description, List<String> allowedValues) {
+        return new SettingDefinition(key, group.key(), label, SettingType.STRING, defaultValue, publicVisible,
+                description, null, null, allowedValues);
     }
 
     private static SettingDefinition bool(String key, SettingGroup group, String label, String defaultValue,

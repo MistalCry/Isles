@@ -39,6 +39,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class NotificationService {
 
+    /** 群发单批用户数：500 行一条 INSERT，兼顾往返次数与 SQL 长度。 */
+    private static final int BROADCAST_BATCH_SIZE = 500;
+
     private final NotificationMapper notificationMapper;
     private final UserMapper userMapper;
     private final JsonSupport jsonSupport;
@@ -71,6 +74,52 @@ public class NotificationService {
         putIfPresent(merged, "commentId", commentId);
         doNotify(userId, type, Notification.Category.SYSTEM.name(), channelId, postId, commentId, null,
                 title, content, merged);
+    }
+
+    /**
+     * 站内信群发：给全站活跃用户各写一条系统通知（公告发布等场景）。
+     *
+     * <p>实现要点（docs/11 §5.5）：
+     * <ul>
+     *   <li>按 id 游标分批取用户（每批 {@link #BROADCAST_BATCH_SIZE}），避免 OFFSET 深分页；</li>
+     *   <li>每批一条多行 INSERT，十万用户也只有约 200 次往返，不会一次拼出超长 SQL；</li>
+     *   <li>不做逐用户 WebSocket 推送（十万条实时事件会打爆推送通道），客户端下次拉取列表即可见。</li>
+     * </ul>
+     *
+     * @return 实际写入的通知条数
+     */
+    public int broadcastSystem(Notification.Type type, String title, String content, Map<String, Object> payload) {
+        String payloadJson = payload == null || payload.isEmpty() ? null : jsonSupport.toJson(payload);
+        String afterId = null;
+        int total = 0;
+        while (true) {
+            List<String> userIds = userMapper.selectActiveIdsAfter(afterId, BROADCAST_BATCH_SIZE);
+            if (userIds.isEmpty()) {
+                break;
+            }
+            LocalDateTime now = ClockTimes.nowUtc();
+            List<Notification> batch = new java.util.ArrayList<>(userIds.size());
+            for (String userId : userIds) {
+                Notification notification = new Notification();
+                notification.setId(UlidGenerator.generate());
+                notification.setUserId(userId);
+                notification.setType(type.name());
+                notification.setCategory(Notification.Category.SYSTEM.name());
+                notification.setTitle(title);
+                notification.setContent(content);
+                notification.setPayload(payloadJson);
+                notification.setIsRead(false);
+                notification.setCreatedAt(now);
+                batch.add(notification);
+            }
+            notificationMapper.insertBatch(batch);
+            total += batch.size();
+            afterId = userIds.get(userIds.size() - 1);
+            if (userIds.size() < BROADCAST_BATCH_SIZE) {
+                break;
+            }
+        }
+        return total;
     }
 
     private void doNotify(String userId, Notification.Type type, String category, String channelId, String postId,

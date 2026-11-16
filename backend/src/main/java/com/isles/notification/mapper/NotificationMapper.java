@@ -3,6 +3,7 @@ package com.isles.notification.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.isles.notification.entity.Notification;
 import com.isles.notification.mapper.row.UnreadCategoryRow;
+import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -15,6 +16,25 @@ import java.util.List;
  */
 @Mapper
 public interface NotificationMapper extends BaseMapper<Notification> {
+
+    /**
+     * 批量插入（站内信群发）：一条多行 INSERT，单批 ≤ 500 行，避免逐行往返与超长 SQL。
+     */
+    @Insert("""
+            <script>
+            INSERT INTO notifications
+              (id, user_id, type, category, channel_id, post_id, comment_id, actor_id, title, content,
+               payload, is_read, created_at)
+            VALUES
+            <foreach item="item" collection="items" separator=",">
+              (#{item.id}, #{item.userId}, #{item.type}, #{item.category}, #{item.channelId}, #{item.postId},
+               #{item.commentId}, #{item.actorId}, #{item.title}, #{item.content}, #{item.payload},
+               #{item.isRead}, #{item.createdAt})
+            </foreach>
+            </script>
+            """)
+    int insertBatch(@Param("items") List<Notification> items);
+
 
     /**
      * 通知列表（游标分页，可按频道 / 类型 / 分类 / 未读筛选）。

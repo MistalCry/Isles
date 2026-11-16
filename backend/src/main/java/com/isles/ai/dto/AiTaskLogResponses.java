@@ -30,6 +30,8 @@ public final class AiTaskLogResponses {
                 taskLog.getErrorMessage(),
                 ClockTimes.toInstant(taskLog.getStartedAt()),
                 ClockTimes.toInstant(taskLog.getFinishedAt()),
-                ClockTimes.toInstant(taskLog.getCreatedAt()));
+                ClockTimes.toInstant(taskLog.getCreatedAt()),
+                taskLog.getModelConfigId(),
+                taskLog.getModel());
     }
 }

@@ -59,7 +59,7 @@ public class AiChatService {
     private static final String EVENT_REASONING = "reasoning";
     private static final String EVENT_DONE = "done";
     private static final String EVENT_ERROR = "error";
-    /** 工具调用后下发「真实来源」：覆盖 meta 里的关键词兜底引用 */
+    /** 来源引用事件：每次回答都会下发（0 命中发空数组），前端以此为准 */
     private static final String EVENT_SOURCES = "sources";
     private static final int FALLBACK_SOURCE_LIMIT = 4;
     private static final int ESTIMATED_CHARS_PER_TOKEN = 4;
@@ -289,10 +289,10 @@ public class AiChatService {
             List<AiResponses.SourceResponse> sources = loopResult.hits().isEmpty()
                     ? effectiveSources
                     : contextService.toSources(loopResult.hits());
-            if (task.toolMode()) {
-                sendEventQuietly(emitter, EVENT_SOURCES,
-                        new AiResponses.StreamSources(sources, loopResult.toolRounds()));
-            }
+            // 无条件下发：前端以本事件为「引用可展示」的唯一信号（0 命中也要发空数组），
+            // 非工具模式同样发（sources 即关键词检索结果），避免前端一直等不到事件。
+            sendEventQuietly(emitter, EVENT_SOURCES,
+                    new AiResponses.StreamSources(sources, loopResult.toolRounds()));
             int tokenIn = estimateTokens(task.prompt().messages());
             int tokenOut = estimateTokens(content.toString());
             conversationService.finishAssistantMessage(task.messageId(), content.toString(), reasoning.toString(),

@@ -6,6 +6,7 @@ import com.isles.channel.entity.Channel;
 import com.isles.channel.mapper.BoardMapper;
 import com.isles.channel.mapper.ChannelMapper;
 import com.isles.channel.service.ChannelAccessService;
+import com.isles.common.dto.MediaItem;
 import com.isles.common.error.AppException;
 import com.isles.common.error.ErrorCode;
 import com.isles.common.id.UlidGenerator;
@@ -15,7 +16,9 @@ import com.isles.common.security.HtmlSanitizer;
 import com.isles.common.time.ClockTimes;
 import com.isles.post.dto.PostResponse;
 import com.isles.post.entity.Post;
+import com.isles.post.entity.PostMedia;
 import com.isles.post.mapper.PostMapper;
+import com.isles.post.mapper.PostMediaMapper;
 import com.isles.post.service.PostService;
 import com.isles.search.dto.HotKeywordResponse;
 import com.isles.search.dto.SearchHistoryResponse;
@@ -34,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -68,6 +72,7 @@ public class SearchService {
 
     private final ChannelMapper channelMapper;
     private final PostMapper postMapper;
+    private final PostMediaMapper postMediaMapper;
     private final UserMapper userMapper;
     private final BoardMapper boardMapper;
     private final SearchHistoryMapper searchHistoryMapper;
@@ -98,7 +103,7 @@ public class SearchService {
             }
             case "post" -> {
                 PostPage postPage = searchPosts(pattern, sortValue, cursor, pageSize);
-                items = postPage.items().stream().map(this::toSearchItem).toList();
+                items = toPostItems(postPage.items());
                 nextCursor = postPage.nextCursor();
             }
             case "all" -> {
@@ -108,7 +113,7 @@ public class SearchService {
                 List<Post> posts = postMapper.searchVisiblePosts(pattern, cursorId, pageSize + 1);
                 List<SearchItemResponse> merged = new ArrayList<>(channels.size() + posts.size());
                 channels.forEach(channel -> merged.add(toChannelItem(channel)));
-                posts.forEach(post -> merged.add(toSearchItem(post)));
+                merged.addAll(toPostItems(posts));
                 merged.sort(Comparator.comparing(SearchItemResponse::id).reversed());
                 boolean hasMore = merged.size() > pageSize;
                 items = hasMore ? merged.subList(0, pageSize) : merged;
@@ -315,24 +320,61 @@ public class SearchService {
                 "CHANNEL", channel.getId(), channel.getName(), channel.getDescription(),
                 channel.getId(), channel.getName(), channel.getAvatarUrl(), channel.getAvatarUrl(),
                 channel.getMemberCount(), null, null, null, null, null, null, null, null,
-                ClockTimes.toInstant(channel.getCreatedAt()));
+                ClockTimes.toInstant(channel.getCreatedAt()),
+                // 频道没有帖子封面语义：用频道封面/头像给前端做背景图
+                channel.getCoverUrl(), List.of());
     }
 
-    private SearchItemResponse toSearchItem(Post post) {
-        List<Post> single = List.of(post);
-        Map<String, Channel> channels = loadChannels(single);
-        Map<String, User> authors = loadAuthors(single);
-        Map<String, Board> boards = loadBoards(single);
-        return toPostItem(post, channels.get(post.getChannelId()), authors.get(post.getAuthorId()),
-                boards.get(post.getBoardId()));
+    /**
+     * 批量组装帖子搜索结果：频道/作者/板块/首图各查一次，避免逐帖查询（N+1）。
+     */
+    private List<SearchItemResponse> toPostItems(List<Post> posts) {
+        if (posts == null || posts.isEmpty()) {
+            return List.of();
+        }
+        SearchContext context = loadContext(posts);
+        List<SearchItemResponse> items = new ArrayList<>(posts.size());
+        for (Post post : posts) {
+            items.add(toPostItem(post, context));
+        }
+        return items;
     }
 
-    private SearchItemResponse toPostItem(Post post, Channel channel, User author, Board board) {
+    private SearchContext loadContext(List<Post> posts) {
+        Map<String, PostMedia> firstMedia = loadFirstMedia(posts);
+        return new SearchContext(loadChannels(posts), loadAuthors(posts), loadBoards(posts), firstMedia);
+    }
+
+    /**
+     * 每个帖子的首图（post_media 中 sort 最小的一张）：一次 IN 查询后按 postId 取第一条。
+     */
+    private Map<String, PostMedia> loadFirstMedia(List<Post> posts) {
+        List<String> postIds = posts.stream().map(Post::getId).filter(id -> id != null).distinct().toList();
+        if (postIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, PostMedia> first = new HashMap<>();
+        for (PostMedia media : postMediaMapper.selectByPostIds(postIds)) {
+            // 已按 sort 升序返回，首次出现的即为该帖首图
+            first.putIfAbsent(media.getPostId(), media);
+        }
+        return first;
+    }
+
+    private SearchItemResponse toPostItem(Post post, SearchContext context) {
+        Channel channel = context.channels().get(post.getChannelId());
+        User author = context.authors().get(post.getAuthorId());
+        Board board = context.boards().get(post.getBoardId());
+        PostMedia firstMedia = context.firstMedia().get(post.getId());
         String plain = HtmlSanitizer.toPlainText(post.getContent());
         String summary = plain == null ? "" : truncate(plain, SUMMARY_LENGTH);
         String title = post.getTitle() == null || post.getTitle().isBlank()
                 ? truncate(summary, 60)
                 : post.getTitle();
+        List<MediaItem> media = firstMedia == null
+                ? List.of()
+                : List.of(new MediaItem(firstMedia.getMediaType(), firstMedia.getUrl(), firstMedia.getThumbUrl(),
+                        firstMedia.getWidth(), firstMedia.getHeight(), firstMedia.getDurationMs()));
         return new SearchItemResponse(
                 "POST", post.getId(), title, summary,
                 post.getChannelId(), channel == null ? null : channel.getName(),
@@ -342,7 +384,15 @@ public class SearchService {
                 author == null ? null : author.getNickname(),
                 author == null ? null : author.getAvatarUrl(),
                 post.getBoardId(), board == null ? null : board.getName(),
-                ClockTimes.toInstant(post.getCreatedAt()));
+                ClockTimes.toInstant(post.getCreatedAt()),
+                post.getCoverUrl(), media);
+    }
+
+    /** 搜索结果一次查询出来的关联数据。 */
+    private record SearchContext(Map<String, Channel> channels,
+                                 Map<String, User> authors,
+                                 Map<String, Board> boards,
+                                 Map<String, PostMedia> firstMedia) {
     }
 
     private String requireKeyword(String q) {

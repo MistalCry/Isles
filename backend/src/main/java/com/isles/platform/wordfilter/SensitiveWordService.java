@@ -21,12 +21,21 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 敏感词服务（docs/11 §5.5）：词库管理 + 内容命中记录。
  *
- * <p>匹配策略：词库启用项全量缓存（60 秒），逐词包含匹配，忽略大小写；命中只记录不阻断（REVIEW），
- * 避免误杀。命中记录写入失败不影响内容发布（记录 WARN 后继续）。
+ * <p>匹配策略：词库启用项全量缓存（60 秒），逐词包含匹配，忽略大小写。
+ *
+ * <p>处理方式由配置项 {@code content.sensitiveWord.mode} 决定（docs/11 §5.5）：
+ * <ul>
+ *   <li>{@code REVIEW}（默认）：只记录命中，内容照常发布，避免误杀；</li>
+ *   <li>{@code MASK}：把命中词替换为 {@code ***} 后入库（富文本只替换文本节点，不动标签属性）；</li>
+ *   <li>{@code BLOCK}：直接拒绝发布（422 {@code SENSITIVE_WORD_BLOCKED}），返回命中提示。</li>
+ * </ul>
+ * 命中记录写入失败不影响内容发布（记录 WARN 后继续）；BLOCK 的拒绝不受此保护。
  */
 @Service
 @RequiredArgsConstructor
@@ -38,6 +47,16 @@ public class SensitiveWordService {
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_IMPORT_WORDS = 500;
     private static final String SETTING_ENABLED = "content.sensitiveWord.enabled";
+    private static final String SETTING_MODE = "content.sensitiveWord.mode";
+
+    /** 处理方式（与配置项白名单一致）。 */
+    public static final String MODE_REVIEW = "REVIEW";
+    public static final String MODE_MASK = "MASK";
+    public static final String MODE_BLOCK = "BLOCK";
+
+    private static final String MASK_REPLACEMENT = "***";
+    /** 拒绝提示里最多列出的命中词数量，避免把整个词库回显给用户。 */
+    private static final int MAX_WORDS_IN_MESSAGE = 3;
 
     private final SensitiveWordMapper wordMapper;
     private final SensitiveWordHitMapper hitMapper;
@@ -50,6 +69,24 @@ public class SensitiveWordService {
     }
 
     private record Match(String wordId, String word, String action) {
+    }
+
+    /** 一次命中的词（对外暴露给内容服务，用于落库记录）。 */
+    public record Hit(String wordId, String word) {
+    }
+
+    /**
+     * 检查结果。
+     *
+     * @param text 应当入库的正文（MASK 模式已打码；其余模式与入参一致）
+     * @param hits 命中的词（为空表示未命中或扫描关闭）
+     * @param mode 本次使用的处理方式
+     */
+    public record Inspection(String text, List<Hit> hits, String mode) {
+
+        public boolean hasHits() {
+            return !hits.isEmpty();
+        }
     }
 
     // ------------------------------------------------------------------
@@ -193,37 +230,62 @@ public class SensitiveWordService {
     }
 
     /**
-     * 内容发布后的扫描与记录（REVIEW 模式）：任何异常都不影响发布流程。
+     * 内容发布前的检查：按当前模式返回「要入库的文本」与命中词。
      *
-     * @param scene    POST / COMMENT
-     * @param targetId 帖子或评论 ID
-     * @param text     正文；{@code html=true} 时先抽取纯文本
+     * <p>BLOCK 模式直接抛 {@link ErrorCode#SENSITIVE_WORD_BLOCKED}；其余异常一律降级为「原文放行」，
+     * 保证词库/配置异常不会阻断用户发帖。
+     *
+     * @param text 正文（富文本传净化后的 HTML）
+     * @param html 是否按 HTML 处理（匹配取纯文本，MASK 只替换文本节点）
      */
-    public void scanAndRecord(String scene, String targetId, String userId, String text, boolean html) {
+    public Inspection inspect(String text, boolean html) {
         try {
             if (!settingService.getBoolean(SETTING_ENABLED)) {
-                return;
+                return new Inspection(text, List.of(), MODE_REVIEW);
             }
+            String mode = currentMode();
             String plain = html ? Jsoup.parse(text == null ? "" : text).text() : text;
             List<Match> matches = match(plain);
             if (matches.isEmpty()) {
-                return;
+                return new Inspection(text, List.of(), mode);
             }
-            for (Match match : matches) {
-                SensitiveWordHit hit = new SensitiveWordHit();
-                hit.setId(UlidGenerator.generate());
-                hit.setWordId(match.wordId());
-                hit.setWord(match.word());
-                hit.setScene(scene);
-                hit.setTargetId(targetId);
-                hit.setUserId(userId);
-                hit.setAction(match.action());
-                hit.setCreatedAt(ClockTimes.nowUtc());
-                hitMapper.insert(hit);
+            if (MODE_BLOCK.equals(mode)) {
+                throw blocked(matches);
             }
-            log.info("敏感词命中 scene={} targetId={} count={}", scene, targetId, matches.size());
+            String result = MODE_MASK.equals(mode) ? mask(text, html, matches) : text;
+            return new Inspection(result, toHits(matches), mode);
+        } catch (AppException ex) {
+            throw ex;
         } catch (RuntimeException ex) {
-            log.warn("敏感词扫描失败 scene={} targetId={}", scene, targetId, ex);
+            log.warn("敏感词检查失败，按原文放行", ex);
+            return new Inspection(text, List.of(), MODE_REVIEW);
+        }
+    }
+
+    /**
+     * 内容落库后记录命中（{@code action} 记录本次实际处理方式，便于运营核对）。
+     */
+    public void recordHits(String scene, String targetId, String userId, Inspection inspection) {
+        if (inspection == null || inspection.hits().isEmpty()) {
+            return;
+        }
+        try {
+            for (Hit hit : inspection.hits()) {
+                SensitiveWordHit entity = new SensitiveWordHit();
+                entity.setId(UlidGenerator.generate());
+                entity.setWordId(hit.wordId());
+                entity.setWord(hit.word());
+                entity.setScene(scene);
+                entity.setTargetId(targetId);
+                entity.setUserId(userId);
+                entity.setAction(inspection.mode());
+                entity.setCreatedAt(ClockTimes.nowUtc());
+                hitMapper.insert(entity);
+            }
+            log.info("敏感词命中 scene={} targetId={} count={} mode={}", scene, targetId,
+                    inspection.hits().size(), inspection.mode());
+        } catch (RuntimeException ex) {
+            log.warn("敏感词命中记录失败 scene={} targetId={}", scene, targetId, ex);
         }
     }
 
@@ -246,6 +308,64 @@ public class SensitiveWordService {
             }
         }
         return matches;
+    }
+
+    private String currentMode() {
+        String mode = settingService.getString(SETTING_MODE);
+        if (MODE_MASK.equals(mode) || MODE_BLOCK.equals(mode)) {
+            return mode;
+        }
+        return MODE_REVIEW;
+    }
+
+    /**
+     * 打码：富文本只替换文本节点，避免误改 {@code href}/{@code class} 等属性。
+     */
+    private String mask(String text, boolean html, List<Match> matches) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        if (!html) {
+            return maskPlain(text, matches);
+        }
+        org.jsoup.nodes.Document document = Jsoup.parse(text);
+        org.jsoup.nodes.Element body = document.body();
+        for (org.jsoup.nodes.Element element : body.getAllElements()) {
+            for (org.jsoup.nodes.Node child : new ArrayList<>(element.childNodes())) {
+                if (child instanceof org.jsoup.nodes.TextNode textNode) {
+                    String original = textNode.getWholeText();
+                    String masked = maskPlain(original, matches);
+                    if (!masked.equals(original)) {
+                        textNode.text(masked);
+                    }
+                }
+            }
+        }
+        return body.html();
+    }
+
+    private String maskPlain(String text, List<Match> matches) {
+        String result = text;
+        for (Match match : matches) {
+            result = Pattern.compile(Pattern.quote(match.word()), Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE)
+                    .matcher(result)
+                    .replaceAll(Matcher.quoteReplacement(MASK_REPLACEMENT));
+        }
+        return result;
+    }
+
+    private AppException blocked(List<Match> matches) {
+        List<String> words = matches.stream().map(Match::word).limit(MAX_WORDS_IN_MESSAGE).toList();
+        return new AppException(ErrorCode.SENSITIVE_WORD_BLOCKED,
+                "内容包含敏感词：" + String.join("、", words) + "，请修改后重试");
+    }
+
+    private List<Hit> toHits(List<Match> matches) {
+        List<Hit> hits = new ArrayList<>(matches.size());
+        for (Match match : matches) {
+            hits.add(new Hit(match.wordId(), match.word()));
+        }
+        return List.copyOf(hits);
     }
 
     private List<SensitiveWord> enabledWords() {

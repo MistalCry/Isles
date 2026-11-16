@@ -185,6 +185,11 @@ public class AiTaskService {
         taskLog.setStatus(AiTaskLog.Status.RUNNING.name());
         taskLog.setStartedAt(now);
         taskLog.setCreatedAt(now);
+        // 记录本次实际使用的模型：频道指定或回落平台默认都记，未配置模型时为 null
+        if (model != null) {
+            taskLog.setModelConfigId(model.getId());
+            taskLog.setModel(model.getModel());
+        }
         try {
             taskLogMapper.insert(taskLog);
         } catch (DuplicateKeyException ex) {

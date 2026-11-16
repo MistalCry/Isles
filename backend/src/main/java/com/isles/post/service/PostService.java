@@ -36,6 +36,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -58,11 +59,17 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class PostService {
 
+    /** 浏览量去重窗口：同一会话 30 分钟内重复访问只计一次。 */
+    private static final Duration VIEW_DEDUPE_WINDOW = Duration.ofMinutes(30);
+
     private static final String TAB_LATEST = "latest";
     private static final String TAB_HOT = "hot";
     private static final String TAB_ESSENCE = "essence";
     /** 置顶帖上限：与前端置顶区展示条数一致（docs/03 FR-POST-05）。 */
     private static final int MAX_PINNED = 20;
+
+    /** 进程内浏览去重（多实例场景见类注释：各实例独立计数）。 */
+    private final PostViewDeduper viewDeduper = new PostViewDeduper(VIEW_DEDUPE_WINDOW);
 
     private final PostMapper postMapper;
     private final PostMediaMapper postMediaMapper;
@@ -103,6 +110,10 @@ public class PostService {
         if (content == null || content.isBlank()) {
             throw new AppException(ErrorCode.VALIDATION_ERROR, "正文不能为空");
         }
+        // 敏感词：按配置模式处理（REVIEW 只记录 / MASK 打码后入库 / BLOCK 直接 422）
+        com.isles.platform.wordfilter.SensitiveWordService.Inspection inspection = sensitiveWordService.inspect(content,
+                Post.ContentFormat.HTML.name().equals(contentFormat));
+        content = inspection.text();
         List<MediaItem> media = MediaPayloads.normalize(request.media());
         if (request.title() != null && request.title().length() > 200) {
             throw new AppException(ErrorCode.VALIDATION_ERROR, "标题最长 200 个字符");
@@ -151,9 +162,8 @@ public class PostService {
                 Map.of("boardId", board.getId()));
         // @提及：通知被提及的成员；提及频道助手会触发助手回复
         mentionService.notifyMentions(channelId, post.getId(), null, content, userId);
-        // 敏感词：REVIEW 模式只记录命中，不阻断发布（docs/11 §5.5）
-        sensitiveWordService.scanAndRecord("POST", post.getId(), userId, content,
-                Post.ContentFormat.HTML.name().equals(contentFormat));
+        // 敏感词命中记录（内容已按模式处理：打码或已放行）
+        sensitiveWordService.recordHits("POST", post.getId(), userId, inspection);
         return toResponses(List.of(post), userId).get(0);
     }
 
@@ -303,7 +313,14 @@ public class PostService {
     }
 
     /**
-     * 帖子详情：按频道可见性校验，浏览量 +1。
+     * 帖子详情：按频道可见性校验，浏览量按「有效浏览」计数。
+     *
+     * <p>计数规则（docs/03 FR-POST-05、docs/11 §5.4）：
+     * <ul>
+     *   <li>作者本人查看不计（避免自己刷自己）；</li>
+     *   <li>同一会话 30 分钟内重复访问同一帖子只计一次（F5/来回点不叠加）；</li>
+     *   <li>匿名访问用「IP + UA」作为会话标识（无请求上下文时不参与去重）。</li>
+     * </ul>
      */
     @Transactional
     public PostResponse getPostDetail(String postId, String viewerId) {
@@ -313,12 +330,45 @@ public class PostService {
         } catch (AppException ex) {
             throw new AppException(ErrorCode.POST_NOT_FOUND);
         }
-        interactionService.incrementViewCount(postId);
-        post.setViewCount(post.getViewCount() + 1);
-        if (viewerId != null) {
-            channelViewService.recordView(post.getChannelId(), postId, viewerId);
+        boolean selfView = viewerId != null && viewerId.equals(post.getAuthorId());
+        String viewKey = selfView ? null : viewKey(postId, viewerId);
+        if (!selfView && viewDeduper.shouldCount(viewKey, System.currentTimeMillis())) {
+            interactionService.incrementViewCount(postId);
+            post.setViewCount(post.getViewCount() + 1);
+            if (viewerId != null) {
+                channelViewService.recordView(post.getChannelId(), postId, viewerId);
+            }
         }
         return toResponses(List.of(post), viewerId).get(0);
+    }
+
+    /**
+     * 浏览去重键：登录用户按 userId，匿名按 IP + UA（拿不到请求上下文时返回 null → 不做去重）。
+     */
+    private String viewKey(String postId, String viewerId) {
+        if (viewerId != null) {
+            return postId + "|u:" + viewerId;
+        }
+        String fingerprint = clientFingerprint();
+        return fingerprint == null ? null : postId + "|a:" + fingerprint;
+    }
+
+    private String clientFingerprint() {
+        try {
+            var attributes = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+            if (attributes instanceof org.springframework.web.context.request.ServletRequestAttributes servlet) {
+                var request = servlet.getRequest();
+                String ip = request.getRemoteAddr();
+                if (ip == null || ip.isBlank()) {
+                    return null;
+                }
+                String userAgent = request.getHeader("User-Agent");
+                return ip + "|" + (userAgent == null ? "" : Integer.toHexString(userAgent.hashCode()));
+            }
+        } catch (RuntimeException ex) {
+            // 非 Web 线程（定时任务/测试）
+        }
+        return null;
     }
 
     /**

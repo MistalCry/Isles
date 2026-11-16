@@ -2,6 +2,8 @@ package com.isles.platform.announcement;
 
 import com.isles.common.error.AppException;
 import com.isles.common.error.ErrorCode;
+import com.isles.notification.entity.Notification;
+import com.isles.notification.service.NotificationService;
 import com.isles.platform.audit.PlatformAuditService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,13 +27,15 @@ class AnnouncementServiceTest {
 
     private AnnouncementMapper announcementMapper;
     private PlatformAuditService auditService;
+    private NotificationService notificationService;
     private AnnouncementService service;
 
     @BeforeEach
     void setUp() {
         announcementMapper = mock(AnnouncementMapper.class);
         auditService = mock(PlatformAuditService.class);
-        service = new AnnouncementService(announcementMapper, auditService);
+        notificationService = mock(NotificationService.class);
+        service = new AnnouncementService(announcementMapper, auditService, notificationService);
     }
 
     @Test
@@ -107,6 +111,42 @@ class AnnouncementServiceTest {
                 .isInstanceOf(AppException.class)
                 .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
                         .isEqualTo(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
+    }
+
+
+    @Test
+    void should_broadcast_inbox_notification_when_placement_is_inbox() {
+        Announcement draft = announcement("DRAFT", null);
+        draft.setPlacement("INBOX");
+        when(announcementMapper.selectById("ann-1")).thenReturn(draft);
+        when(notificationService.broadcastSystem(any(), any(), any(), any())).thenReturn(3);
+
+        service.publish("ann-1", "admin-1");
+
+        verify(notificationService).broadcastSystem(eq(Notification.Type.SYSTEM), eq("标题"), eq("内容"), any());
+    }
+
+    @Test
+    void should_not_broadcast_when_placement_is_banner() {
+        when(announcementMapper.selectById("ann-1")).thenReturn(announcement("DRAFT", null));
+
+        service.publish("ann-1", "admin-1");
+
+        verify(notificationService, never()).broadcastSystem(any(), any(), any(), any());
+    }
+
+    @Test
+    void should_keep_publish_when_broadcast_fails() {
+        Announcement draft = announcement("DRAFT", null);
+        draft.setPlacement("INBOX");
+        when(announcementMapper.selectById("ann-1")).thenReturn(draft);
+        when(notificationService.broadcastSystem(any(), any(), any(), any()))
+                .thenThrow(new IllegalStateException("db down"));
+
+        AnnouncementDtos.AnnouncementView view = service.publish("ann-1", "admin-1");
+
+        // 通知失败不影响公告生效
+        assertThat(view.status()).isEqualTo("PUBLISHED");
     }
 
     private Announcement announcement(String status, LocalDateTime startAt) {

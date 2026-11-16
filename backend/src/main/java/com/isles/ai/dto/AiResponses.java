@@ -146,7 +146,9 @@ public final class AiResponses {
             String errorMessage,
             Instant startedAt,
             Instant finishedAt,
-            Instant createdAt) {
+            Instant createdAt,
+            String modelConfigId,
+            String model) {
     }
 
     public record TaskLogPage(List<TaskLogResponse> items, long total, int page, int size) {
@@ -162,9 +164,10 @@ public final class AiResponses {
     }
 
     /**
-     * SSE sources 事件：工具调用完成后下发的真实来源引用（覆盖 meta 里的兜底引用）。
+     * SSE sources 事件：回答的最终来源引用（每次回答都会下发，0 命中时为 {@code []}）。
      *
-     * <p>{@code toolRounds} 为实际执行的工具轮次，0 表示模型未调用工具（此时 sources 与 meta 相同）。
+     * <p>前端应以此事件为「引用可展示」的唯一信号；{@code meta.sources} 只是提前给的兜底值。
+     * {@code toolRounds} 为实际执行的工具轮次，0 表示模型未调用工具（此时 sources 即关键词检索结果）。
      */
     public record StreamSources(List<SourceResponse> sources, int toolRounds) {
     }

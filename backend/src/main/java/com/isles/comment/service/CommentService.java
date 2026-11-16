@@ -132,6 +132,9 @@ public class CommentService {
             }
         }
         String replyToUserId = normalizeReplyToUserId(request.replyToUserId());
+        // 敏感词：按配置模式处理（REVIEW 只记录 / MASK 打码后入库 / BLOCK 直接 422）
+        com.isles.platform.wordfilter.SensitiveWordService.Inspection inspection = sensitiveWordService.inspect(content, false);
+        content = inspection.text();
 
         LocalDateTime now = ClockTimes.nowUtc();
         Comment comment = new Comment();
@@ -154,8 +157,8 @@ public class CommentService {
         notifyComment(post, parent, comment, userId);
         // @提及：通知被提及的成员；提及频道助手会触发助手回复
         mentionService.notifyMentions(post.getChannelId(), postId, comment.getId(), content, userId);
-        // 敏感词：REVIEW 模式只记录命中，不阻断评论（docs/11 §5.5）
-        sensitiveWordService.scanAndRecord("COMMENT", comment.getId(), userId, content, false);
+        // 敏感词命中记录（内容已按模式处理：打码或已放行）
+        sensitiveWordService.recordHits("COMMENT", comment.getId(), userId, inspection);
         if (parent != null) {
             // 事务提交后由 AI 模块判断是否需要「助手接话」（CommentService 不直接依赖 AI 模块）
             eventPublisher.publishEvent(new com.isles.comment.event.CommentRepliedEvent(
