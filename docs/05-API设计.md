@@ -56,10 +56,13 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 | 403 | `FORBIDDEN` / `CHANNEL_MUTED` / `NOT_JOINED` / `BLOCKED` | 无权限、禁言、未加入、拉黑 |
 | 404 | `CHANNEL_NOT_FOUND` / `POST_NOT_FOUND` / `CONVERSATION_NOT_FOUND` | 不存在或不可见 |
 | 409 | `USERNAME_TAKEN` / `ALREADY_JOINED` / `REPORT_ALREADY_EXISTS` | 冲突 |
+| 409 | `VOICE_ROOM_CLOSED` / `VOICE_SEAT_OCCUPIED` / `VOICE_ROOM_ALREADY_OPEN` | 语音房已关、抢座失败、同频道重复开房 |
 | 413 | `MEDIA_TOO_LARGE` | 上传超限 |
 | 422 | `BUSINESS_RULE_VIOLATION` / `OWNER_CANNOT_LEAVE` | 业务规则不满足 |
 | 422 | `REPORT_TARGET_INVALID` | 举报目标不存在或不可见（帖子/评论已删除、频道不可见、目标类型不匹配） |
 | 422 | `SENSITIVE_WORD_BLOCKED` | 内容命中敏感词且平台处理方式为 `BLOCK`（`details` 不返回词库，提示里最多列 3 个命中词） |
+| 422 | `VOICE_SEAT_INVALID` / `CHANNEL_APP_LIMIT_EXCEEDED` | 麦位越界、频道应用数量超上限 |
+| 422 | `ACTIVITY_NOT_PUBLISHED` / `ACTIVITY_FULL` / `ACTIVITY_ENDED` | 活动未发布、报名已满、活动已开始 |
 | 429 | `RATE_LIMITED` | 触发限流 |
 | 500 | `INTERNAL_ERROR` | 服务端异常 |
 
@@ -338,6 +341,57 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 > 举报状态已统一为 `PENDING` / `ACCEPTED` / `REJECTED`（与频道侧一致）；`available`/`dependency`
 > 字段保留为兼容字段，恒为 `true`/`null`。
 
+### 2.14 频道应用 / 语音房 / 频道活动（V10）
+
+**频道应用**（频道页入口卡片；读：频道可见，写：`channel.settings`）
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/channels/{id}/apps` | 应用列表（默认只返回启用项；`includeDisabled=true` 需管理权限） |
+| POST | `/channels/{id}/apps` | 新建（单频道最多 20 个） |
+| PUT | `/channels/{id}/apps/{appId}` | 编辑 |
+| DELETE | `/channels/{id}/apps/{appId}` | 删除 |
+| PUT | `/channels/{id}/apps/order` | 批量重排（body `{"appIds":[...]}`，按数组顺序写 0..n-1） |
+
+**语音房**（开房/上麦要求频道成员；状态变更广播 `/topic/voice/{roomId}/state`）
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/channels/{id}/voice-rooms` | 频道内开启中的房间 |
+| POST | `/channels/{id}/voice-rooms` | 开房（同一频道一人只能有一个开启中的房间） |
+| GET | `/voice-rooms/{roomId}` | 房间详情（含麦位） |
+| POST | `/voice-rooms/{roomId}/join` | 进房（听众不落库，断线即消失） |
+| POST | `/voice-rooms/{roomId}/seats` | 上麦（body `{"seatIndex":0}`；抢座冲突 409 `VOICE_SEAT_OCCUPIED`） |
+| DELETE | `/voice-rooms/{roomId}/seats/me` | 下麦 |
+| POST | `/voice-rooms/{roomId}/seats/{seatIndex}/mute` | 静音/取消（body `{"muted":true}`；房主可操作任何人，其他人只能操作自己） |
+| POST | `/voice-rooms/{roomId}/close` | 关房（房主或 `channel.settings`；清空麦位并广播 `ROOM_CLOSED`） |
+
+**STOMP 信令**（连接 `/ws`，CONNECT 帧带 JWT）
+
+| 方向 | 目的地 | 说明 |
+| --- | --- | --- |
+| 上行 | `/app/voice/{roomId}/signal` | WebRTC offer/answer/candidate 透传（服务端不解析 SDP） |
+| 下行 | `/topic/voice/{roomId}/signal` | `{roomId, from, data}`；仅转发给房间所在频道的成员 |
+| 下行 | `/topic/voice/{roomId}/state` | 状态事件：`ROOM_OPENED` / `SEAT_TAKEN` / `SEAT_LEFT` / `SEAT_MUTED` / `SEAT_UNMUTED` / `ROOM_CLOSED` / `SIGNAL_RELAY` |
+
+**频道活动**（浏览：频道可见；管理：`channel.settings`；报名：频道成员）
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/channels/{id}/activities` | 活动列表（`status`/`page`/`size`；非管理员强制只看 `PUBLISHED`） |
+| POST | `/channels/{id}/activities` | 新建（草稿） |
+| GET | `/activities/{activityId}` | 详情（含报名人数与本人是否已报名） |
+| PUT | `/activities/{activityId}` | 编辑（已取消不可编辑） |
+| DELETE | `/activities/{activityId}` | 删除（已发布需先取消） |
+| POST | `/activities/{activityId}/publish` | 发布 |
+| POST | `/activities/{activityId}/cancel` | 取消 |
+| POST | `/activities/{activityId}/signup` | 报名（幂等；满员 422 `ACTIVITY_FULL`） |
+| DELETE | `/activities/{activityId}/signup` | 取消报名 |
+| GET | `/activities/{activityId}/signups` | 报名名单（管理端） |
+
+> 活动开始前 **30 分钟**由定时任务（每 10 分钟扫描）给报名者发站内通知；
+> 幂等依赖 `channel_activities.reminder_sent_at`（先抢占再发送，多实例不会重复）。
+
 ### 2.13 健康检查
 
 | 方法 | 路径 | 说明 |
@@ -487,10 +541,16 @@ Retry-After: 37
 | `ReportResponse` | `id`、`reporterId`、`reporterNickname`、`channelId`、`targetType`、`targetId`、`targetPreview`、`reason`、`status`、`handleAction`、`handleNote`、`handledAt`、`createdAt` |
 | `AuditLogResponse` | `id`、`channelId`、`actorId`、`actorNickname`、`action`、`targetType`、`targetId`、`detail`、`ip`、`createdAt` |
 | `StatsOverviewResponse` | `channelId`、`memberCount`、`postCount`、`yesterday`、`memberDelta`、`postDelta` |
+| `AppView` | `id`、`channelId`、`appType`（`VOICE_ROOM`/`LIVE_ROOM`/`CUSTOM`）、`name`、`iconUrl`、`description`、`sortOrder`、`enabled`、`createdAt` |
+| `RoomView` | `id`、`channelId`、`appId`、`hostId`、`hostNickname`、`title`、`status`（`OPEN`/`CLOSED`）、`maxSeats`、`seats[]`（`seatIndex`/`userId`/`nickname`/`avatarUrl`/`muted`/`joinedAt`）、`createdAt`、`closedAt` |
+| `ActivityView` | `id`、`channelId`、`title`、`description`、`startAt`、`endAt`、`location`、`capacity`、`status`（`DRAFT`/`PUBLISHED`/`CANCELLED`）、`goingCount`、`signedUp`、`createdAt` |
 | `TaskLogResponse` | `id`、`channelId`、`taskType`、`frequencyKey`、`status`、`resultText`、`postId`、`commentId`、`errorMessage`、`startedAt`、`finishedAt`、`createdAt`、`modelConfigId`、`model`（后两个为本次任务实际使用的模型；未配置模型时为 `null`，配置被删除后 `modelConfigId` 为 `null` 但 `model` 保留快照） |
 | `SelectableModelResponse` | `id`、`name`、`model`、`visionEnabled`、`reasoningEnabled`、`isDefault`（频道可选模型，不含 Base URL/密钥） |
 | `AssistantSettingsResponse` | 原有字段 + `modelConfigId`（空=跟随平台默认）；`updatedAt` 之后追加，前端按字段名读取 |
 | `AssistantSettingsResponse` | `channelId`、`assistantUserId`、`nickname`、`avatarUrl`、`coverUrl`、`bio`、`persona`、`enabled`、六个任务开关、`dailySummaryHour`、三个每日频率 |
+| `AppView` | `id`、`channelId`、`appType`（`VOICE_ROOM`/`LIVE_ROOM`/`CUSTOM`）、`name`、`iconUrl`、`description`、`sortOrder`、`enabled`、`createdAt` |
+| `RoomView` | `id`、`channelId`、`appId`、`hostId`、`hostNickname`、`title`、`status`（`OPEN`/`CLOSED`）、`maxSeats`、`seats[]`（`seatIndex`/`userId`/`nickname`/`avatarUrl`/`muted`/`joinedAt`）、`createdAt`、`closedAt` |
+| `ActivityView` | `id`、`channelId`、`title`、`description`、`startAt`、`endAt`、`location`、`capacity`、`status`（`DRAFT`/`PUBLISHED`/`CANCELLED`）、`goingCount`、`signedUp`、`createdAt` |
 | `TaskLogResponse` | `id`、`channelId`、`taskType`、`frequencyKey`、`status`、`resultText`、`postId`、`commentId`、`errorMessage`、`startedAt`、`finishedAt`、`createdAt` |
 | `PageResult<T>` | `items`、`nextCursor` |
 | `OffsetPage<T>` | `items`、`total` |

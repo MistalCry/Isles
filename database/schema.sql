@@ -2,13 +2,14 @@
 -- 群岛（Isles）数据库结构（仅结构，不含任何数据）
 --
 -- 适用：MySQL 8.0+（utf8mb4 / utf8mb4_0900_ai_ci）
--- 生成：mysqldump --no-data（V1–V9 迁移全部应用后的结构）
--- 表数：39 张（不含 Flyway 的 flyway_schema_history）
+-- 生成：mysqldump --no-data（V1–V11 迁移全部应用后的结构）
+-- 表数：44 张（不含 Flyway 的 flyway_schema_history）
 --       V1–V4：核心/管理/AI/社交；V5：思考模式；V6：平台后台；V7：公告与敏感词；
---       V8：频道助手可选模型 + AI 工具调用开关；V9：任务日志记录模型（均只加列，不新增表）
+--       V8：频道助手可选模型 + 工具开关；V9：任务日志记录模型；
+--       V10：频道应用 / 语音房与麦位 / 频道活动与报名（+5 张表）；V11：AI 会话 scope 放宽
 --
 -- 两种初始化方式（二选一）：
---   A. 推荐：只建空库，启动后端由 Flyway 自动执行 V1–V9 迁移
+--   A. 推荐：只建空库，启动后端由 Flyway 自动执行 V1–V11 迁移
 --        CREATE DATABASE my_social_channel DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 --   B. 手工导入本文件（表已建好），启动后端时必须关闭 Flyway，否则会重复建表报错：
 --        CREATE DATABASE my_social_channel DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
@@ -36,6 +37,28 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
+-- Table structure for table `activity_signups`
+--
+
+DROP TABLE IF EXISTS `activity_signups`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `activity_signups` (
+  `id` char(26) NOT NULL COMMENT 'ULID',
+  `activity_id` char(26) NOT NULL,
+  `user_id` char(26) NOT NULL,
+  `status` varchar(16) NOT NULL DEFAULT 'GOING' COMMENT 'GOING / CANCELLED',
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_activity_signups_activity_user` (`activity_id`,`user_id`),
+  KEY `idx_activity_signups_activity_status` (`activity_id`,`status`),
+  KEY `idx_activity_signups_user` (`user_id`,`created_at`),
+  CONSTRAINT `fk_activity_signups_activity` FOREIGN KEY (`activity_id`) REFERENCES `channel_activities` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
+  CONSTRAINT `fk_activity_signups_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='活动报名';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `ai_conversations`
 --
 
@@ -45,7 +68,7 @@ DROP TABLE IF EXISTS `ai_conversations`;
 CREATE TABLE `ai_conversations` (
   `id` char(26) NOT NULL,
   `user_id` char(26) NOT NULL,
-  `scope` varchar(16) NOT NULL DEFAULT 'GLOBAL' COMMENT 'GLOBAL / CHANNEL',
+  `scope` varchar(32) NOT NULL DEFAULT 'GLOBAL' COMMENT 'GLOBAL / CHANNEL / CHANNEL_ASSISTANT',
   `channel_id` char(26) DEFAULT NULL COMMENT 'scope=CHANNEL 时的频道',
   `title` varchar(120) DEFAULT NULL,
   `model_config_id` char(26) DEFAULT NULL COMMENT '最近使用的模型配置',
@@ -223,6 +246,36 @@ CREATE TABLE `boards` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `channel_activities`
+--
+
+DROP TABLE IF EXISTS `channel_activities`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `channel_activities` (
+  `id` char(26) NOT NULL COMMENT 'ULID',
+  `channel_id` char(26) NOT NULL,
+  `title` varchar(100) NOT NULL,
+  `description` varchar(1000) DEFAULT NULL,
+  `start_at` datetime(3) NOT NULL,
+  `end_at` datetime(3) DEFAULT NULL,
+  `location` varchar(200) DEFAULT NULL,
+  `capacity` int DEFAULT NULL COMMENT '报名上限，空=不限',
+  `status` varchar(16) NOT NULL DEFAULT 'DRAFT' COMMENT 'DRAFT / PUBLISHED / CANCELLED',
+  `reminder_sent_at` datetime(3) DEFAULT NULL COMMENT '提醒发送时间（幂等标记）',
+  `created_by` char(26) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_channel_activities_channel_start` (`channel_id`,`status`,`start_at`),
+  KEY `idx_channel_activities_reminder` (`status`,`start_at`,`reminder_sent_at`),
+  KEY `fk_channel_activities_creator` (`created_by`),
+  CONSTRAINT `fk_channel_activities_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_channel_activities_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='频道活动';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `channel_ai_settings`
 --
 
@@ -261,6 +314,33 @@ CREATE TABLE `channel_ai_settings` (
   CONSTRAINT `fk_channel_ai_settings_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT `fk_channel_ai_settings_model_config` FOREIGN KEY (`model_config_id`) REFERENCES `ai_model_configs` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='频道助手设置';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `channel_apps`
+--
+
+DROP TABLE IF EXISTS `channel_apps`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `channel_apps` (
+  `id` char(26) NOT NULL COMMENT 'ULID',
+  `channel_id` char(26) NOT NULL,
+  `app_type` varchar(16) NOT NULL COMMENT 'VOICE_ROOM / LIVE_ROOM / CUSTOM',
+  `name` varchar(32) NOT NULL,
+  `icon_url` varchar(500) DEFAULT NULL,
+  `description` varchar(200) DEFAULT NULL,
+  `sort_order` int NOT NULL DEFAULT '0',
+  `enabled` tinyint(1) NOT NULL DEFAULT '1',
+  `created_by` char(26) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_channel_apps_channel_sort` (`channel_id`,`sort_order`,`id`),
+  KEY `fk_channel_apps_creator` (`created_by`),
+  CONSTRAINT `fk_channel_apps_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_channel_apps_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='频道应用入口';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1106,6 +1186,56 @@ CREATE TABLE `users` (
   KEY `idx_users_platform_role` (`platform_role`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户账号';
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `voice_room_seats`
+--
+
+DROP TABLE IF EXISTS `voice_room_seats`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `voice_room_seats` (
+  `id` char(26) NOT NULL COMMENT 'ULID',
+  `room_id` char(26) NOT NULL,
+  `user_id` char(26) NOT NULL,
+  `seat_index` int NOT NULL COMMENT '0 起，< voice_rooms.max_seats',
+  `muted` tinyint(1) NOT NULL DEFAULT '0',
+  `joined_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_voice_room_seats_room_user` (`room_id`,`user_id`),
+  UNIQUE KEY `uk_voice_room_seats_room_seat` (`room_id`,`seat_index`),
+  KEY `idx_voice_room_seats_user` (`user_id`,`joined_at`),
+  CONSTRAINT `fk_voice_room_seats_room` FOREIGN KEY (`room_id`) REFERENCES `voice_rooms` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
+  CONSTRAINT `fk_voice_room_seats_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='语音房麦位';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `voice_rooms`
+--
+
+DROP TABLE IF EXISTS `voice_rooms`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `voice_rooms` (
+  `id` char(26) NOT NULL COMMENT 'ULID',
+  `channel_id` char(26) NOT NULL,
+  `app_id` char(26) DEFAULT NULL,
+  `host_id` char(26) NOT NULL COMMENT '房主',
+  `title` varchar(60) NOT NULL,
+  `status` varchar(16) NOT NULL DEFAULT 'OPEN' COMMENT 'OPEN / CLOSED',
+  `max_seats` int NOT NULL DEFAULT '8' COMMENT '麦位数量（1-20）',
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `closed_at` datetime(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_voice_rooms_channel_status` (`channel_id`,`status`,`created_at`),
+  KEY `idx_voice_rooms_app` (`app_id`),
+  KEY `fk_voice_rooms_host` (`host_id`),
+  CONSTRAINT `fk_voice_rooms_app` FOREIGN KEY (`app_id`) REFERENCES `channel_apps` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+  CONSTRAINT `fk_voice_rooms_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_voice_rooms_host` FOREIGN KEY (`host_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='语音房';
+/*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
@@ -1116,4 +1246,4 @@ CREATE TABLE `users` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-11-16  3:49:45
+-- Dump completed on 2026-11-16 14:22:14
