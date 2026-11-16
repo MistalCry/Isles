@@ -39,6 +39,8 @@ const cleanup = {
   adminToken: null,
   modelId: null,
   configTouched: false,
+  /** 运行前已有的默认模型：临时配置会清掉它们的 is_default，收尾要还回去 */
+  restoreDefaultModels: [],
 }
 
 class HttpError extends Error {
@@ -319,6 +321,19 @@ async function runCleanup() {
     }
   }
 
+  // 还原本来的默认模型（临时默认配置会把它们的 is_default 清成 0）
+  for (const item of cleanup.restoreDefaultModels) {
+    try {
+      await api('PUT', `/admin/ai/models/${item.id}`, {
+        token: cleanup.adminToken,
+        body: { ...item.request, isDefault: true },
+      })
+      console.log(`  ✓ 原默认模型标记已还原 ${item.request.name}`)
+    } catch (error) {
+      console.error(`  ! 还原默认模型失败 ${item.id}：${error.message}`)
+    }
+  }
+
   if (cleanup.channelId && cleanup.ownerToken) {
     try {
       await api('POST', `/channels/${cleanup.channelId}/dissolve`, {
@@ -339,13 +354,19 @@ async function runCleanup() {
 async function prepare(admin) {
   let owner
   let channel
+  let board
   await step('准备：超管登录 + 临时默认模型（指向 mock）+ 频道与板块', async () => {
     const models = await api('GET', '/admin/ai/models', { token: admin.token })
     const existingDefaults = (models.items ?? []).filter((item) => item.isDefault)
-    assert(
-      existingDefaults.length === 0,
-      `运行前不应已有默认模型（否则删除临时配置会改变原状态），实际 ${existingDefaults.map((m) => m.name).join(',')}`,
-    )
+    // 别人可能已经设了默认模型（团队联调常用 LM Studio）：先记下来，收尾还原，
+    // 不能因为「创建默认模型会清掉别人的 is_default」就把平台配置改坏。
+    cleanup.restoreDefaultModels = existingDefaults.map((item) => ({
+      id: item.id,
+      request: toModelRequest(item),
+    }))
+    if (existingDefaults.length > 0) {
+      console.log(`      运行前已有默认模型 ${existingDefaults.map((m) => m.name).join(',')}，收尾会还原`)
+    }
 
     const model = await api('POST', '/admin/ai/models', {
       token: admin.token,
@@ -363,8 +384,10 @@ async function prepare(admin) {
       body: { name: `Agent Audit ${suffix()}`, avatarUrl: '/uploads/default-avatar.png', type: 'PUBLIC' },
     })
     cleanup.channelId = channel.id
+    board = (await api('GET', `/channels/${channel.id}/boards`)).items[0]
+    assert(board, '频道应自带默认板块')
   })
-  return { owner, channel }
+  return { owner, channel, board }
 }
 
 async function createAgent(admin, channelId, overrides = {}) {
@@ -384,7 +407,7 @@ async function createAgent(admin, channelId, overrides = {}) {
 // ---------------------------------------------------------------------------
 
 async function mainFlow(admin) {
-  const { channel } = await prepare(admin)
+  const { owner, channel, board } = await prepare(admin)
   if (!channel) return
 
   let agent
@@ -455,6 +478,70 @@ async function mainFlow(admin) {
     const mine = (comments.items ?? []).find((item) => item.id === commentId)
     assert(mine, '评论应出现在前台评论列表')
     assert(mine.authorId === agent.agentId, '评论作者应为代理账号')
+  })
+
+  await step('AI 标识字段：代理内容 true、真人内容 false（帖子/评论/作者/个人资料）', async () => {
+    // 真人对照：同频道一帖、同帖子一评。只测 true 挡不住回归，false 才是防线。
+    const humanPost = await api('POST', `/channels/${channel.id}/posts`, {
+      token: owner.token,
+      expect: [201],
+      body: {
+        boardId: board.id,
+        title: `真人帖 ${suffix()}`,
+        content: '真人发的内容，AI 标识应为 false。',
+        contentFormat: 'PLAIN',
+      },
+    })
+    const humanComment = await api('POST', `/posts/${postId}/comments`, {
+      token: owner.token,
+      expect: [201],
+      body: { content: '真人评论，不是 AI 生成。' },
+    })
+
+    // 1) 帖子详情
+    const agentPost = await api('GET', `/posts/${postId}`)
+    assert(agentPost.isAiGenerated === true, `代理帖 isAiGenerated 应为 true，实际 ${agentPost.isAiGenerated}`)
+    assert(agentPost.authorIsAgent === true, `代理帖 authorIsAgent 应为 true，实际 ${agentPost.authorIsAgent}`)
+    const humanDetail = await api('GET', `/posts/${humanPost.id}`)
+    assert(humanDetail.isAiGenerated === false, `真人帖 isAiGenerated 应为 false，实际 ${humanDetail.isAiGenerated}`)
+    assert(humanDetail.authorIsAgent === false, `真人帖 authorIsAgent 应为 false，实际 ${humanDetail.authorIsAgent}`)
+
+    // 2) 帖子列表（列表是主路径，与详情共用映射但必须一起验）
+    const list = await api('GET', `/channels/${channel.id}/posts?limit=20`)
+    const listedAgent = (list.items ?? []).find((item) => item.id === postId)
+    const listedHuman = (list.items ?? []).find((item) => item.id === humanPost.id)
+    assert(listedAgent, '频道列表应包含代理帖')
+    assert(listedHuman, '频道列表应包含真人帖')
+    assert(
+      listedAgent.isAiGenerated === true && listedAgent.authorIsAgent === true,
+      `列表里的代理帖应带 AI 标识，实际 ${listedAgent.isAiGenerated}/${listedAgent.authorIsAgent}`,
+    )
+    assert(
+      listedHuman.isAiGenerated === false && listedHuman.authorIsAgent === false,
+      `列表里的真人帖不应带 AI 标识，实际 ${listedHuman.isAiGenerated}/${listedHuman.authorIsAgent}`,
+    )
+
+    // 3) 评论列表
+    const comments = await api('GET', `/posts/${postId}/comments?limit=50`)
+    const agentComment = (comments.items ?? []).find((item) => item.id === commentId)
+    const humanOne = (comments.items ?? []).find((item) => item.id === humanComment.id)
+    assert(agentComment, '评论列表应包含代理评论')
+    assert(humanOne, '评论列表应包含真人评论')
+    assert(
+      agentComment.isAiGenerated === true && agentComment.authorIsAgent === true,
+      `代理评论应带 AI 标识，实际 ${agentComment.isAiGenerated}/${agentComment.authorIsAgent}`,
+    )
+    assert(
+      humanOne.isAiGenerated === false && humanOne.authorIsAgent === false,
+      `真人评论不应带 AI 标识，实际 ${humanOne.isAiGenerated}/${humanOne.authorIsAgent}`,
+    )
+
+    // 4) 作者信息：公开资料（代理 true）与「当前用户」（真人 false）
+    // 注意：当前用户是 GET /auth/me；/users/me 不存在（会被 /users/{id} 当成 id="me" 返回 404）
+    const agentPublic = await api('GET', `/users/${agent.agentId}`)
+    assert(agentPublic.isAgent === true, `代理公开资料 isAgent 应为 true，实际 ${agentPublic.isAgent}`)
+    const me = await api('GET', '/auth/me', { token: owner.token })
+    assert(me.isAgent === false, `真人 /auth/me 的 isAgent 应为 false，实际 ${me.isAgent}`)
   })
 
   await step('日发帖上限：postsPerDay=1 后第二次发帖被闸门拦下（GUARDED）', async () => {

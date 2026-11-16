@@ -17,7 +17,7 @@
 | `ai-tools-regression.mjs` | AI 工具调用：模型要工具→检索→二轮回答、sources 与落库一致、0 命中发空数组、非工具模式同样下发 sources、不支持 tools 时降级 | 7 步 |
 | `content-regression.mjs` | 内容链路：浏览量去重（作者/30 分钟/换账号）、敏感词 REVIEW/MASK/BLOCK、搜索 coverUrl 与首图 | 10 步 |
 | `apps-regression.mjs` | 频道应用 CRUD/排序、语音房抢座与 STOMP 信令（含非成员/关房拒绝）、活动报名/上限/提醒幂等、频道解散级联清理 | 21 步 |
-| `agent-regression.mjs` | AI 代理：run-now 产出与 AI 标识、日上限、话题去重、暂停、总开关、无模型降级、运行日志回放（`AGENT_TICK_MODE=1` 测调度） | 10 步 / 调度 5 步 |
+| `agent-regression.mjs` | AI 代理：run-now 产出与 AI 标识、AI 标识字段（代理 true / 真人 false）、日上限、话题去重、暂停、总开关、无模型降级、运行日志回放（`AGENT_TICK_MODE=1` 测调度） | 11 步 / 调度 5 步 |
 | `user-ai-regression.mjs` | 我的帖子过滤、助手多会话隔离、无视觉模型带图降级 | 6 步 |
 | `assistant-model-regression.mjs` | 助手模型：频道指定模型生效、任务日志记录模型 id、模型禁用后回落默认 | 4 步 |
 
@@ -98,7 +98,7 @@ isles.bat admin <用户名>
 - 需要 mock-openai（`node tools/mock-openai/server.mjs 1235`）：脚本用 `POST /debug/agent-plan` 注入计划，
   代理的计划请求（系统提示词含「可选动作」）会按队列返回 JSON。
 - 代理固定用平台**默认模型**，所以脚本会临时建一个 `isDefault=true` 的 mock 配置，跑完删除；
-  运行前若已有默认模型会直接判失败（避免删掉临时配置时改变原状态）。
+  运行前若已有默认模型，脚本会记下并在收尾把 `is_default` 还原（创建默认配置会清掉别人的标记）。
 - 主链路模式要把 tick 关掉（`--app.agent.tick-cron=0 0 0 1 1 *`），否则调度会抢走队列里的计划。
 - 调度模式需要 10 秒 tick（`--app.agent.tick-cron=0/10 * * * * *`），会额外等 25 秒验证「暂停/关总开关后不再挑选」。
 - 需要本机 `mysql` 客户端校验 `is_agent` / `is_ai_generated`（`E2E_DB_*` 可覆盖连接参数）。

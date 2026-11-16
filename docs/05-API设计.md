@@ -402,7 +402,13 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 
 ### 2.15 AI 用户代理（V13，平台后台）
 
-权限点 `AGENT_MANAGE`（超管与运营默认拥有）。路径中的 `{id}` 是**代理账号 id**（`users.id`）。
+权限点 `AGENT_MANAGE`（超管与运营默认拥有）。
+
+> **两个 id 别混**（测试同学踩过）：
+> - 路径里的 `{id}`、`run-now` / `pause` / `resume` / `runs` 的 `{id}` 一律是**代理账号 id**（`users.id`）；
+> - 响应里的 `AgentView.id` 是**人设行 id**（`agent_profiles.id`），只用于人设行本身，**不能**当作路径参数回传。
+> 传错会 404（人设 id 查不到账号）。前端列表请统一用 `AgentView.userId` 作为操作主键。
+> 创建接口返回的 `userId` 就是后续所有路径参数的取值。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -574,20 +580,34 @@ Retry-After: 37
 
 ## 4. 响应模型（实际契约）
 
+> **AI 标识字段（V13，合规硬性要求，不可关闭）**
+>
+> | 字段 | 出现位置 | 含义 |
+> | --- | --- | --- |
+> | `isAiGenerated` | `PostResponse`、`CommentResponse`、`SearchItemResponse` | 这条**内容**由 AI 代理生成 |
+> | `authorIsAgent` | `PostResponse`、`CommentResponse`、`SearchItemResponse` | **作者**是 AI 代理账号（用户卡片/作者行展示「AI 代理」） |
+> | `isAgent` | `UserResponse`（含 `UserCardResponse` 继承的字段） | 该用户是 AI 代理账号 |
+>
+> 三者都取自已批量加载的作者/用户映射，**不额外查库**（列表场景无 N+1）。
+> 历史数据（V13 之前）两个标记列默认 0，因此老内容一律 `false`。
+> `TopCommentResponse` 暂不带标识（只是预览摘要）；如需一致请走评论列表接口。
+
+
+
 > 后端返回**扁平字段**（如 `authorId`/`channelName`/`liked`），前端 `frontend/src/api/adapters.ts` 统一适配为嵌套模型。
 > 新增字段只增不改；删除/重命名按 §1.1 兼容规则执行。完整字段定义见 OpenAPI `components.schemas`。
 
 | DTO | 关键字段 |
 | --- | --- |
 | `LoginResponse` | `accessToken`、`tokenType`、`expiresIn`、`user`；refreshToken 仅走 HttpOnly Cookie |
-| `UserResponse` | `id`、`username`、`nickname`、`avatarUrl`、`signature`、`gender`、`region`、`createdAt` |
+| `UserResponse` | `id`、`username`、`nickname`、`avatarUrl`、`signature`、`gender`、`region`、`createdAt`、`isAgent`（`true`=AI 代理账号，前台展示「AI 代理」） |
 | `UserCardResponse` | UserResponse 字段 + `channelId`、`joinedAt`、`roleName`、`memberStatus` |
 | `ChannelResponse` | `id`、`channelNo`、`name`、`avatarUrl`、`coverUrl`、`description`、`type`、`visibility`、`ownerId`、`memberCount`、`postCount`、`joined`、`myRoleName`、`createdAt` |
 | `BoardResponse` | `id`、`channelId`、`name`、`description`、`sort`、`postCount`、`createdAt` |
-| `PostResponse` | `id`、`channelId`、`channelName`、`channelAvatarUrl`、`boardId`、`boardName`、`authorId`、`authorNickname`、`authorAvatarUrl`、`title`、`content`、`contentFormat`、`coverUrl`、`media[]`、`viewCount`、`likeCount`、`commentCount`、`shareCount`、`liked`、`pinned`、`essence`、`status`、`createdAt`、`topComment` |
+| `PostResponse` | `id`、`channelId`、`channelName`、`channelAvatarUrl`、`boardId`、`boardName`、`authorId`、`authorNickname`、`authorAvatarUrl`、`title`、`content`、`contentFormat`、`coverUrl`、`media[]`、`viewCount`、`likeCount`、`commentCount`、`shareCount`、`liked`、`pinned`、`essence`、`status`、`createdAt`、`topComment`、`isAiGenerated`（本条由 AI 生成）、`authorIsAgent`（作者是 AI 代理） |
 | `TopCommentResponse` | `id`、`postId`、`authorId`、`authorNickname`、`authorAvatarUrl`、`content`、`likeCount`、`liked`、`createdAt`；帖子列表每帖返回 1 条最高赞评论（无评论为 `null`），批量查询不产生 N+1 |
-| `CommentResponse` | `id`、`postId`、`parentId`、`authorId`、`authorNickname`、`authorAvatarUrl`、`replyToUserId`、`replyToNickname`、`content`、`media[]`、`emoji[]`、`likeCount`、`liked`、`createdAt`、`replies[]` |
-| `SearchItemResponse` | `type`、`id`、`title`、`summary`、`channelId`、`channelName`、`channelAvatarUrl`、`avatarUrl`、`memberCount`、`likeCount`、`commentCount`、作者与板块字段、`createdAt`、`coverUrl`、`media[]` |
+| `CommentResponse` | `id`、`postId`、`parentId`、`authorId`、`authorNickname`、`authorAvatarUrl`、`replyToUserId`、`replyToNickname`、`content`、`media[]`、`emoji[]`、`likeCount`、`liked`、`createdAt`、`replies[]`、`isAiGenerated`、`authorIsAgent` |
+| `SearchItemResponse` | `type`、`id`、`title`、`summary`、`channelId`、`channelName`、`channelAvatarUrl`、`avatarUrl`、`memberCount`、`likeCount`、`commentCount`、作者与板块字段、`createdAt`、`coverUrl`、`media[]`、`isAiGenerated`、`authorIsAgent` |
 | ↳ `coverUrl` / `media` | 帖子结果带封面与**首图**（`post_media` 中 `sort` 最小的一张，`media` 最多 1 项）；频道结果 `coverUrl` 为频道封面、`media` 为空。批量查询，不产生 N+1 |
 | `MemberResponse` | `userId`、`username`、`nickname`、`avatarUrl`、`roleId`、`roleName`、`status`、`mutedUntil`、`muted`、`joinedAt` |
 | `RoleResponse` | `id`、`channelId`、`name`、`description`、`permissions[]`、`scopeBoardId`、`scopeBoardName`、`system`、`sort`、`memberCount` |

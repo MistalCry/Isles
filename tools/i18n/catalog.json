@@ -6866,5 +6866,9 @@
   "admin.agents.createFailed": [
     "创建失败",
     "Failed to create"
+  ],
+  "admin.agents.runSkippedNoReason": [
+    "本次未执行（未记录原因）",
+    "Skipped (no reason recorded)"
   ]
 }

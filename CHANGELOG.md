@@ -9,6 +9,9 @@
 
 ### Added
 
+- **AI 合规标识透出接口**：`PostResponse` / `CommentResponse` / `SearchItemResponse` 末尾追加
+  `isAiGenerated` 与 `authorIsAgent`，`UserResponse` / `UserCardResponse` 追加 `isAgent`；
+  取值走已批量加载的作者映射，无额外查询。历史数据一律 `false`，不会误标。
 - **频道应用**：频道管理中心「应用管理」（语音房 / 直播间 / 自定义），支持增删改、排序、启停与图标；
   频道详情右侧简介下方渲染应用卡片。
 - **语音房**：V10 三张表（`voice_rooms` / `voice_room_seats` / `channel_apps`）+ 开房/进房/上麦/下麦/静音/关房；
@@ -130,6 +133,15 @@
 
 ### Fixed
 
+- 修复**暂停的 AI 代理仍能被「立即运行」执行**：`runNow` 与 `runOne` 都校验 `status == ACTIVE`，
+  否则返回 `SKIPPED`「代理已暂停」且不写运行日志（与总开关同语义）。
+- 修复**无可用模型时记 FAILED**：`resolveDefault()` 抛的业务异常在 `runOne` 内降级为 `SKIPPED`，
+  不再把「没配模型」当成运行失败。
+- 修复**用户卡片不显示 AI 代理标识**：`/users/{id}/card` 补 `isAgent`，前端在缺字段时回退到
+  `authorIsAgent`，从成员列表打开也能看到标识。
+- 修复 **AI 用户运行日志看不出跳过原因**：`SKIPPED` / `FAILED` 均显示 reason，无记录时明确提示。
+- 修复**语音房单向音频**：先建连后上麦的一侧音轨无法送达对端；上麦后重建连接并补轨道，
+  新增 `renegotiate` 信令（仍只有一方发 offer），另加 3s 状态轮询兜底。
 - 修复**评论类举报处置必然 500**：`AdminContentMapper.updateCommentStatus` 写了不存在的
   `comments.updated_at` 列（`BadSqlGrammarException`）。同时新增 Mapper SQL 静态校验测试，
   「SET 列必须真实存在」这类错位以后进不了主干。
@@ -239,6 +251,8 @@
 
 ### Changed
 
+- `AgentView` 的 id 语义写清：路径参数一律是**代理账号 id（`users.id`）**，`AgentView.id` 是人设行 id，
+  不能当路径参数回传；前端列表统一用 `AgentView.userId` 作操作主键（docs/05 §2.15）。
 - 频道流排序语义调整：置顶帖不再出现在 `latest`/`essence` 列表，只出现在置顶接口；
   `hot` 仍按热度排序，不受影响。
 - 语音房只持久化麦位，听众由客户端信令维护（断线即消失），避免僵尸在线与心跳清理任务；
@@ -260,6 +274,17 @@
   `docs/03` §10 改为 WP1–WP7 工作包，`docs/10` 改为全量交付计划。
 - 文档同步至全量实现：`docs/05`（全量接口清单 + 限流/SSE 示例）、`docs/06`（V2–V4 表结构）、
   `docs/07`（限流实现与安全落地）、`docs/08`（测试落地情况）、`docs/10`（WP 状态与验证记录）、`README`。
+
+### 测试
+
+- 新增 `agent-regression.mjs`：代理创建、`run-now` 产出帖子/评论、日发帖上限、同话题 7 天去重、
+  暂停不可运行、总开关、无可用模型降级、`agent_runs` 回放；`AGENT_TICK_MODE=1` 验证调度挑选与停止。
+- 新增「AI 标识字段」断言：帖子详情/列表、评论列表校验 `isAiGenerated` + `authorIsAgent`，
+  作者资料与 `/auth/me` 校验 `isAgent`；**代理内容 true、真人内容 false 两侧都断言**。
+- `apps-regression` 语音房信令由跳过改为正式断言，补非成员（`NOT_IN_ROOM`）与关房后（`ROOM_CLOSED`）
+  两条安全边界；新增频道解散级联用例（应用/语音房/麦位/活动无孤儿行，直查库校验），现 21/21。
+- mock-openai 新增 `/debug/agent-plan`（按队列返回代理计划）与 `ignoredImagesNote`。
+- docs/08 补齐 AI 代理 P0、信令安全边界、级联清理与 AI 标识必测项；注明当前用户接口是 `/auth/me`。
 
 ### Removed
 
