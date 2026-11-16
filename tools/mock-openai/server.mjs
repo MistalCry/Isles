@@ -19,6 +19,13 @@ import http from 'node:http'
  * DELETE /debug/requests 清空。用于断言「模型要工具 → 检索 → 二轮回答」以及「服务端实际用了哪个模型」。
  * 模型名用 "mock-no-tools" 时，只要请求带 tools 就返回 400（模拟「模型不支持 function calling」），
  * 用于验证服务端的自动降级（关闭工具 + 关键词检索重试）。
+ *
+ * AI 代理（V13）计划模式：请求的系统提示词里含「可选动作（必须只选一个）」时，视为代理的计划请求，
+ * 按队列返回结构化 JSON 计划（非流式）。队列用调试接口控制：
+ *   POST   /debug/agent-plan  {"plans":[{"action":"create_post","args":{...}}]}  追加计划
+ *   GET    /debug/agent-plan                                                     查看剩余队列
+ *   DELETE /debug/agent-plan                                                     清空
+ * 队列为空时返回 {"action":"none","args":{}}（代理「本次不行动」），保证 tick 不会因 mock 报错。
  */
 
 const PORT = Number(process.argv[2] || 1234)
@@ -26,6 +33,11 @@ const PORT = Number(process.argv[2] || 1234)
 /** 最近请求摘要（供 e2e 断言轮次与模型，仅测试用，不落盘） */
 const requestLog = []
 const REQUEST_LOG_LIMIT = 200
+
+/** AI 代理计划队列：每次代理计划请求消费一条（测试用，不落盘） */
+const agentPlans = []
+/** 代理计划请求的特征串（AgentPlanner 的系统提示词里固定出现） */
+const AGENT_PLAN_MARKER = '可选动作（必须只选一个）'
 
 const MODELS = [
   { id: 'mock-chat', object: 'model', owned_by: 'isles-mock' },
@@ -126,6 +138,24 @@ function answerFor(body) {
     lines.push('来源引用：本次未调用工具（未开启工具调用或请求未带 tools）。')
   }
   return lines.join('\n')
+}
+
+function systemText(body) {
+  return (Array.isArray(body.messages) ? body.messages : [])
+    .filter((m) => m?.role === 'system')
+    .map((m) => textOfContent(m.content))
+    .join('\n')
+}
+
+/** 是否代理计划请求（AgentPlanner 一次非流式调用，要一段 JSON 计划）。 */
+function isAgentPlanRequest(body) {
+  return systemText(body).includes(AGENT_PLAN_MARKER)
+}
+
+/** 取一条计划：队列空时回 none，避免 tick 因 mock 无计划而失败。 */
+function nextAgentPlan() {
+  if (agentPlans.length === 0) return { action: 'none', args: {} }
+  return agentPlans.shift()
 }
 
 function json(res, status, payload) {
@@ -237,6 +267,22 @@ const server = http.createServer(async (req, res) => {
     requestLog.length = 0
     return json(res, 200, { cleared: true })
   }
+  if (url.pathname === '/debug/agent-plan' && req.method === 'GET') {
+    return json(res, 200, { queued: agentPlans.length, plans: agentPlans.slice() })
+  }
+  if (url.pathname === '/debug/agent-plan' && req.method === 'DELETE') {
+    agentPlans.length = 0
+    return json(res, 200, { cleared: true })
+  }
+  if (url.pathname === '/debug/agent-plan' && req.method === 'POST') {
+    const body = await readBody(req)
+    const plans = Array.isArray(body.plans) ? body.plans : body.action ? [body] : []
+    for (const plan of plans) {
+      if (!plan || typeof plan.action !== 'string') continue
+      agentPlans.push({ action: plan.action, args: plan.args ?? {} })
+    }
+    return json(res, 200, { queued: agentPlans.length })
+  }
   if (url.pathname === '/v1/models' && req.method === 'GET') return json(res, 200, { object: 'list', data: MODELS })
   if (url.pathname === '/v1/chat/completions' && req.method === 'POST') {
     try {
@@ -263,9 +309,39 @@ const server = http.createServer(async (req, res) => {
         ),
       })
       if (requestLog.length > REQUEST_LOG_LIMIT) requestLog.shift()
+      const agentPlan = isAgentPlanRequest(body)
+      const planned = agentPlan ? nextAgentPlan() : null
+      if (agentPlan) {
+        const last = requestLog[requestLog.length - 1]
+        if (last) last.agentPlan = planned
+      }
       if (body.model === 'mock-no-tools' && Array.isArray(body.tools) && body.tools.length > 0) {
         return json(res, 400, {
           error: { message: 'this model does not support tools', type: 'invalid_request_error' },
+        })
+      }
+      if (agentPlan) {
+        // 代理计划：一次性返回 JSON 计划（AgentPlanner 用 stream=false 调用）
+        const content = JSON.stringify(planned)
+        if (body.stream === true) {
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+          })
+          writeChunk(res, body, { content })
+          writeChunk(res, body, {}, 'stop')
+          res.write('data: [DONE]\n\n')
+          res.end()
+          return
+        }
+        return json(res, 200, {
+          id: `chatcmpl-mock-${Date.now()}`,
+          object: 'chat.completion',
+          created: Math.floor(Date.now() / 1000),
+          model: body.model || 'mock-chat',
+          choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 320, completion_tokens: 60, total_tokens: 380 },
         })
       }
       const plan = planToolCall(body)

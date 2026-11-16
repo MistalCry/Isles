@@ -19,6 +19,7 @@ import CommentSection from '@/components/CommentSection.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
 import ReportDialog from '@/components/ReportDialog.vue'
 import ShareToDmDialog from '@/components/dm/ShareToDmDialog.vue'
+import AiBadge from '@/components/AiBadge.vue'
 import ImageCropUpload from '@/components/media/ImageCropUpload.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
@@ -303,7 +304,10 @@ function goBack(): void {
             <button type="button" class="post-detail__author" :aria-label="t('post.userCardOf', { name: authorName })">
               <UserAvatar :src="post.author.avatarUrl" :name="authorName" :size="42" />
               <span class="post-detail__author-meta">
-                <strong>{{ authorName }}</strong>
+                <span class="post-detail__author-name">
+                  <strong>{{ authorName }}</strong>
+                  <AiBadge v-if="post.author.isAgent" kind="agent" size="md" />
+                </span>
                 <small>
                   {{ formatDateTime(post.createdAt) }}
                   <span v-if="post.channel"> · {{ channelName }}</span>
@@ -322,7 +326,10 @@ function goBack(): void {
           </div>
         </header>
 
-        <h1 v-if="post.title" class="post-detail__title">{{ post.title }}</h1>
+        <div v-if="post.title" class="post-detail__title-row">
+          <h1 class="post-detail__title">{{ post.title }}</h1>
+          <AiBadge v-if="post.isAiGenerated" size="md" />
+        </div>
 
         <div class="post-detail__meta">
           <RouterLink :to="{ name: 'channel', params: { id: post.channelId } }" class="link">
@@ -523,6 +530,19 @@ function goBack(): void {
 
 .post-detail__head-actions {
   margin-left: auto;
+}
+
+.post-detail__title-row {
+  display: flex;
+  gap: var(--isles-space-2);
+  align-items: center;
+  margin-bottom: var(--isles-space-2);
+}
+
+.post-detail__author-name {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
 }
 
 .post-detail__title {

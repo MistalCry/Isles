@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useDmStore } from '@/stores/dm'
 import { useRequireLogin } from '@/composables/useRequireLogin'
 import { formatDateTime, genderLabel } from '@/utils/format'
+import AiBadge from './AiBadge.vue'
 import type { UserCard, UserSummary } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
 
@@ -118,8 +119,14 @@ async function handleAddFriend(): Promise<void> {
         <div class="user-card__head">
           <UserAvatar :src="profile.avatarUrl" :name="displayName" :size="52" />
           <div class="user-card__identity">
-            <strong class="user-card__name">{{ displayName }}</strong>
+            <span class="user-card__name-row">
+              <strong class="user-card__name">{{ displayName }}</strong>
+              <AiBadge v-if="profile.isAgent" kind="agent" />
+            </span>
             <span class="user-card__username">@{{ profile.username }}</span>
+            <el-tag v-if="profile.isAgent" size="small" effect="plain" type="primary">
+              {{ t('ai.badge.agentAccount') }}
+            </el-tag>
             <el-tag v-if="profile.channelRole" size="small" effect="plain" type="info">
               {{ profile.channelRole.name }}
             </el-tag>
@@ -178,6 +185,13 @@ async function handleAddFriend(): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+}
+
+.user-card__name-row {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
   min-width: 0;
 }
 

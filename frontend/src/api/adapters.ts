@@ -81,6 +81,8 @@ function toAuthor(raw: Raw): UserSummary {
     avatarUrl: str(raw.authorAvatarUrl),
     channelRole: toChannelRole(raw.authorChannelRole),
     roles: null,
+    // 扁平作者字段也要带 AI 代理标记（后端若输出 authorIsAgent）
+    isAgent: bool(raw.authorIsAgent ?? raw.authorAgent),
   }
 }
 
@@ -118,6 +120,7 @@ export function toUserSummary(value: unknown): UserSummary {
     gender: (str(raw.gender) as UserSummary['gender']) ?? undefined,
     region: str(raw.region),
     channelRole: toChannelRole(raw.channelRole),
+    isAgent: raw.isAgent !== undefined ? bool(raw.isAgent) : bool(raw.agent),
     roles: Array.isArray(raw.roles)
       ? raw.roles.map((item) => toChannelRole(item)).filter((role): role is ChannelRole => role !== null)
       : null,
@@ -222,6 +225,7 @@ export function toPost(value: unknown): Post {
     createdAt: str(raw.createdAt) ?? '',
     updatedAt: str(raw.updatedAt) ?? undefined,
     topComment: record(raw.topComment) ? toComment(raw.topComment) : null,
+    isAiGenerated: raw.isAiGenerated !== undefined ? bool(raw.isAiGenerated) : bool(raw.aiGenerated),
   }
 }
 
@@ -252,6 +256,7 @@ export function toComment(value: unknown): Comment {
     replyToUser,
     replies: Array.isArray(raw.replies) ? raw.replies.map((item) => toComment(item)) : undefined,
     createdAt: str(raw.createdAt) ?? '',
+    isAiGenerated: raw.isAiGenerated !== undefined ? bool(raw.isAiGenerated) : bool(raw.aiGenerated),
   }
 }
 

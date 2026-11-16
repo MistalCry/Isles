@@ -2,6 +2,7 @@ import type { Component } from 'vue'
 import {
   Bell,
   DataAnalysis,
+  MagicStick,
   Document,
   Files,
   List,
@@ -41,6 +42,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { name: 'admin-admins', path: '/admin/admins', labelKey: 'admin.layout.admins', icon: UserFilled, permission: 'ADMIN_MANAGE' },
   { name: 'admin-audit', path: '/admin/audit-logs', labelKey: 'admin.layout.audit', icon: List, permission: 'AUDIT_READ' },
   { name: 'admin-ai-models', path: '/admin/ai-models', labelKey: 'admin.layout.ai', icon: Setting, permission: 'AI_MANAGE' },
+  { name: 'admin-agents', path: '/admin/agents', labelKey: 'admin.layout.agents', icon: MagicStick, permission: 'AGENT_MANAGE' },
 ]
 
 /** 是否有某个权限点 */
@@ -81,4 +83,5 @@ export const ADMIN_PERMISSION_LABEL_KEYS: Record<AdminPermission, string> = {
   ANNOUNCEMENT_MANAGE: 'admin.permission.announcementManage',
   WORD_MANAGE: 'admin.permission.wordManage',
   STATS_READ: 'admin.permission.statsRead',
+  AGENT_MANAGE: 'admin.permission.agentManage',
 }

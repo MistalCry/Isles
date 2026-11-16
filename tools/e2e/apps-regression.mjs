@@ -4,7 +4,9 @@
  *
  * A. 应用：CRUD、批量排序、频道可见（游客可读）、无权限用户不可写。
  * B. 语音房：开房 → 两人进房 → 并发抢同一麦位（只有一个成功，另一个 409）→ 静音 → 下麦 → 关房；
- *    STOMP 信令：两个客户端订阅 /topic/voice/{id}/signal，一端发 offer，另一端收到且 from 正确。
+ *    STOMP 信令：两个客户端订阅 /topic/voice/{id}/signal，一端发 offer，另一端收到且 from 正确；
+ *    安全边界：非成员订阅/发送被拒（NOT_IN_ROOM）、关房后发送被拒（ROOM_CLOSED）。
+ * D. 级联：频道解散后 channel_apps / voice_rooms / channel_activities 不留孤儿行（需本机 mysql 客户端）。
  * C. 活动：创建 → 发布 → 报名 → 取消 → 人数上限 422 → 开始前 30 分钟提醒只发一次。
  *
  * 提醒用例需要把扫描间隔调短（默认 10 分钟一次）：
@@ -14,6 +16,8 @@
  * 运行：BASE_URL=http://127.0.0.1:8082/api/v1 node tools/e2e/apps-regression.mjs
  */
 
+import { execFileSync } from 'node:child_process'
+
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:8080/api/v1'
 const WS_URL = process.env.WS_URL || BASE_URL.replace(/^http/, 'ws').replace(/\/api\/v1\/?$/, '') + '/ws'
 /** 等几个扫描周期再断言「只提醒一次」 */
@@ -21,6 +25,39 @@ const REMINDER_WAIT_MS = Number(process.env.REMINDER_WAIT_MS || 25_000)
 
 const results = []
 const cleanup = { channelId: null, ownerToken: null, roomId: null, activityId: null }
+
+/**
+ * 直连数据库校验（级联删除只能从表里看，接口对已解散频道一律 404）。
+ * 走本机 mysql 客户端；没有客户端时相关用例记为跳过并说明。
+ */
+// 用 E2E_ 前缀：外层 shell 里常有项目无关的 DB_* 变量，直接读会被带偏
+const DB = {
+  host: process.env.E2E_DB_HOST || '127.0.0.1',
+  port: process.env.E2E_DB_PORT || '3306',
+  name: process.env.E2E_DB_NAME || 'my_social_channel',
+  user: process.env.E2E_DB_USERNAME || 'isles_app',
+  password: process.env.E2E_DB_PASSWORD || 'IslesDev2026a7',
+}
+
+function dbRows(sql) {
+  let output
+  try {
+    output = execFileSync(
+      'mysql',
+      ['-h', DB.host, '-P', DB.port, '-u', DB.user, `-p${DB.password}`, DB.name, '-N', '-B', '-e', sql],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    )
+  } catch (error) {
+    throw new SkipCase(
+      `无法连接数据库校验（缺 mysql 客户端或凭据不对）：${String(error.message).split('\n')[0]}`,
+    )
+  }
+  return output
+    .trim()
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
 
 class HttpError extends Error {
   constructor(status, body, label) {
@@ -423,30 +460,23 @@ async function main() {
       clientA.subscribe(`/topic/voice/${room.id}/signal`)
       // 等订阅生效（STOMP 无 ACK，给服务端一点时间建立订阅）
       await sleep(300)
+      assert(
+        clientA.errors.length === 0 && clientB.errors.length === 0,
+        `成员订阅不应收到 ERROR 帧，实际 ${[...clientA.errors, ...clientB.errors].join(' | ')}`,
+      )
 
       clientA.send(`/app/voice/${room.id}/signal`, { type: 'offer', sdp: 'v=0-offer-e2e' })
-      let frame
-      try {
-        frame = await clientB.next(
-          (item) => item.command === 'MESSAGE' && item.body.includes('v=0-offer-e2e'),
-          4000,
-        )
-      } catch (timeout) {
-        // 已知缺陷 D1：StompAuthChannelInterceptor 只允许 /user/queue/** 订阅，且 SEND 一律拒绝，
-        // 导致 /topic/voice/** 订阅与 /app/voice/** 发送都到不了 VoiceSignalController。
-        const errors = [...(clientA.errors ?? []), ...(clientB.errors ?? [])]
-        if (errors.length > 0) {
-          throw new SkipCase(
-            `信令通道被 STOMP 拦截器挡住（缺陷 D1）：订阅/发送收到 ERROR 帧「${errors[0].slice(0, 80)}」；` +
-              'StompAuthChannelInterceptor 只放行 /user/queue/** 且拒绝所有 SEND',
-          )
-        }
-        throw timeout
-      }
+      const frame = await clientB.next(
+        (item) => item.command === 'MESSAGE' && item.body.includes('v=0-offer-e2e'),
+        6000,
+      )
       const event = JSON.parse(frame.body)
       assert(event.type === 'VOICE_SIGNAL', `事件类型应为 VOICE_SIGNAL，实际 ${event.type}`)
-      assert(event.payload?.from === owner.id, `from 应为发送者 ${owner.id}，实际 ${event.payload?.from}`)
-      assert(event.payload?.data?.type === 'offer', '信令内容应原样透传 type=offer')
+      // 信封：{ id, type, ts, version, data: { roomId, from, data } }
+      assert(event.data?.from === owner.id, `from 应为发送者 ${owner.id}，实际 ${event.data?.from}`)
+      assert(event.data?.roomId === room.id, '事件应带 roomId')
+      assert(event.data?.data?.type === 'offer', '信令内容应原样透传 type=offer')
+      assert(event.data?.data?.sdp === 'v=0-offer-e2e', 'SDP 应原样透传（服务端不解析）')
 
       // 反向：B 发 answer，A 收到
       clientB.send(`/app/voice/${room.id}/signal`, { type: 'answer', sdp: 'v=0-answer-e2e' })
@@ -455,10 +485,43 @@ async function main() {
         8000,
       )
       const backEvent = JSON.parse(back.body)
-      assert(backEvent.payload?.from === member.id, '反向信令的 from 应为成员 id')
+      assert(backEvent.data?.from === member.id, '反向信令的 from 应为成员 id')
+      assert(
+        clientA.errors.length === 0 && clientB.errors.length === 0,
+        '整个转发过程都不应出现 ERROR 帧',
+      )
     } finally {
       clientA.close()
       clientB.close()
+    }
+  })
+
+  await step('语音房：非成员订阅/发送被拒（NOT_IN_ROOM，安全边界）', async () => {
+    const outsider = await newUser('vout')
+    // 订阅：不该拿到房间主题的任何信令（含 SDP / ICE）
+    const subClient = await connectStomp(outsider.token)
+    try {
+      subClient.subscribe(`/topic/voice/${room.id}/signal`)
+      const error = await subClient.next((item) => item.command === 'ERROR', 4000)
+      assert(
+        error.headers.code === 'NOT_IN_ROOM',
+        `非成员订阅应被拒且 code=NOT_IN_ROOM，实际 code=${error.headers.code} body=${error.body}`,
+      )
+    } finally {
+      subClient.close()
+    }
+
+    // 发送：单独一条连接，避免上一条被 ERROR 关闭后误判
+    const sendClient = await connectStomp(outsider.token)
+    try {
+      sendClient.send(`/app/voice/${room.id}/signal`, { type: 'offer', sdp: 'v=0-outsider' })
+      const error = await sendClient.next((item) => item.command === 'ERROR', 4000)
+      assert(
+        error.headers.code === 'NOT_IN_ROOM',
+        `非成员发送应被拒且 code=NOT_IN_ROOM，实际 code=${error.headers.code} body=${error.body}`,
+      )
+    } finally {
+      sendClient.close()
     }
   })
 
@@ -469,6 +532,33 @@ async function main() {
     await api('POST', `/voice-rooms/${room.id}/join`, { token: member.token, expect: [409, 404] })
     const list = await api('GET', `/channels/${channel.id}/voice-rooms`)
     assert(!list.some((item) => item.id === room.id), '开启中列表不应再包含已关闭房间')
+  })
+
+  await step('语音房：关房后信令订阅与发送都被拒（ROOM_CLOSED）', async () => {
+    // 关房后即使原本在房里，也不能再收发信令（否则旧连接能继续占用信令通道）
+    const subClient = await connectStomp(owner.token)
+    try {
+      subClient.subscribe(`/topic/voice/${room.id}/signal`)
+      const error = await subClient.next((item) => item.command === 'ERROR', 4000)
+      assert(
+        error.headers.code === 'ROOM_CLOSED',
+        `关房后订阅应被拒且 code=ROOM_CLOSED，实际 code=${error.headers.code} body=${error.body}`,
+      )
+    } finally {
+      subClient.close()
+    }
+
+    const sendClient = await connectStomp(owner.token)
+    try {
+      sendClient.send(`/app/voice/${room.id}/signal`, { type: 'offer', sdp: 'v=0-closed' })
+      const error = await sendClient.next((item) => item.command === 'ERROR', 4000)
+      assert(
+        error.headers.code === 'ROOM_CLOSED',
+        `关房后发送应被拒且 code=ROOM_CLOSED，实际 code=${error.headers.code} body=${error.body}`,
+      )
+    } finally {
+      sendClient.close()
+    }
   })
 
   // ------------------------------------------------------------------
@@ -540,6 +630,75 @@ async function main() {
     const cancelled = await api('POST', `/activities/${activity.id}/cancel`, { token: owner.token })
     assert(cancelled.status === 'CANCELLED', `取消后状态应为 CANCELLED，实际 ${cancelled.status}`)
     await api('POST', `/activities/${activity.id}/signup`, { token: member.token, expect: [422, 409] })
+  })
+
+  // ------------------------------------------------------------------
+  // D. 级联删除（K2）
+  // ------------------------------------------------------------------
+  await step('级联：频道解散后应用/语音房/活动不留孤儿行', async () => {
+    // 单独造一个频道，避免影响前面用例的断言对象
+    const tempChannel = await api('POST', '/channels', {
+      token: owner.token,
+      expect: [201],
+      body: { name: `Cascade ${suffix()}`, avatarUrl: '/uploads/default-avatar.png', type: 'PUBLIC' },
+    })
+    const tempChannelId = tempChannel.id
+    try {
+      await api('POST', `/channels/${tempChannelId}/apps`, {
+        token: owner.token,
+        expect: [201],
+        body: { appType: 'CUSTOM', name: `级联应用${suffix()}`, description: '级联校验', enabled: true },
+      })
+      const tempRoom = await api('POST', `/channels/${tempChannelId}/voice-rooms`, {
+        token: owner.token,
+        expect: [201],
+        body: { title: `级联房间${suffix()}`, maxSeats: 4 },
+      })
+      const tempActivity = await api('POST', `/channels/${tempChannelId}/activities`, {
+        token: owner.token,
+        expect: [201],
+        body: {
+          title: `级联活动${suffix()}`,
+          description: 'E2E 级联',
+          startAt: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
+          location: '群岛码头',
+          capacity: 5,
+        },
+      })
+
+      // 解散前先确认三类行都在（否则「解散后为 0」不能说明级联生效）
+      const before = dbRows(`SELECT
+          (SELECT COUNT(*) FROM channel_apps WHERE channel_id='${tempChannelId}'),
+          (SELECT COUNT(*) FROM voice_rooms WHERE channel_id='${tempChannelId}'),
+          (SELECT COUNT(*) FROM channel_activities WHERE channel_id='${tempChannelId}')`)[0]
+      const [appsBefore, roomsBefore, actsBefore] = before.split('\t').map(Number)
+      assert(
+        appsBefore >= 1 && roomsBefore >= 1 && actsBefore >= 1,
+        `解散前应各有一行，实际 apps=${appsBefore} rooms=${roomsBefore} activities=${actsBefore}`,
+      )
+
+      await api('POST', `/channels/${tempChannelId}/dissolve`, { token: owner.token, expect: [204, 200] })
+
+      const after = dbRows(`SELECT
+          (SELECT COUNT(*) FROM channel_apps WHERE channel_id='${tempChannelId}'),
+          (SELECT COUNT(*) FROM voice_rooms WHERE channel_id='${tempChannelId}'),
+          (SELECT COUNT(*) FROM channel_activities WHERE channel_id='${tempChannelId}'),
+          (SELECT COUNT(*) FROM voice_room_seats s JOIN voice_rooms r ON r.id=s.room_id WHERE r.channel_id='${tempChannelId}')`)[0]
+      const [appsAfter, roomsAfter, actsAfter, seatsAfter] = after.split('\t').map(Number)
+      assert(
+        appsAfter === 0 && roomsAfter === 0 && actsAfter === 0,
+        `解散后应无孤儿行，实际 apps=${appsAfter} rooms=${roomsAfter} activities=${actsAfter}`,
+      )
+      assert(seatsAfter === 0, `麦位也应一并清理，实际 ${seatsAfter} 行`)
+      // 房间对象与活动对象确实建过：避免「接口没建成功所以表里为 0」的假通过
+      assert(tempRoom.status === 'OPEN' && tempActivity.status === 'DRAFT', '房间/活动创建状态应正常')
+    } finally {
+      // 已解散则无需再处理；异常路径下尽力清理
+      await api('POST', `/channels/${tempChannelId}/dissolve`, {
+        token: owner.token,
+        expect: [204, 200, 403, 404, 409],
+      }).catch(() => {})
+    }
   })
 
   const passed = results.filter((item) => item.status === 'pass').length

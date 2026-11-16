@@ -35,6 +35,8 @@ export interface UserSummary {
   /** 当前频道下的身份组（帖子/评论上下文提供） */
   channelRole?: ChannelRole | null
   roles?: ChannelRole[] | null
+  /** AI 代理账号（docs/12 §3.1）：用户卡片与作者处显示「AI」标识 */
+  isAgent?: boolean
 }
 
 export interface CurrentUser extends UserSummary {
@@ -121,6 +123,8 @@ export interface Post {
   createdAt: string
   updatedAt?: string
   topComment?: Comment | null
+  /** AI 生成内容（docs/12 §3.5）：不可关闭的「AI」标识 */
+  isAiGenerated?: boolean
 }
 
 export interface Comment {
@@ -137,6 +141,8 @@ export interface Comment {
   replyToUser?: UserSummary | null
   replies?: Comment[]
   createdAt: string
+  /** AI 生成内容（docs/12 §3.5） */
+  isAiGenerated?: boolean
 }
 
 export interface PageResult<T> {

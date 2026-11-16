@@ -8,6 +8,7 @@ import { useRequireLogin } from '@/composables/useRequireLogin'
 import { excerpt, formatCount, formatRelativeTime, sortMedia } from '@/utils/format'
 import type { Comment, Post } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
+import AiBadge from './AiBadge.vue'
 import UserCardPopover from './UserCardPopover.vue'
 import MediaViewer from './MediaViewer.vue'
 import QuickCommentSheet from './QuickCommentSheet.vue'
@@ -143,7 +144,10 @@ function handleAdminAction(action: string): void {
         <button type="button" class="post-card__author-link" :aria-label="t('post.userCardOf', { name: authorName })">
           <UserAvatar :src="post.author.avatarUrl" :name="authorName" :size="34" />
           <span class="post-card__author-meta">
-            <strong>{{ authorName }}</strong>
+            <span class="post-card__author-name">
+              <strong>{{ authorName }}</strong>
+              <AiBadge v-if="post.author.isAgent" kind="agent" />
+            </span>
             <small>@{{ post.author.username }}</small>
           </span>
         </button>
@@ -156,6 +160,7 @@ function handleAdminAction(action: string): void {
     </header>
 
     <div class="post-card__badges">
+      <AiBadge v-if="post.isAiGenerated" />
       <el-tag v-if="post.isPinned" size="small" type="danger" effect="plain">{{ t('post.pinned') }}</el-tag>
       <el-tag v-if="post.isEssence" size="small" type="warning" effect="plain">{{ t('post.essence') }}</el-tag>
     </div>
@@ -287,6 +292,13 @@ function handleAdminAction(action: string): void {
   border: none;
   border-radius: var(--isles-radius-md);
   cursor: pointer;
+}
+
+.post-card__author-name {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
 }
 
 .post-card__author-meta {

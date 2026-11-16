@@ -12,6 +12,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AdminTrendChart: typeof import('./components/admin/AdminTrendChart.vue')['default']
+    AiBadge: typeof import('./components/AiBadge.vue')['default']
     AiChatPanel: typeof import('./components/ai/AiChatPanel.vue')['default']
     AiMessageItem: typeof import('./components/ai/AiMessageItem.vue')['default']
     AiSessionSidebar: typeof import('./components/ai/AiSessionSidebar.vue')['default']
@@ -33,6 +34,9 @@ declare module 'vue' {
     ElBadge: typeof import('element-plus/es')['ElBadge']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElCheckbox: typeof import('element-plus/es')['ElCheckbox']
+    ElCheckboxGroup: typeof import('element-plus/es')['ElCheckboxGroup']
+    ElCollapse: typeof import('element-plus/es')['ElCollapse']
+    ElCollapseItem: typeof import('element-plus/es')['ElCollapseItem']
     ElConfigProvider: typeof import('element-plus/es')['ElConfigProvider']
     ElDatePicker: typeof import('element-plus/es')['ElDatePicker']
     ElDialog: typeof import('element-plus/es')['ElDialog']
@@ -63,6 +67,7 @@ declare module 'vue' {
     ElTabPane: typeof import('element-plus/es')['ElTabPane']
     ElTabs: typeof import('element-plus/es')['ElTabs']
     ElTag: typeof import('element-plus/es')['ElTag']
+    ElTooltip: typeof import('element-plus/es')['ElTooltip']
     EmptyState: typeof import('./components/EmptyState.vue')['default']
     ErrorState: typeof import('./components/ErrorState.vue')['default']
     ImageCropUpload: typeof import('./components/media/ImageCropUpload.vue')['default']

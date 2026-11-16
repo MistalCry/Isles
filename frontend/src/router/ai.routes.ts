@@ -83,6 +83,12 @@ export const aiRoutes: RouteRecordRaw[] = [
         component: () => import('@/pages/admin/AdminAiModelsView.vue'),
         meta: { title: t('admin.layout.ai'), requiresAuth: true, permission: 'AI_MANAGE' },
       },
+      {
+        path: 'agents',
+        name: 'admin-agents',
+        component: () => import('@/pages/admin/AdminAgentsView.vue'),
+        meta: { title: t('admin.layout.agents'), requiresAuth: true, permission: 'AGENT_MANAGE' },
+      },
     ],
   },
 ]

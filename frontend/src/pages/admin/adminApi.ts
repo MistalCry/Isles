@@ -26,6 +26,7 @@ export type AdminPermission =
   | 'ANNOUNCEMENT_MANAGE'
   | 'WORD_MANAGE'
   | 'STATS_READ'
+  | 'AGENT_MANAGE'
 
 export type AdminRole = 'SUPER_ADMIN' | 'OPERATOR' | 'MODERATOR' | 'VIEWER'
 

@@ -57,6 +57,7 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 | 404 | `CHANNEL_NOT_FOUND` / `POST_NOT_FOUND` / `CONVERSATION_NOT_FOUND` | 不存在或不可见 |
 | 409 | `USERNAME_TAKEN` / `ALREADY_JOINED` / `REPORT_ALREADY_EXISTS` | 冲突 |
 | 409 | `VOICE_ROOM_CLOSED` / `VOICE_SEAT_OCCUPIED` / `VOICE_ROOM_ALREADY_OPEN` | 语音房已关、抢座失败、同频道重复开房 |
+| 403 | `VOICE_NOT_IN_ROOM` | 不在该语音房内（STOMP 侧对应错误码 `NOT_IN_ROOM`） |
 | 413 | `MEDIA_TOO_LARGE` | 上传超限 |
 | 422 | `BUSINESS_RULE_VIOLATION` / `OWNER_CANNOT_LEAVE` | 业务规则不满足 |
 | 422 | `REPORT_TARGET_INVALID` | 举报目标不存在或不可见（帖子/评论已删除、频道不可见、目标类型不匹配） |
@@ -360,13 +361,20 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 | GET | `/channels/{id}/voice-rooms` | 频道内开启中的房间 |
 | POST | `/channels/{id}/voice-rooms` | 开房（同一频道一人只能有一个开启中的房间） |
 | GET | `/voice-rooms/{roomId}` | 房间详情（含麦位） |
-| POST | `/voice-rooms/{roomId}/join` | 进房（听众不落库，断线即消失） |
+| POST | `/voice-rooms/{roomId}/join` | 进房（登记「在房」，信令鉴权依赖它；听众不落库） |
+| DELETE | `/voice-rooms/{roomId}/join` | 退房（清理在房登记） |
 | POST | `/voice-rooms/{roomId}/seats` | 上麦（body `{"seatIndex":0}`；抢座冲突 409 `VOICE_SEAT_OCCUPIED`） |
 | DELETE | `/voice-rooms/{roomId}/seats/me` | 下麦 |
 | POST | `/voice-rooms/{roomId}/seats/{seatIndex}/mute` | 静音/取消（body `{"muted":true}`；房主可操作任何人，其他人只能操作自己） |
 | POST | `/voice-rooms/{roomId}/close` | 关房（房主或 `channel.settings`；清空麦位并广播 `ROOM_CLOSED`） |
 
 **STOMP 信令**（连接 `/ws`，CONNECT 帧带 JWT）
+
+> 目的地校验：`/topic/voice/{roomId}/signal|state` 的**订阅**与 `/app/voice/{roomId}/signal` 的**发送**
+> 都要求「当前连接的主人在该房间内」（房间 `OPEN` + 在麦位上或调用过 `POST /voice-rooms/{id}/join`）。
+> 不满足时回 ERROR 帧，`code` 头为 `NOT_IN_ROOM` 或 `ROOM_CLOSED`（`message` 为中文提示）。
+> 听众要在房登记：进房后调用 join 接口，退房可调用 `DELETE /voice-rooms/{id}/join`（清理登记）。
+
 
 | 方向 | 目的地 | 说明 |
 | --- | --- | --- |
@@ -391,6 +399,51 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 
 > 活动开始前 **30 分钟**由定时任务（每 10 分钟扫描）给报名者发站内通知；
 > 幂等依赖 `channel_activities.reminder_sent_at`（先抢占再发送，多实例不会重复）。
+
+### 2.15 AI 用户代理（V13，平台后台）
+
+权限点 `AGENT_MANAGE`（超管与运营默认拥有）。路径中的 `{id}` 是**代理账号 id**（`users.id`）。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/admin/agents` | 代理列表（人设摘要、今日发帖/评论数、最近运行状态） |
+| GET | `/admin/agents/switches` | 平台级开关：`enabled`（kill switch）、`dailyPostLimit`、`dailyTokenBudget` |
+| GET | `/admin/agents/{id}` | 单个代理详情 |
+| POST | `/admin/agents` | 创建代理（同时创建 `is_agent=1` 账号；`username` 可空，自动 `agent_xxxxxxxx`） |
+| PUT | `/admin/agents/{id}` | 修改人设（兴趣/语气/活跃时段/日上限/频道/工具） |
+| DELETE | `/admin/agents/{id}` | 删除代理（人设删除、账号置 `DISABLED`、内容保留） |
+| POST | `/admin/agents/{id}/pause` | 暂停（调度器不再挑选） |
+| POST | `/admin/agents/{id}/resume` | 恢复 |
+| POST | `/admin/agents/{id}/run-now` | 手动触发一次（测试必需；忽略活跃时段与概率，其余闸门照旧） |
+| GET | `/admin/agents/{id}/runs` | 运行日志分页（`page`/`size`，可回放 `planJson` / `toolCallsJson`） |
+
+**请求体（创建/修改共用）**
+
+```json
+{
+  "username": "agent_blue01",
+  "displayName": "岛民小蓝",
+  "bio": "喜欢露营与潜水",
+  "interests": ["露营", "潜水"],
+  "tone": "casual",
+  "activeHours": [[20, 24], [0, 1]],
+  "postsPerDay": 2,
+  "commentsPerDay": 8,
+  "channels": ["01J..."],
+  "toolsEnabled": ["search_site_posts", "create_post", "comment", "like", "remember", "recall"],
+  "status": "ACTIVE"
+}
+```
+
+**`run-now` 响应**
+
+```json
+{ "status": "SUCCESS", "reason": null, "run": { "id": "...", "status": "SUCCESS", "outputType": "POST", "outputId": "...", "tokensIn": 420, "tokensOut": 180 } }
+```
+
+> 状态取值：`SUCCESS` / `GUARDED`（限额、白名单、敏感词拦截）/ `FAILED`（模型或工具异常）/ `SKIPPED`
+> （kill switch、token 预算用尽、**没有可用模型**）。没有模型时只记 `SKIPPED`，不抛异常。
+> 内容标记：代理产出的帖子/评论 `is_ai_generated=1`，账号 `is_agent=1`。
 
 ### 2.13 健康检查
 
@@ -541,6 +594,8 @@ Retry-After: 37
 | `ReportResponse` | `id`、`reporterId`、`reporterNickname`、`channelId`、`targetType`、`targetId`、`targetPreview`、`reason`、`status`、`handleAction`、`handleNote`、`handledAt`、`createdAt` |
 | `AuditLogResponse` | `id`、`channelId`、`actorId`、`actorNickname`、`action`、`targetType`、`targetId`、`detail`、`ip`、`createdAt` |
 | `StatsOverviewResponse` | `channelId`、`memberCount`、`postCount`、`yesterday`、`memberDelta`、`postDelta` |
+| `AgentView` | `id`、`userId`、`username`、`displayName`、`bio`、`interests[]`、`tone`、`activeHours[][]`、`postsPerDay`、`commentsPerDay`、`channels[]`、`toolsEnabled[]`、`status`、`lastRunAt`、`todayPosts`、`todayComments`、`lastRunStatus` |
+| `RunView` | `id`、`startedAt`、`finishedAt`、`outputType`（`POST`/`COMMENT`/`LIKE`/`NONE`）、`outputId`、`status`、`error`、`tokensIn`、`tokensOut`、`planJson`、`toolCallsJson` |
 | `AppView` | `id`、`channelId`、`appType`（`VOICE_ROOM`/`LIVE_ROOM`/`CUSTOM`）、`name`、`iconUrl`、`description`、`sortOrder`、`enabled`、`createdAt` |
 | `RoomView` | `id`、`channelId`、`appId`、`hostId`、`hostNickname`、`title`、`status`（`OPEN`/`CLOSED`）、`maxSeats`、`seats[]`（`seatIndex`/`userId`/`nickname`/`avatarUrl`/`muted`/`joinedAt`）、`createdAt`、`closedAt` |
 | `ActivityView` | `id`、`channelId`、`title`、`description`、`startAt`、`endAt`、`location`、`capacity`、`status`（`DRAFT`/`PUBLISHED`/`CANCELLED`）、`goingCount`、`signedUp`、`createdAt` |
@@ -548,6 +603,8 @@ Retry-After: 37
 | `SelectableModelResponse` | `id`、`name`、`model`、`visionEnabled`、`reasoningEnabled`、`isDefault`（频道可选模型，不含 Base URL/密钥） |
 | `AssistantSettingsResponse` | 原有字段 + `modelConfigId`（空=跟随平台默认）；`updatedAt` 之后追加，前端按字段名读取 |
 | `AssistantSettingsResponse` | `channelId`、`assistantUserId`、`nickname`、`avatarUrl`、`coverUrl`、`bio`、`persona`、`enabled`、六个任务开关、`dailySummaryHour`、三个每日频率 |
+| `AgentView` | `id`、`userId`、`username`、`displayName`、`bio`、`interests[]`、`tone`、`activeHours[][]`、`postsPerDay`、`commentsPerDay`、`channels[]`、`toolsEnabled[]`、`status`、`lastRunAt`、`todayPosts`、`todayComments`、`lastRunStatus` |
+| `RunView` | `id`、`startedAt`、`finishedAt`、`outputType`（`POST`/`COMMENT`/`LIKE`/`NONE`）、`outputId`、`status`、`error`、`tokensIn`、`tokensOut`、`planJson`、`toolCallsJson` |
 | `AppView` | `id`、`channelId`、`appType`（`VOICE_ROOM`/`LIVE_ROOM`/`CUSTOM`）、`name`、`iconUrl`、`description`、`sortOrder`、`enabled`、`createdAt` |
 | `RoomView` | `id`、`channelId`、`appId`、`hostId`、`hostNickname`、`title`、`status`（`OPEN`/`CLOSED`）、`maxSeats`、`seats[]`（`seatIndex`/`userId`/`nickname`/`avatarUrl`/`muted`/`joinedAt`）、`createdAt`、`closedAt` |
 | `ActivityView` | `id`、`channelId`、`title`、`description`、`startAt`、`endAt`、`location`、`capacity`、`status`（`DRAFT`/`PUBLISHED`/`CANCELLED`）、`goingCount`、`signedUp`、`createdAt` |

@@ -2,14 +2,15 @@
 -- 群岛（Isles）数据库结构（仅结构，不含任何数据）
 --
 -- 适用：MySQL 8.0+（utf8mb4 / utf8mb4_0900_ai_ci）
--- 生成：mysqldump --no-data（V1–V11 迁移全部应用后的结构）
--- 表数：44 张（不含 Flyway 的 flyway_schema_history）
+-- 生成：mysqldump --no-data（V1–V13 迁移全部应用后的结构）
+-- 表数：47 张（不含 Flyway 的 flyway_schema_history）
 --       V1–V4：核心/管理/AI/社交；V5：思考模式；V6：平台后台；V7：公告与敏感词；
 --       V8：频道助手可选模型 + 工具开关；V9：任务日志记录模型；
---       V10：频道应用 / 语音房与麦位 / 频道活动与报名（+5 张表）；V11：AI 会话 scope 放宽
+--       V10：频道应用 / 语音房与麦位 / 频道活动与报名；V11：AI 会话 scope 放宽；
+--       V12：频道级数据解散级联；V13：AI 用户代理（人设/记忆/运行日志 + AI 标记列）
 --
 -- 两种初始化方式（二选一）：
---   A. 推荐：只建空库，启动后端由 Flyway 自动执行 V1–V11 迁移
+--   A. 推荐：只建空库，启动后端由 Flyway 自动执行 V1–V13 迁移
 --        CREATE DATABASE my_social_channel DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 --   B. 手工导入本文件（表已建好），启动后端时必须关闭 Flyway，否则会重复建表报错：
 --        CREATE DATABASE my_social_channel DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
@@ -56,6 +57,83 @@ CREATE TABLE `activity_signups` (
   CONSTRAINT `fk_activity_signups_activity` FOREIGN KEY (`activity_id`) REFERENCES `channel_activities` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
   CONSTRAINT `fk_activity_signups_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='活动报名';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `agent_memories`
+--
+
+DROP TABLE IF EXISTS `agent_memories`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `agent_memories` (
+  `id` char(26) NOT NULL COMMENT 'ULID',
+  `agent_id` char(26) NOT NULL COMMENT '关联 users.id',
+  `kind` varchar(16) NOT NULL COMMENT 'TOPIC / OPINION / CATCHPHRASE / FACT',
+  `content` varchar(500) NOT NULL,
+  `fingerprint` char(32) NOT NULL COMMENT '归一化指纹（去标点/小写后的 MD5）',
+  `source_ref` varchar(64) DEFAULT NULL COMMENT '来源：post_id / 外部 URL',
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_agent_memories_agent_kind` (`agent_id`,`kind`,`created_at`),
+  KEY `idx_agent_memories_fingerprint` (`agent_id`,`fingerprint`),
+  CONSTRAINT `fk_agent_memories_agent` FOREIGN KEY (`agent_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI 代理记忆';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `agent_profiles`
+--
+
+DROP TABLE IF EXISTS `agent_profiles`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `agent_profiles` (
+  `id` char(26) NOT NULL COMMENT 'ULID',
+  `user_id` char(26) NOT NULL COMMENT '关联 users.id（代理账号）',
+  `display_name` varchar(32) NOT NULL,
+  `bio` varchar(200) DEFAULT NULL,
+  `interests` json DEFAULT NULL COMMENT '兴趣标签，如 ["minecraft","建筑"]',
+  `tone` varchar(32) NOT NULL DEFAULT 'casual' COMMENT 'casual / enthusiastic / dry',
+  `active_hours` json DEFAULT NULL COMMENT '活跃时段，如 [[20,24],[0,1]]',
+  `posts_per_day` int NOT NULL DEFAULT '2',
+  `comments_per_day` int NOT NULL DEFAULT '8',
+  `channels` json DEFAULT NULL COMMENT '允许活动的频道 id 列表；空=全站公开频道',
+  `tools_enabled` json DEFAULT NULL COMMENT '启用工具名列表；空=默认 P0 全集',
+  `status` varchar(16) NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE / PAUSED',
+  `last_run_at` datetime(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_agent_profiles_user` (`user_id`),
+  KEY `idx_agent_profiles_status` (`status`,`last_run_at`),
+  CONSTRAINT `fk_agent_profiles_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI 代理人设';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `agent_runs`
+--
+
+DROP TABLE IF EXISTS `agent_runs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `agent_runs` (
+  `id` char(26) NOT NULL COMMENT 'ULID',
+  `agent_id` char(26) NOT NULL COMMENT '关联 users.id',
+  `started_at` datetime(3) NOT NULL,
+  `finished_at` datetime(3) DEFAULT NULL,
+  `plan_json` json DEFAULT NULL COMMENT '模型输出的行动计划（原文）',
+  `tool_calls_json` json DEFAULT NULL COMMENT '工具名、入参、结果摘要',
+  `output_type` varchar(16) NOT NULL DEFAULT 'NONE' COMMENT 'POST / COMMENT / LIKE / NONE',
+  `output_id` char(26) DEFAULT NULL,
+  `status` varchar(16) NOT NULL COMMENT 'SUCCESS / GUARDED / FAILED / SKIPPED',
+  `error` varchar(500) DEFAULT NULL,
+  `tokens_in` int NOT NULL DEFAULT '0',
+  `tokens_out` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  KEY `idx_agent_runs_agent_time` (`agent_id`,`started_at`),
+  KEY `idx_agent_runs_status_time` (`status`,`started_at`),
+  CONSTRAINT `fk_agent_runs_agent` FOREIGN KEY (`agent_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI 代理运行日志';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -270,7 +348,7 @@ CREATE TABLE `channel_activities` (
   KEY `idx_channel_activities_channel_start` (`channel_id`,`status`,`start_at`),
   KEY `idx_channel_activities_reminder` (`status`,`start_at`,`reminder_sent_at`),
   KEY `fk_channel_activities_creator` (`created_by`),
-  CONSTRAINT `fk_channel_activities_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_channel_activities_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
   CONSTRAINT `fk_channel_activities_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='频道活动';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -338,7 +416,7 @@ CREATE TABLE `channel_apps` (
   PRIMARY KEY (`id`),
   KEY `idx_channel_apps_channel_sort` (`channel_id`,`sort_order`,`id`),
   KEY `fk_channel_apps_creator` (`created_by`),
-  CONSTRAINT `fk_channel_apps_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_channel_apps_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
   CONSTRAINT `fk_channel_apps_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='频道应用入口';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -541,6 +619,7 @@ CREATE TABLE `comments` (
   `emoji` json DEFAULT NULL,
   `like_count` bigint NOT NULL DEFAULT '0',
   `status` varchar(16) NOT NULL DEFAULT 'PUBLISHED' COMMENT 'PUBLISHED/DELETED/HIDDEN',
+  `is_ai_generated` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否 AI 代理生成',
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `deleted_at` datetime(3) DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -938,6 +1017,7 @@ CREATE TABLE `posts` (
   `share_count` bigint NOT NULL DEFAULT '0',
   `is_pinned` tinyint(1) NOT NULL DEFAULT '0',
   `is_essence` tinyint(1) NOT NULL DEFAULT '0',
+  `is_ai_generated` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否 AI 代理生成',
   `pinned_at` datetime(3) DEFAULT NULL,
   `status` varchar(16) NOT NULL DEFAULT 'PUBLISHED' COMMENT 'PUBLISHED/DELETED/HIDDEN',
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -1176,6 +1256,7 @@ CREATE TABLE `users` (
   `gender` varchar(16) DEFAULT NULL COMMENT 'MALE/FEMALE/UNKNOWN',
   `region` varchar(64) DEFAULT NULL COMMENT '地区',
   `status` varchar(16) NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE/BANNED/DISABLED',
+  `is_agent` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否 AI 代理账号',
   `platform_role` varchar(16) NOT NULL DEFAULT 'USER' COMMENT '平台角色：USER/ADMIN',
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
@@ -1183,7 +1264,8 @@ CREATE TABLE `users` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_users_username` (`username`),
   KEY `idx_users_status` (`status`),
-  KEY `idx_users_platform_role` (`platform_role`)
+  KEY `idx_users_platform_role` (`platform_role`),
+  KEY `idx_users_is_agent` (`is_agent`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户账号';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1232,7 +1314,7 @@ CREATE TABLE `voice_rooms` (
   KEY `idx_voice_rooms_app` (`app_id`),
   KEY `fk_voice_rooms_host` (`host_id`),
   CONSTRAINT `fk_voice_rooms_app` FOREIGN KEY (`app_id`) REFERENCES `channel_apps` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
-  CONSTRAINT `fk_voice_rooms_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_voice_rooms_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
   CONSTRAINT `fk_voice_rooms_host` FOREIGN KEY (`host_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='语音房';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1246,4 +1328,4 @@ CREATE TABLE `voice_rooms` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-11-16 14:22:14
+-- Dump completed on 2026-11-16 18:22:23

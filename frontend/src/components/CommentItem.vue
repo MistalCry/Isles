@@ -6,6 +6,7 @@ import { formatCount, formatRelativeTime } from '@/utils/format'
 import { formatMentions } from '@/utils/mention'
 import type { Comment, UserSummary } from '@/types/models'
 import UserAvatar from './UserAvatar.vue'
+import AiBadge from './AiBadge.vue'
 import UserCardPopover from './UserCardPopover.vue'
 import MediaViewer from './MediaViewer.vue'
 
@@ -79,6 +80,8 @@ function handleLike(comment: Comment): void {
         <UserCardPopover :user="comment.author" :channel-id="channelId">
           <button type="button" class="comment-item__name">{{ authorName }}</button>
         </UserCardPopover>
+        <AiBadge v-if="comment.author.isAgent" kind="agent" />
+        <AiBadge v-if="comment.isAiGenerated" />
         <span v-if="isPostAuthor" class="comment-badge comment-badge--author">{{ t('comment.authorBadge') }}</span>
         <el-tag v-if="roleName" size="small" effect="plain" type="info">{{ roleName }}</el-tag>
         <time class="comment-item__time" :datetime="comment.createdAt">

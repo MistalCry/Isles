@@ -76,7 +76,7 @@ function isInitiator(peerId: string): boolean {
   return myId.value < peerId
 }
 
-function sendSignal(to: string, type: 'offer' | 'answer' | 'ice', payload: unknown): void {
+function sendSignal(to: string, type: 'offer' | 'answer' | 'ice' | 'renegotiate', payload: unknown): void {
   if (!room.value) return
   realtime.publish(`/app/voice/${room.value.id}/signal`, { to, type, payload })
 }
@@ -146,6 +146,9 @@ async function handleSignal(message: unknown): Promise<void> {
     } else if (type === 'answer') {
       const peer = peers.get(from)
       if (peer) await peer.pc.setRemoteDescription(payload.sdp as RTCSessionDescriptionInit)
+    } else if (type === 'renegotiate') {
+      // 对端上麦后才拿到音轨：它不能主动 offer（会 glare），发信号请发起方重新协商
+      if (isInitiator(from)) await callPeer(from)
     } else if (type === 'ice') {
       const peer = peers.get(from)
       if (peer && payload.candidate) await peer.pc.addIceCandidate(payload.candidate as RTCIceCandidateInit)
@@ -195,6 +198,23 @@ async function reconcilePeers(): Promise<void> {
   }
 }
 
+let pollTimer: number | null = null
+
+/** 状态推送是「轻提示」，漏一条就会卡住；再挂一个 3s 轮询兜底 */
+function startPolling(): void {
+  stopPolling()
+  pollTimer = window.setInterval(() => {
+    void refreshRoom()
+  }, 3000)
+}
+
+function stopPolling(): void {
+  if (pollTimer !== null) {
+    window.clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
 function subscribeRoom(roomId: string): void {
   unsubscribers.push(
     realtime.subscribe(`/topic/voice/${roomId}/signal`, (body) => {
@@ -209,6 +229,7 @@ function subscribeRoom(roomId: string): void {
 }
 
 function unsubscribeAll(): void {
+  stopPolling()
   while (unsubscribers.length > 0) unsubscribers.pop()?.()
   if (refreshTimer !== null) {
     window.clearTimeout(refreshTimer)
@@ -237,6 +258,7 @@ async function enterRoom(target: VoiceRoom): Promise<void> {
   const joined = await joinVoiceRoom(target.id).catch(() => null)
   room.value = joined ?? target
   subscribeRoom(target.id)
+  startPolling()
   await reconcilePeers()
 }
 
@@ -297,6 +319,8 @@ async function takeSeat(seat: VoiceSeat): Promise<void> {
   try {
     const updated = await takeVoiceSeat(room.value.id, seat.index)
     if (updated) room.value = updated
+    // 先按最新麦位把连接建起来，再补音轨（否则「先建连、后上麦」的一侧没有对端）
+    await reconcilePeers()
     await syncTracksAndRenegotiate()
     ElMessage.success(t('voice.seated'))
   } catch (cause) {
@@ -313,6 +337,7 @@ async function leaveSeat(): Promise<void> {
     const updated = await releaseVoiceSeat(room.value.id)
     if (updated) room.value = updated
     muted.value = false
+    await reconcilePeers()
     await syncTracksAndRenegotiate()
     ElMessage.success(t('voice.leftSeat'))
   } catch (cause) {
@@ -322,7 +347,13 @@ async function leaveSeat(): Promise<void> {
   }
 }
 
-/** 上/下麦后本地音轨变化：给已有连接补轨道并重新协商 */
+/**
+ * 上/下麦后本地音轨变化：给已有连接补轨道并重新协商。
+ *
+ * <p>只有 initiator 能发 offer（避免双方同时 offer 造成 glare），
+ * 非 initiator 一侧补完轨道后发 `renegotiate` 请对端重新协商——
+ * 否则「先建连、后上麦」的一侧声音永远发不出去（实测单向音频就是这么来的）。
+ */
 async function syncTracksAndRenegotiate(): Promise<void> {
   const stream = localStream.value
   if (!stream) return
@@ -332,6 +363,7 @@ async function syncTracksAndRenegotiate(): Promise<void> {
       if (!senders.some((sender) => sender.track === track)) pc.addTrack(track, stream)
     }
     if (isInitiator(peerId)) await callPeer(peerId).catch(() => undefined)
+    else sendSignal(peerId, 'renegotiate', {})
   }
 }
 
