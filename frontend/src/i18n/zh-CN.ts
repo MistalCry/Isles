@@ -1678,6 +1678,10 @@ admin: {
     toolCallUrl: "地址",
     toolCallTitles: "前 {n} 条标题",
     toolCallRaw: "原始 JSON",
+    running: "正在运行，最长约 3 分钟…",
+    runTimeout: "已超时，请稍后刷新运行日志查看结果",
+    avatar: "头像",
+    avatarHint: "1:1 裁剪；不设置则用展示名首字母占位",
   },
 },
 assistant: {

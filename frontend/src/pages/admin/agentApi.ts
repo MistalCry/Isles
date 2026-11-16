@@ -49,6 +49,20 @@ export interface AgentSwitches {
   dailyTokenBudget: number
 }
 
+/**
+ * 「运行一次」的超时（毫秒）。
+ *
+ * <p>这个接口要跑完整的一轮模型调用（本地 8B 约 30–60 秒），全局 20 秒必然超时；
+ * 只给这一个请求放宽到 180 秒，其他接口继续快速失败。
+ */
+export const RUN_NOW_TIMEOUT_MS = 180_000
+
+/** axios 的超时在 client.ts 里被包成 AppError，原始 code 挂在 cause 上 */
+export function isRequestTimeout(error: unknown): boolean {
+  const code = (error as { cause?: { code?: string } } | null)?.cause?.code
+  return code === 'ECONNABORTED' || code === 'ETIMEDOUT'
+}
+
 export interface RunNowResult {
   status: string
   reason?: string | null
@@ -90,6 +104,8 @@ export interface AgentProfilePayload {
   displayName?: string
   bio?: string | null
   status?: AgentStatus
+  /** 头像 URL（上传后回填）；null = 清空，走首字母占位 */
+  avatarUrl?: string | null
   profile: Partial<AgentProfile>
 }
 
@@ -181,7 +197,7 @@ export function toAgentUser(value: unknown): AgentUser | null {
     userId: str(raw.userId) ?? id,
     username: str(raw.username) ?? '',
     displayName: str(raw.displayName) ?? str(raw.display_name) ?? str(raw.nickname) ?? str(raw.username) ?? '',
-    avatarUrl: str(raw.avatarUrl),
+    avatarUrl: str(raw.avatarUrl) ?? str(raw.avatar_url),
     bio: str(raw.bio),
     status: statusOf(raw.status ?? profileRaw.status),
     profile: {
@@ -275,6 +291,8 @@ export async function updateAdminAgent(agentId: string, payload: AgentProfilePay
     bio: payload.bio ?? null,
     status: payload.status,
   }
+  // 头像单独判断：undefined 表示「本次不改」，null 表示「清空」
+  if (payload.avatarUrl !== undefined) body.avatarUrl = payload.avatarUrl
   if (profile.interests !== undefined) body.interests = profile.interests
   if (profile.tone !== undefined) body.tone = profile.tone
   if (profile.activeHours !== undefined) body.activeHours = profile.activeHours
@@ -320,9 +338,18 @@ export async function resumeAdminAgent(agentId: string): Promise<void> {
   await http.post(`/admin/agents/${encodeURIComponent(agentId)}/resume`)
 }
 
-/** 立即运行一次：返回 { status, reason, run }，status 可能是 SKIPPED */
+/**
+ * 立即运行一次：返回 { status, reason, run }，status 可能是 SKIPPED。
+ *
+ * <p>单独给 180 秒超时并关掉全局错误提示：超时很可能只是前端等不及了，
+ * 后端仍在跑并可能已经发出内容，提示文案要由页面按「超时」而非「失败」给出。
+ */
 export async function runAdminAgentNow(agentId: string): Promise<RunNowResult> {
-  const { data } = await http.post(`/admin/agents/${encodeURIComponent(agentId)}/run-now`)
+  const { data } = await http.post(
+    `/admin/agents/${encodeURIComponent(agentId)}/run-now`,
+    undefined,
+    { timeout: RUN_NOW_TIMEOUT_MS, silent: true },
+  )
   const raw = record(data) ?? {}
   return {
     status: String(raw.status ?? 'SKIPPED').toUpperCase(),

@@ -1678,6 +1678,10 @@ admin: {
     toolCallUrl: "URL",
     toolCallTitles: "Top {n} titles",
     toolCallRaw: "Raw JSON",
+    running: "Running, up to ~3 min…",
+    runTimeout: "Timed out — refresh the run logs shortly to see the result.",
+    avatar: "Avatar",
+    avatarHint: "Cropped 1:1; falls back to the first letter of the display name.",
   },
 },
 assistant: {

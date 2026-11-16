@@ -92,7 +92,7 @@ watch(
       <Sidebar @open-announcements="openAnnouncements()" />
     </aside>
 
-    <el-drawer v-model="mobileNavOpen" direction="ltr" size="264px" :with-header="false">
+    <el-drawer v-model="mobileNavOpen" direction="ltr" size="264px" :with-header="false" class="app-nav-drawer">
       <Sidebar @navigate="closeMobileNav" @open-announcements="openAnnouncements()" />
     </el-drawer>
 
@@ -207,7 +207,8 @@ watch(
 </style>
 
 <style lang="scss">
-.el-drawer__body {
+/* 移动端导航抽屉是满宽侧栏，需要贴边；其余抽屉沿用全局 20px 内边距 */
+.app-nav-drawer .el-drawer__body {
   padding: 0;
 }
 </style>

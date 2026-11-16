@@ -257,13 +257,43 @@ function listFromObject(value: unknown): unknown[] {
 }
 
 /**
+ * 两阶段 tick 的日志形态：`{ research:[步骤...], compose:步骤 }`。
+ *
+ * <p>把 `research` 逐条展开、`compose` 拼在最后，页面就能按「先检索、后产出」的顺序展示，
+ * 而不是显示成一条「未知工具」。`compose` 兼容对象与 JSON 字符串两种历史写法。
+ */
+function fromTwoPhase(source: Raw): ToolCallView[] | null {
+  const research = source.research
+  if (!Array.isArray(research)) return null
+  const items: unknown[] = [...research]
+  const compose = source.compose
+  if (isRaw(compose)) {
+    items.push(compose)
+  } else if (typeof compose === 'string') {
+    const parsed = parseJson(compose)
+    items.push(isRaw(parsed) ? parsed : { action: 'compose', summary: compose })
+  }
+  const views: ToolCallView[] = []
+  for (const item of items) {
+    const view = toView(item)
+    if (view) views.push(view)
+  }
+  return views
+}
+
+/**
  * 把 `tool_calls_json` 归一成页面可渲染的列表。
  *
- * <p>兼容四种形态：单对象、对象数组、`{calls:[...]}` 包装、以及整体是 JSON 字符串。
+ * <p>兼容五种形态：单对象、对象数组、`{calls:[...]}` 包装、两阶段 `{research,compose}`、
+ * 以及整体是 JSON 字符串。
  */
 export function parseToolCalls(value: unknown): ToolCallView[] {
   const source = typeof value === 'string' ? (parseJson(value) ?? value) : value
   if (source === null || source === undefined) return []
+  if (isRaw(source)) {
+    const twoPhase = fromTwoPhase(source)
+    if (twoPhase) return twoPhase
+  }
   const items = Array.isArray(source) ? source : listFromObject(source)
   const views: ToolCallView[] = []
   for (const item of items) {

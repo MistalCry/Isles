@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus, Refresh, Search, VideoPlay } from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
+import ImageCropUpload from '@/components/media/ImageCropUpload.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { resolveErrorMessage } from '@/api/client'
@@ -15,6 +16,7 @@ import {
   createAdminAgent,
   deleteAdminAgent,
   getAgentSwitches,
+  isRequestTimeout,
   listAdminAgentRuns,
   listAdminAgents,
   pauseAdminAgent,
@@ -48,6 +50,8 @@ const globalEnabled = ref<boolean | null>(null)
 const dailyPostLimit = ref(0)
 const dailyTokenBudget = ref(0)
 const busyId = ref<string | null>(null)
+/** 「运行一次」单独标记：这个动作要跑完整模型调用，loading 文案与按钮都要区别对待 */
+const runningId = ref<string | null>(null)
 
 /**
  * 联网搜索配置 agent.search.provider（NONE / SEARXNG）。
@@ -85,6 +89,7 @@ const formError = ref<string | null>(null)
 const form = ref({
   displayName: '',
   bio: '',
+  avatarUrl: null as string | null,
   status: 'ACTIVE' as AgentStatus,
   tone: 'casual' as AgentTone,
   interests: [] as string[],
@@ -280,6 +285,7 @@ async function openEdit(agent: AgentUser): Promise<void> {
   form.value = {
     displayName: agent.displayName,
     bio: agent.bio ?? '',
+    avatarUrl: agent.avatarUrl ?? null,
     status: agent.status,
     tone: agent.profile.tone,
     interests: [...agent.profile.interests],
@@ -329,6 +335,7 @@ async function saveProfile(): Promise<void> {
       displayName: form.value.displayName.trim(),
       bio: form.value.bio.trim() || null,
       status: form.value.status,
+      avatarUrl: form.value.avatarUrl,
       profile,
     })
     if (updated) applyAgent(updated)
@@ -367,7 +374,7 @@ async function togglePause(agent: AgentUser): Promise<void> {
 }
 
 async function runNow(agent: AgentUser): Promise<void> {
-  busyId.value = agent.userId
+  runningId.value = agent.userId
   try {
     const result = await runAdminAgentNow(agent.userId)
     if (result.status === 'FAILED') {
@@ -381,9 +388,15 @@ async function runNow(agent: AgentUser): Promise<void> {
     }
     await load()
   } catch (cause) {
-    ElMessage.error(resolveErrorMessage(cause, t('admin.agents.actionFailed')))
+    if (isRequestTimeout(cause)) {
+      // 前端等不及 ≠ 后端失败：整轮模型调用可能已经跑完并发出内容
+      ElMessage.warning(t('admin.agents.runTimeout'))
+      void load()
+    } else {
+      ElMessage.error(resolveErrorMessage(cause, t('admin.agents.actionFailed')))
+    }
   } finally {
-    busyId.value = null
+    runningId.value = null
   }
 }
 
@@ -604,9 +617,9 @@ onMounted(() => {
                 text
                 size="small"
                 :icon="VideoPlay"
-                :loading="busyId === row.userId"
+                :loading="runningId === row.userId"
                 @click="runNow(row as AgentUser)"
-              >{{ t('admin.agents.runNow') }}</el-button>
+              >{{ runningId === row.userId ? t('admin.agents.running') : t('admin.agents.runNow') }}</el-button>
               <el-button v-if="canManage" text size="small" type="danger" :icon="Delete" @click="removeAgent(row as AgentUser)">
                 {{ t('common.delete') }}
               </el-button>
@@ -651,6 +664,19 @@ onMounted(() => {
     <el-drawer v-model="editOpen" :title="t('admin.agents.editTitle', { name: editing?.displayName ?? '' })" size="520px">
       <el-alert v-if="formError" :title="formError" type="error" :closable="false" show-icon class="admin-agents__alert" />
       <el-form label-position="top" @submit.prevent>
+        <el-form-item :label="t('admin.agents.avatar')">
+          <ImageCropUpload
+            v-model="form.avatarUrl"
+            :aspect-ratio="1"
+            :max-output-width="1024"
+            :box-width="200"
+            :preview-width="72"
+            shape="circle"
+            :label="t('media.crop.avatarLabel')"
+            :hint="t('media.crop.squareHint')"
+          />
+          <p class="agent-form__hint">{{ t('admin.agents.avatarHint') }}</p>
+        </el-form-item>
         <el-form-item :label="t('admin.agents.displayName')" required>
           <el-input v-model="form.displayName" maxlength="32" show-word-limit />
         </el-form-item>

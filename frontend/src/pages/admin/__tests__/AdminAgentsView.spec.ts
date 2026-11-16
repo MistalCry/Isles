@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
+import ElementPlus, { ElMessage } from 'element-plus'
 
 // AI 用户页是 Agent P0 的运维入口：列表字段、总开关提示、三个关键动作都要锁住，
 // 避免以后改接口时页面静默变成空表。
@@ -28,6 +28,7 @@ vi.mock('@/pages/admin/agentApi', async () => {
   return {
     toAgentUser: actual.toAgentUser,
     toAgentRun: actual.toAgentRun,
+    isRequestTimeout: actual.isRequestTimeout,
     listAdminAgents: mocks.listAdminAgents,
     getAgentSwitches: mocks.getAgentSwitches,
     createAdminAgent: mocks.createAdminAgent,
@@ -90,7 +91,12 @@ async function mountView() {
       plugins: [ElementPlus],
       // el-input-number 在 jsdom 下会因内部 ref 未挂载而抛错（Element Plus 已知问题），
       // 这里只关心「页面行为」，数值控件用桩即可。
-      stubs: { teleport: true, 'el-input-number': true },
+      // el-drawer 的桩要带上 footer 插槽，否则抽屉底部的保存按钮点不到。
+      stubs: {
+        teleport: true,
+        'el-input-number': true,
+        'el-drawer': { template: '<div class="el-drawer-stub"><slot /><slot name="footer" /></div>' },
+      },
     },
   })
   await flushPromises()
@@ -272,6 +278,54 @@ describe('AdminAgentsView', () => {
     // 标题只渲染前 3 条（原始 JSON 折叠里仍有全量，所以这里数列表项而不是搜文本）
     const titles = wrapper.findAll('.tool-call__title-list li').map((item) => item.text())
     expect(titles).toEqual(['A 岛新地标', 'B 岛红石农场', 'C 岛交通改造'])
+  })
+
+  it('运行一次：loading 文案提示最长 3 分钟，超时按「超时」而不是「失败」提示', async () => {
+    const warn = vi.spyOn(ElMessage, 'warning')
+    let finish: (value: unknown) => void = () => undefined
+    mocks.runAdminAgentNow.mockReturnValue(new Promise((resolve) => {
+      finish = resolve
+    }))
+    const wrapper = await mountView()
+    const runBtn = wrapper.findAll('button').find((b) => b.text().includes('运行一次'))!
+    await runBtn.trigger('click')
+    await flushPromises()
+    // 按钮在跑的时候要告诉用户会等很久
+    expect(runBtn.text()).toContain('正在运行，最长约 3 分钟')
+
+    finish({ status: 'SUCCESS', reason: null, run: null })
+    await flushPromises()
+
+    // 超时：后端可能已经成功了，不能报「失败」
+    warn.mockClear()
+    mocks.runAdminAgentNow.mockRejectedValue({ cause: { code: 'ECONNABORTED' } })
+    await runBtn.trigger('click')
+    await flushPromises()
+    expect(warn).toHaveBeenCalledWith('已超时，请稍后刷新运行日志查看结果')
+    expect(wrapper.text()).not.toContain('操作失败')
+    warn.mockRestore()
+  })
+
+  it('人设抽屉带头像上传，保存时把 avatarUrl 一起提交', async () => {
+    mocks.listAdminAgents.mockResolvedValue({
+      items: [{ ...AGENT, avatarUrl: '/media/agent-avatar.png' }],
+      total: 1,
+      page: 1,
+      size: 20,
+    })
+    const wrapper = await mountView()
+    await wrapper.findAll('button').find((b) => b.text().trim() === '编辑')!.trigger('click')
+    await flushPromises()
+    // 1:1 裁剪的头像上传（ImageCropUpload）
+    expect(wrapper.text()).toContain('头像')
+    expect(wrapper.find('.image-crop-upload').exists()).toBe(true)
+
+    await wrapper.findAll('button').find((b) => b.text().trim() === '保存')!.trigger('click')
+    await flushPromises()
+    expect(mocks.updateAdminAgent).toHaveBeenCalledWith(
+      AGENT.userId,
+      expect.objectContaining({ avatarUrl: '/media/agent-avatar.png' }),
+    )
   })
 
   it('运行一次 / 暂停分别调用对应接口', async () => {

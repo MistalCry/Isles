@@ -133,4 +133,32 @@ describe('parseToolCalls', () => {
     })
     expect(calls[0].titles).toHaveLength(3)
   })
+
+  it('两阶段日志：research 逐条展开，compose 排在最后', () => {
+    const calls = parseToolCalls({
+      research: [
+        { action: 'web_search', query: 'minecraft 建筑', count: 10, results: [{ title: 'A' }] },
+        { action: 'list_channel_posts', postIds: ['01P1'] },
+      ],
+      compose: { action: 'create_post', args: { title: '红石坑' }, outputId: '01POST' },
+    })
+    expect(calls.map((call) => call.name)).toEqual(['web_search', 'list_channel_posts', 'create_post'])
+    expect(calls[0].query).toBe('minecraft 建筑')
+    expect(calls[2].outputId).toBe('01POST')
+  })
+
+  it('两阶段日志：compose 是 JSON 字符串时也能解析', () => {
+    const calls = parseToolCalls({
+      research: [{ action: 'web_search', query: 'vrchat' }],
+      compose: '{"action":"comment","args":{"postId":"01P1"}}',
+    })
+    expect(calls).toHaveLength(2)
+    expect(calls[1].name).toBe('comment')
+  })
+
+  it('两阶段日志：research 为空数组时只渲染 compose', () => {
+    const calls = parseToolCalls({ research: [], compose: { action: 'none' } })
+    expect(calls).toHaveLength(1)
+    expect(calls[0].name).toBe('none')
+  })
 })
