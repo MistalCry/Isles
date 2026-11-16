@@ -1,6 +1,8 @@
 package com.isles.user.controller;
 
 import com.isles.common.security.CurrentUserProvider;
+import com.isles.post.dto.UserPostPage;
+import com.isles.post.service.PostService;
 import com.isles.user.dto.UpdateProfileRequest;
 import com.isles.user.dto.UserCardResponse;
 import com.isles.user.dto.UserResponse;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserService userService;
+    private final PostService postService;
     private final CurrentUserProvider currentUserProvider;
 
     @GetMapping("/{id}")
@@ -40,5 +43,15 @@ public class UserController {
     @PatchMapping("/me")
     public UserResponse updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
         return userService.updateProfile(currentUserProvider.requireUserId(), request);
+    }
+
+    /**
+     * 我的帖子（docs/05 §2.1）：按发布时间倒序，可用 {@code channelId} 过滤某个频道内的帖子。
+     */
+    @GetMapping("/me/posts")
+    public UserPostPage myPosts(@RequestParam(required = false) String channelId,
+                                @RequestParam(required = false) Integer page,
+                                @RequestParam(required = false) Integer size) {
+        return postService.listMyPosts(currentUserProvider.requireUserId(), channelId, page, size);
     }
 }

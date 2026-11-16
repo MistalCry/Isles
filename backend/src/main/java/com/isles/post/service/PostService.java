@@ -25,6 +25,7 @@ import com.isles.interaction.service.InteractionService;
 import com.isles.post.dto.CreatePostRequest;
 import com.isles.post.dto.UpdatePostRequest;
 import com.isles.post.dto.PostResponse;
+import com.isles.post.dto.UserPostPage;
 import com.isles.post.dto.TopCommentResponse;
 import com.isles.post.entity.Post;
 import com.isles.post.entity.PostMedia;
@@ -58,6 +59,10 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class PostService {
+
+    /** 「我的帖子」默认/最大分页。 */
+    private static final int DEFAULT_MY_POSTS_SIZE = 20;
+    private static final int MAX_MY_POSTS_SIZE = 50;
 
     /** 浏览量去重窗口：同一会话 30 分钟内重复访问只计一次。 */
     private static final Duration VIEW_DEDUPE_WINDOW = Duration.ofMinutes(30);
@@ -264,13 +269,11 @@ public class PostService {
             nextCursor = null;
         } else if (TAB_ESSENCE.equals(tabValue)) {
             String cursorId = CursorUtils.validateIdCursor(cursor);
-            rows = postMapper.selectChannelLatest(channelId, boardId, true, cursorId,
-                    cursorPinnedFlag(cursorId), pageSize + 1);
+            rows = postMapper.selectChannelLatest(channelId, boardId, true, cursorId, pageSize + 1);
             nextCursor = null;
         } else if (TAB_LATEST.equals(tabValue)) {
             String cursorId = CursorUtils.validateIdCursor(cursor);
-            rows = postMapper.selectChannelLatest(channelId, boardId, false, cursorId,
-                    cursorPinnedFlag(cursorId), pageSize + 1);
+            rows = postMapper.selectChannelLatest(channelId, boardId, false, cursorId, pageSize + 1);
             nextCursor = null;
         } else {
             throw new AppException(ErrorCode.VALIDATION_ERROR, "tab 取值必须为 latest、hot 或 essence");
@@ -290,26 +293,29 @@ public class PostService {
     }
 
     /**
+     * 我的帖子（docs/05 §2.1）：按发布时间倒序，支持按频道过滤，page/size 偏移分页。
+     *
+     * <p>与频道帖子流同构（{@link PostResponse}，含 {@code topComment}），便于前端复用帖子卡片。
+     */
+    public UserPostPage listMyPosts(String userId, String channelId, Integer page, Integer size) {
+        int pageNo = page == null || page <= 0 ? 1 : page;
+        int pageSize = size == null || size <= 0 ? DEFAULT_MY_POSTS_SIZE : Math.min(size, MAX_MY_POSTS_SIZE);
+        String channelFilter = channelId == null || channelId.isBlank() ? null : channelId.trim();
+        long total = postMapper.countUserPosts(userId, channelFilter);
+        List<Post> rows = postMapper.selectUserPosts(userId, channelFilter, pageSize, (pageNo - 1) * pageSize);
+        return new UserPostPage(toResponses(rows, userId), total, pageNo, pageSize);
+    }
+
+    /**
      * 频道置顶帖列表（docs/03 FR-POST-05）：按置顶时间倒序，最多 20 条。
      *
-     * <p>频道帖子流（latest）也会把置顶排在最前；本接口供「置顶区」独立渲染，避免翻页后置顶被冲走。
+     * <p>频道帖子流（latest/essence）已排除置顶帖，本接口是置顶帖的唯一入口。
      */
     public PageResult<PostResponse> listPinnedPosts(String channelId, Integer limit, String viewerId) {
         accessService.requireVisibleChannel(channelId, viewerId);
         int pageSize = limit == null || limit <= 0 ? MAX_PINNED : Math.min(limit, MAX_PINNED);
         List<Post> rows = postMapper.selectChannelPinned(channelId, null, pageSize);
         return new PageResult<>(toResponses(rows, viewerId), null);
-    }
-
-    /**
-     * 游标帖自身的置顶状态：置顶流与普通流混排时用于复合游标。
-     */
-    private int cursorPinnedFlag(String cursorId) {
-        if (cursorId == null) {
-            return 0;
-        }
-        Post cursorPost = postMapper.selectById(cursorId);
-        return cursorPost != null && Boolean.TRUE.equals(cursorPost.getIsPinned()) ? 1 : 0;
     }
 
     /**

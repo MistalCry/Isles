@@ -375,6 +375,35 @@ class PostServiceTest {
         verify(interactionService, times(2)).incrementViewCount("post-1");
     }
 
+
+    /** 我的帖子：page/size 偏移分页，返回与帖子流同构的 PostResponse。 */
+    @Test
+    void should_list_my_posts_with_offset_paging() {
+        when(postMapper.countUserPosts("user-1", "ch-1")).thenReturn(3L);
+        when(postMapper.selectUserPosts("user-1", "ch-1", 20, 0)).thenReturn(List.of(post()));
+        mockResponseDependencies();
+
+        com.isles.post.dto.UserPostPage page = postService.listMyPosts("user-1", "ch-1", 1, 20);
+
+        assertThat(page.total()).isEqualTo(3L);
+        assertThat(page.page()).isEqualTo(1);
+        assertThat(page.size()).isEqualTo(20);
+        assertThat(page.items()).hasSize(1);
+        assertThat(page.items().get(0).id()).isEqualTo("post-1");
+        verify(postMapper).selectUserPosts("user-1", "ch-1", 20, 0);
+    }
+
+    @Test
+    void should_clamp_my_posts_size() {
+        when(postMapper.countUserPosts("user-1", null)).thenReturn(0L);
+        when(postMapper.selectUserPosts("user-1", null, 50, 100)).thenReturn(List.of());
+
+        com.isles.post.dto.UserPostPage page = postService.listMyPosts("user-1", null, 3, 500);
+
+        assertThat(page.size()).isEqualTo(50);
+        verify(postMapper).selectUserPosts("user-1", null, 50, 100);
+    }
+
     private void mockResponseDependencies() {
         when(userMapper.selectBatchIds(anyCollection())).thenReturn(List.of(author()));
         when(channelMapper.selectBatchIds(anyCollection())).thenReturn(List.of(channel()));

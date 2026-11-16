@@ -96,8 +96,15 @@ public interface AdminContentMapper {
             """)
     int updatePostStatus(@Param("id") String id, @Param("status") String status);
 
+    /**
+     * 评论状态变更。
+     *
+     * <p>注意：{@code comments} 表**没有 updated_at 列**（只有 created_at / deleted_at），
+     * 这里只能改 status；早期版本多写了一列 updated_at，导致评论类举报处置直接
+     * BadSqlGrammarException（500）。
+     */
     @Update("""
-            UPDATE comments SET status = #{status}, updated_at = CURRENT_TIMESTAMP(3)
+            UPDATE comments SET status = #{status}
             WHERE id = #{id} AND deleted_at IS NULL
             """)
     int updateCommentStatus(@Param("id") String id, @Param("status") String status);

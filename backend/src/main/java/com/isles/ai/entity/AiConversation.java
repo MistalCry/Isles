@@ -32,6 +32,14 @@ public class AiConversation {
     private LocalDateTime deletedAt;
 
     public enum Scope {
-        GLOBAL, CHANNEL
+        /** 全站频道问问（跨频道检索）。 */
+        GLOBAL,
+        /** 频道内问答：检索限定该频道，频道可见即可。 */
+        CHANNEL,
+        /**
+         * 频道助手多会话（V10 起）：用户与频道助手的私聊会话，复用 scope + channel_id，
+         * 要求用户是该频道**成员**（不只是可见）。
+         */
+        CHANNEL_ASSISTANT
     }
 }

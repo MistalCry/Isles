@@ -35,4 +35,11 @@ public interface RealtimePublisher {
      * 向指定用户的指定队列推送（仅允许本接口已声明的队列，防止目的地注入）。
      */
     void publishToUser(String userId, String queue, RealtimeEvent event);
+
+    /**
+     * 向频道级主题广播（语音房信令/状态用）。
+     *
+     * <p>只允许 {@code /topic/voice/} 前缀，防止目的地注入；推送失败只记日志，不影响业务。
+     */
+    void publishTopic(String topic, RealtimeEvent event);
 }

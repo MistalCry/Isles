@@ -21,21 +21,19 @@ public interface PostMapper extends BaseMapper<Post> {
     /**
      * 频道帖子流 - 最新（含精华筛选）。
      *
-     * <p>排序 {@code is_pinned DESC, id DESC}：置顶帖固定排在最前，避免置顶已久的旧帖沉到首屏之外。
-     * 游标使用「置顶标记 + id」复合条件：{@code cursorPinned} 为游标帖自身的置顶状态，
-     * 未置顶的游标只能继续翻未置顶帖，置顶游标先翻完剩余置顶再进入普通流。
+     * <p><b>排除置顶帖</b>：置顶由 {@code GET /channels/{id}/posts/pinned} 单独提供，
+     * 这里只返回普通流，避免置顶帖在「置顶区 + 列表首屏」重复出现；
+     * 游标因此退化为单一 {@code id}，不再需要「置顶标记 + id」复合条件。
      */
     @Select("""
             <script>
             SELECT * FROM posts
             WHERE channel_id = #{channelId} AND status = 'PUBLISHED' AND deleted_at IS NULL
+              AND is_pinned = 0
             <if test="boardId != null">AND board_id = #{boardId}</if>
             <if test="essenceOnly">AND is_essence = 1</if>
-            <if test="cursorId != null">
-              AND (is_pinned &lt; #{cursorPinned}
-                   OR (is_pinned = #{cursorPinned} AND id &lt; #{cursorId}))
-            </if>
-            ORDER BY is_pinned DESC, id DESC
+            <if test="cursorId != null">AND id &lt; #{cursorId}</if>
+            ORDER BY id DESC
             LIMIT #{limit}
             </script>
             """)
@@ -43,8 +41,35 @@ public interface PostMapper extends BaseMapper<Post> {
                                    @Param("boardId") String boardId,
                                    @Param("essenceOnly") boolean essenceOnly,
                                    @Param("cursorId") String cursorId,
-                                   @Param("cursorPinned") int cursorPinned,
                                    @Param("limit") int limit);
+
+    /**
+     * 我的帖子：按发布时间倒序（同一毫秒用 id 兜底），支持按频道过滤。
+     *
+     * <p>只看自己发布的正常帖子（不含已删除/已下架），不参与置顶排序。
+     */
+    @Select("""
+            <script>
+            SELECT * FROM posts
+            WHERE author_id = #{authorId} AND status = 'PUBLISHED' AND deleted_at IS NULL
+            <if test="channelId != null">AND channel_id = #{channelId}</if>
+            ORDER BY created_at DESC, id DESC
+            LIMIT #{limit} OFFSET #{offset}
+            </script>
+            """)
+    List<Post> selectUserPosts(@Param("authorId") String authorId,
+                               @Param("channelId") String channelId,
+                               @Param("limit") int limit,
+                               @Param("offset") int offset);
+
+    @Select("""
+            <script>
+            SELECT COUNT(*) FROM posts
+            WHERE author_id = #{authorId} AND status = 'PUBLISHED' AND deleted_at IS NULL
+            <if test="channelId != null">AND channel_id = #{channelId}</if>
+            </script>
+            """)
+    long countUserPosts(@Param("authorId") String authorId, @Param("channelId") String channelId);
 
     /**
      * 频道置顶帖：按置顶时间倒序，最多 20 条（docs/03 FR-POST-05）。

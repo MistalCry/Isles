@@ -33,6 +33,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -189,9 +190,14 @@ public class AiChatService {
     private SseEmitter startStream(AiConversation conversation, String userId, AiModelConfig model, String question,
                                    List<String> images, List<AiMessage> history, boolean deepThinking) {
         List<String> resolvedImages = imageResolver.resolveAll(images);
-        if (!resolvedImages.isEmpty() && !Boolean.TRUE.equals(model.getVisionEnabled())) {
-            // 模型不支持视觉时降级为纯文本（docs/03 FR-AIQA-04），前端在 meta 中能感知来源不变
-            log.info("模型未开启视觉能力，图片降级为纯文本 modelConfigId={}", model.getId());
+        boolean visionEnabled = Boolean.TRUE.equals(model.getVisionEnabled());
+        int ignoredImages = 0;
+        if (!resolvedImages.isEmpty() && !visionEnabled) {
+            // 模型不支持视觉时降级为纯文本（docs/03 FR-AIQA-04），并告诉模型「有图但被忽略」，
+            // 避免模型因为看不到图而反问或报 400
+            log.info("模型未开启视觉能力，图片降级为纯文本 modelConfigId={} count={}",
+                    model.getId(), resolvedImages.size());
+            ignoredImages = resolvedImages.size();
             resolvedImages = List.of();
         }
         AiContextService.AiPromptRequest promptRequest = new AiContextService.AiPromptRequest(
@@ -208,6 +214,16 @@ public class AiChatService {
         AiContextService.AiPrompt prompt = toolMode
                 ? contextService.buildToolPrompt(promptRequest)
                 : contextService.buildPrompt(promptRequest);
+        if (!visionEnabled) {
+            // 兜底：历史/提示词里若带图片 part（多模态历史），一并剥离并统计
+            PromptCleanup cleanup = stripImages(prompt.messages(), ignoredImages);
+            if (cleanup.ignored() > 0) {
+                List<AiChatMessage> cleaned = new ArrayList<>(cleanup.messages());
+                cleaned.add(AiChatMessage.system("当前模型不支持图片，已忽略 " + cleanup.ignored()
+                        + " 张图片；如需理解图片内容请切换到支持视觉的模型。"));
+                prompt = new AiContextService.AiPrompt(cleaned, prompt.sources());
+            }
+        }
         List<AiResponses.SourceResponse> initialSources = prompt.sources();
         if (toolMode && initialSources.isEmpty()) {
             // meta 事件早于工具执行：先给一份关键词兜底引用，工具跑完后用 sources 事件覆盖为真实命中
@@ -411,13 +427,22 @@ public class AiChatService {
     // ---------------------------------------------------------------------
 
     private void validateChannelScope(AiConversation conversation, String userId) {
-        if (AiConversation.Scope.CHANNEL.name().equals(conversation.getScope())) {
-            if (conversation.getChannelId() == null) {
-                throw new AppException(ErrorCode.BUSINESS_RULE_VIOLATION, "频道会话缺少频道信息");
-            }
-            // 频道内问答仅对可见频道开放；仅成员可见频道由 AccessService 强制成员校验
-            accessService.requireVisibleChannel(conversation.getChannelId(), userId);
+        String scope = conversation.getScope();
+        boolean channelScope = AiConversation.Scope.CHANNEL.name().equals(scope)
+                || AiConversation.Scope.CHANNEL_ASSISTANT.name().equals(scope);
+        if (!channelScope) {
+            return;
         }
+        if (conversation.getChannelId() == null) {
+            throw new AppException(ErrorCode.BUSINESS_RULE_VIOLATION, "频道会话缺少频道信息");
+        }
+        if (AiConversation.Scope.CHANNEL_ASSISTANT.name().equals(scope)) {
+            // 助手私聊要求成员身份（频道可见不等于能占用助手会话）
+            conversationService.requireChannelMember(conversation.getChannelId(), userId);
+            return;
+        }
+        // 频道内问答仅对可见频道开放；仅成员可见频道由 AccessService 强制成员校验
+        accessService.requireVisibleChannel(conversation.getChannelId(), userId);
     }
 
     private void enforceQuota(String userId) {
@@ -451,14 +476,36 @@ public class AiChatService {
         return history;
     }
 
+    /**
+     * 剥离消息里的图片 part，返回清理后的消息与「被忽略的图片总数」。
+     */
+    private PromptCleanup stripImages(List<AiChatMessage> messages, int alreadyIgnored) {
+        int ignored = alreadyIgnored;
+        List<AiChatMessage> cleaned = new ArrayList<>(messages.size());
+        for (AiChatMessage message : messages) {
+            if (message.hasImages()) {
+                ignored += message.imageUrls().size();
+                cleaned.add(new AiChatMessage(message.role(), message.content(), List.of(),
+                        message.toolCallId(), message.toolCalls()));
+            } else {
+                cleaned.add(message);
+            }
+        }
+        return new PromptCleanup(cleaned, ignored);
+    }
+
+    private record PromptCleanup(List<AiChatMessage> messages, int ignored) {
+    }
+
     private boolean channelScoped(AiConversation conversation) {
-        return AiConversation.Scope.CHANNEL.name().equals(conversation.getScope())
-                && conversation.getChannelId() != null;
+        String scope = conversation.getScope();
+        boolean channelScope = AiConversation.Scope.CHANNEL.name().equals(scope)
+                || AiConversation.Scope.CHANNEL_ASSISTANT.name().equals(scope);
+        return channelScope && conversation.getChannelId() != null;
     }
 
     private String channelName(AiConversation conversation) {
-        if (!AiConversation.Scope.CHANNEL.name().equals(conversation.getScope())
-                || conversation.getChannelId() == null) {
+        if (!channelScoped(conversation)) {
             return null;
         }
         Channel channel = channelMapper.selectById(conversation.getChannelId());
@@ -466,8 +513,7 @@ public class AiChatService {
     }
 
     private String assistantPersona(AiConversation conversation) {
-        if (!AiConversation.Scope.CHANNEL.name().equals(conversation.getScope())
-                || conversation.getChannelId() == null) {
+        if (!channelScoped(conversation)) {
             return null;
         }
         ChannelAiSetting setting = channelAiSettingMapper.selectOne(

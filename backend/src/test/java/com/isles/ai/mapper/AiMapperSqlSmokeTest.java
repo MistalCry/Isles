@@ -6,6 +6,11 @@ import com.isles.admin.mapper.AdminReportMapper;
 import com.isles.admin.mapper.AdminStatsMapper;
 import com.isles.admin.mapper.AdminTrendMapper;
 import com.isles.admin.mapper.AdminUserMapper;
+import com.isles.apps.mapper.ActivitySignupMapper;
+import com.isles.apps.mapper.ChannelActivityMapper;
+import com.isles.apps.mapper.ChannelAppMapper;
+import com.isles.apps.mapper.VoiceRoomMapper;
+import com.isles.apps.mapper.VoiceRoomSeatMapper;
 import com.isles.platform.announcement.AnnouncementMapper;
 import com.isles.platform.audit.PlatformAuditLogMapper;
 import com.isles.platform.penalty.UserPenaltyMapper;
@@ -47,7 +52,13 @@ class AiMapperSqlSmokeTest {
             PlatformAuditLogMapper.class,
             PlatformAdminGrantMapper.class,
             PlatformAdminQueryMapper.class,
-            UserPenaltyMapper.class);
+            UserPenaltyMapper.class,
+            // V10：频道应用 / 语音房 / 活动
+            ChannelAppMapper.class,
+            VoiceRoomMapper.class,
+            VoiceRoomSeatMapper.class,
+            ChannelActivityMapper.class,
+            ActivitySignupMapper.class);
 
     /**
      * 非 {@code <script>} 包裹的 SQL 是纯文本，MyBatis 不会解码 XML 实体；
@@ -93,5 +104,10 @@ class AiMapperSqlSmokeTest {
         assertThat(configuration.hasStatement("com.isles.admin.mapper.AdminUserMapper.selectRowById")).isTrue();
         assertThat(configuration.hasStatement("com.isles.admin.mapper.AdminChannelMapper.selectPage")).isTrue();
         assertThat(configuration.hasStatement("com.isles.admin.mapper.AdminReportMapper.selectPage")).isTrue();
+        assertThat(configuration.hasStatement("com.isles.apps.mapper.ChannelAppMapper.selectByChannel")).isTrue();
+        assertThat(configuration.hasStatement("com.isles.apps.mapper.VoiceRoomMapper.selectOpenByChannel")).isTrue();
+        assertThat(configuration.hasStatement("com.isles.apps.mapper.VoiceRoomSeatMapper.selectByRoom")).isTrue();
+        assertThat(configuration.hasStatement("com.isles.apps.mapper.ChannelActivityMapper.selectDueReminders")).isTrue();
+        assertThat(configuration.hasStatement("com.isles.apps.mapper.ActivitySignupMapper.selectGoing")).isTrue();
     }
 }

@@ -17,10 +17,16 @@ public final class AiRequests {
     }
 
     /**
-     * 新建会话：scope=GLOBAL 为频道问问；scope=CHANNEL 必须带 channelId（频道助手）。
+     * 新建会话：
+     * <ul>
+     *   <li>{@code GLOBAL}：全站频道问问；</li>
+     *   <li>{@code CHANNEL}：频道内问答，必须带 channelId（频道可见即可）；</li>
+     *   <li>{@code CHANNEL_ASSISTANT}：与频道助手的私聊多会话，必须带 channelId 且用户须为频道成员。</li>
+     * </ul>
      */
     public record CreateConversationRequest(
-            @Pattern(regexp = "GLOBAL|CHANNEL", message = "scope 取值必须为 GLOBAL 或 CHANNEL")
+            @Pattern(regexp = "GLOBAL|CHANNEL|CHANNEL_ASSISTANT",
+                    message = "scope 取值必须为 GLOBAL、CHANNEL 或 CHANNEL_ASSISTANT")
             String scope,
 
             String channelId,

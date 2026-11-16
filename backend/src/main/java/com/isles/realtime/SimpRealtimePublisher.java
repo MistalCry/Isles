@@ -1,6 +1,8 @@
 package com.isles.realtime;
 
 import com.isles.realtime.dto.RealtimeEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
@@ -16,7 +18,11 @@ import java.util.Set;
 @Component
 public class SimpRealtimePublisher implements RealtimePublisher {
 
+    private static final Logger log = LoggerFactory.getLogger(SimpRealtimePublisher.class);
+
     private static final Set<String> ALLOWED_QUEUES = Set.of(QUEUE_DM, QUEUE_NOTIFICATIONS);
+    /** 允许的主题前缀（只读广播）。 */
+    private static final String ALLOWED_TOPIC_PREFIX = "/topic/voice/";
 
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -43,5 +49,18 @@ public class SimpRealtimePublisher implements RealtimePublisher {
             throw new IllegalArgumentException("不支持的实时推送队列: " + queue);
         }
         messagingTemplate.convertAndSendToUser(userId, queue, event);
+    }
+
+    @Override
+    public void publishTopic(String topic, RealtimeEvent event) {
+        if (topic == null || event == null || !topic.startsWith(ALLOWED_TOPIC_PREFIX)) {
+            throw new IllegalArgumentException("不支持的实时广播主题: " + topic);
+        }
+        try {
+            messagingTemplate.convertAndSend(topic, event);
+        } catch (RuntimeException ex) {
+            // 广播是尽力而为通道：失败不影响 REST 结果，客户端重连后按详情接口补状态
+            log.warn("实时广播失败 topic={}", topic, ex);
+        }
     }
 }

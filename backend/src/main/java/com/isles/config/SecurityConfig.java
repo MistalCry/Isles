@@ -87,6 +87,10 @@ public class SecurityConfig {
                         // 公开只读：频道详情、板块、频道帖子流、置顶帖
                         .requestMatchers(HttpMethod.GET, "/api/v1/channels/*", "/api/v1/channels/*/boards",
                                 "/api/v1/channels/*/posts", "/api/v1/channels/*/posts/pinned").permitAll()
+                        // 公开只读：频道应用入口、语音房列表/详情、活动列表/详情（服务层校验频道可见性）
+                        .requestMatchers(HttpMethod.GET, "/api/v1/channels/*/apps",
+                                "/api/v1/channels/*/voice-rooms", "/api/v1/channels/*/activities").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/voice-rooms/*", "/api/v1/activities/*").permitAll()
                         // 公开只读：帖子详情、评论列表
                         .requestMatchers(HttpMethod.GET, "/api/v1/posts/*", "/api/v1/posts/*/comments").permitAll()
                         // 公开只读：搜索

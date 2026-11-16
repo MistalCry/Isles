@@ -1,8 +1,10 @@
 package com.isles.admin.service;
 
+import com.isles.admin.dto.AdminContentRow;
 import com.isles.admin.dto.AdminDtos;
 import com.isles.admin.dto.AdminUserRow;
 import com.isles.admin.mapper.AdminChannelMapper;
+import com.isles.admin.mapper.AdminContentMapper;
 import com.isles.admin.mapper.AdminReportMapper;
 import com.isles.admin.mapper.AdminStatsMapper;
 import com.isles.admin.mapper.AdminUserMapper;
@@ -42,6 +44,7 @@ class AdminServiceTest {
     private AdminUserMapper adminUserMapper;
     private AdminChannelMapper adminChannelMapper;
     private AdminReportMapper adminReportMapper;
+    private AdminContentMapper adminContentMapper;
     private AdminStatsMapper adminStatsMapper;
     private UserMapper userMapper;
     private ChannelMapper channelMapper;
@@ -60,6 +63,7 @@ class AdminServiceTest {
         adminUserMapper = mock(AdminUserMapper.class);
         adminChannelMapper = mock(AdminChannelMapper.class);
         adminReportMapper = mock(AdminReportMapper.class);
+        adminContentMapper = mock(AdminContentMapper.class);
         adminStatsMapper = mock(AdminStatsMapper.class);
         userMapper = mock(UserMapper.class);
         channelMapper = mock(ChannelMapper.class);
@@ -71,7 +75,8 @@ class AdminServiceTest {
         moderationService = mock(AdminModerationService.class);
         notificationService = mock(NotificationService.class);
         auditService = mock(PlatformAuditService.class);
-        service = new AdminService(adminUserMapper, adminChannelMapper, adminReportMapper, adminStatsMapper,
+        service = new AdminService(adminUserMapper, adminChannelMapper, adminReportMapper, adminContentMapper,
+                adminStatsMapper,
                 userMapper, channelMapper, postMapper, commentMapper, aiConversationService, currentUserProvider,
                 penaltyService, moderationService, notificationService, auditService);
     }
@@ -202,6 +207,76 @@ class AdminServiceTest {
         assertThat(page.size()).isEqualTo(20);
     }
 
+
+    /** 评论类举报 → 删除内容：走评论下架，且通知里带评论摘要（不能 500 / 不能只说「举报已处理」）。 */
+    @Test
+    void should_takedown_comment_and_notify_with_excerpt() {
+        Report commentReport = report("PENDING");
+        commentReport.setTargetType("COMMENT");
+        commentReport.setTargetId("comment-1");
+        when(currentUserProvider.requireUserId()).thenReturn("admin-1");
+        when(adminReportMapper.selectById("report-1")).thenReturn(commentReport);
+        when(adminContentMapper.selectComment("comment-1"))
+                .thenReturn(contentRow("COMMENT", null, "这条评论包含大量广告与无关链接，请处理"));
+        when(adminReportMapper.handle("report-1", "ACCEPTED", "admin-1", "DELETE_CONTENT", null)).thenReturn(1);
+
+        service.handleReport("report-1", new AdminDtos.HandleReportRequest("RESOLVE", null, "DELETE_CONTENT"));
+
+        verify(moderationService).takedownComment("comment-1", "举报核实：SPAM", "admin-1");
+        verify(moderationService, org.mockito.Mockito.never()).takedownPost(anyString(), anyString(), anyString());
+        org.mockito.ArgumentCaptor<String> content = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(notificationService).notifySystem(eq("reporter-1"), any(), eq("ch-1"), eq(null), eq("comment-1"),
+                eq("举报已处理"), content.capture(), eq(null));
+        assertThat(content.getValue()).startsWith("你举报的评论（这条评论包含大量广告").contains("已被删除");
+    }
+
+    /** 帖子类举报 → 删除内容：通知带帖子标题。 */
+    @Test
+    void should_notify_post_title_when_takedown() {
+        when(currentUserProvider.requireUserId()).thenReturn("admin-1");
+        when(adminReportMapper.selectById("report-1")).thenReturn(report("PENDING"));
+        when(adminContentMapper.selectPost("post-1"))
+                .thenReturn(contentRow("POST", "露营装备清单", "正文摘要"));
+        when(adminReportMapper.handle("report-1", "ACCEPTED", "admin-1", "DELETE_CONTENT", null)).thenReturn(1);
+
+        service.handleReport("report-1", new AdminDtos.HandleReportRequest("RESOLVE", null, "DELETE_CONTENT"));
+
+        verify(moderationService).takedownPost("post-1", "举报核实：SPAM", "admin-1");
+        org.mockito.ArgumentCaptor<String> content = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(notificationService).notifySystem(any(), any(), any(), any(), any(), any(), content.capture(), any());
+        assertThat(content.getValue()).isEqualTo("你举报的帖子《露营装备清单》已被删除");
+    }
+
+    /** 驳回：文案说明「经核查未违规」。 */
+    @Test
+    void should_notify_rejected_with_verdict() {
+        when(currentUserProvider.requireUserId()).thenReturn("admin-1");
+        when(adminReportMapper.selectById("report-1")).thenReturn(report("PENDING"));
+        when(adminReportMapper.handle("report-1", "REJECTED", "admin-1", "NONE", null)).thenReturn(1);
+
+        service.handleReport("report-1", new AdminDtos.HandleReportRequest("DISMISS", null, null));
+
+        org.mockito.ArgumentCaptor<String> content = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(notificationService).notifySystem(any(), any(), any(), any(), any(), eq("举报未通过"),
+                content.capture(), any());
+        assertThat(content.getValue()).isEqualTo("你举报的内容经核查未违规");
+    }
+
+    /** 快照查不到时（内容已被物理删除等）仍能给出可读文案，不抛异常。 */
+    @Test
+    void should_fallback_when_target_snapshot_missing() {
+        when(currentUserProvider.requireUserId()).thenReturn("admin-1");
+        when(adminReportMapper.selectById("report-1")).thenReturn(report("PENDING"));
+        when(adminContentMapper.selectPost("post-1")).thenReturn(null);
+        when(adminReportMapper.handle("report-1", "ACCEPTED", "admin-1", "NONE", null)).thenReturn(1);
+
+        service.handleReport("report-1", new AdminDtos.HandleReportRequest("RESOLVE", null, null));
+
+        org.mockito.ArgumentCaptor<String> content = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(notificationService).notifySystem(any(), any(), any(), any(), any(), any(), content.capture(), any());
+        assertThat(content.getValue()).isEqualTo("你举报的帖子已处理");
+    }
+
     private Report report(String status) {
         Report report = new Report();
         report.setId("report-1");
@@ -213,5 +288,17 @@ class AdminServiceTest {
         report.setStatus(status);
         report.setCreatedAt(LocalDateTime.now());
         return report;
+    }
+
+    private AdminContentRow contentRow(String targetType, String title, String preview) {
+        AdminContentRow row = new AdminContentRow();
+        row.setId("target-1");
+        row.setTargetType(targetType);
+        row.setChannelId("ch-1");
+        row.setTitle(title);
+        row.setContentPreview(preview);
+        row.setStatus("PUBLISHED");
+        row.setCreatedAt(LocalDateTime.now());
+        return row;
     }
 }

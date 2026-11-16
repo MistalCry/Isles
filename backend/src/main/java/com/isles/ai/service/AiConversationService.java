@@ -77,10 +77,16 @@ public class AiConversationService {
         String channelId = blankToNull(request.channelId());
         if (AiConversation.Scope.CHANNEL.name().equals(scope)) {
             if (channelId == null) {
-                throw new AppException(ErrorCode.VALIDATION_ERROR, "频道助手会话必须指定 channelId");
+                throw new AppException(ErrorCode.VALIDATION_ERROR, "频道会话必须指定 channelId");
             }
             // 频道可见性校验：私密频道仅成员可发起问答（docs/07 §3）
             accessService.requireVisibleChannel(channelId, userId);
+        } else if (AiConversation.Scope.CHANNEL_ASSISTANT.name().equals(scope)) {
+            if (channelId == null) {
+                throw new AppException(ErrorCode.VALIDATION_ERROR, "频道助手会话必须指定 channelId");
+            }
+            // 助手私聊要求成员身份：游客/非成员不能占用频道的助手会话
+            requireChannelMember(channelId, userId);
         } else {
             channelId = null;
         }
@@ -113,6 +119,16 @@ public class AiConversationService {
         }
         if (modelConfigMapper.selectById(modelConfigId) == null) {
             throw new AppException(ErrorCode.VALIDATION_ERROR, "模型配置不存在");
+        }
+    }
+
+    /**
+     * 频道成员校验（频道助手私聊用）：非成员/已退出直接 403。
+     */
+    public void requireChannelMember(String channelId, String userId) {
+        var member = accessService.findMember(channelId, userId);
+        if (!ChannelAccessService.isActiveMember(member)) {
+            throw new AppException(ErrorCode.NOT_JOINED);
         }
     }
 
@@ -430,8 +446,11 @@ public class AiConversationService {
             return null;
         }
         String value = scope.trim().toUpperCase(Locale.ROOT);
-        if (!AiConversation.Scope.GLOBAL.name().equals(value) && !AiConversation.Scope.CHANNEL.name().equals(value)) {
-            throw new AppException(ErrorCode.VALIDATION_ERROR, "scope 取值必须为 GLOBAL 或 CHANNEL");
+        if (!AiConversation.Scope.GLOBAL.name().equals(value)
+                && !AiConversation.Scope.CHANNEL.name().equals(value)
+                && !AiConversation.Scope.CHANNEL_ASSISTANT.name().equals(value)) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR,
+                    "scope 取值必须为 GLOBAL、CHANNEL 或 CHANNEL_ASSISTANT");
         }
         return value;
     }

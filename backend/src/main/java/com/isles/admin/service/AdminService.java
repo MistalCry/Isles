@@ -3,7 +3,9 @@ package com.isles.admin.service;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.isles.admin.dto.AdminDtos;
 import com.isles.admin.dto.AdminUserRow;
+import com.isles.admin.dto.AdminContentRow;
 import com.isles.admin.mapper.AdminChannelMapper;
+import com.isles.admin.mapper.AdminContentMapper;
 import com.isles.admin.mapper.AdminReportMapper;
 import com.isles.admin.mapper.AdminStatsMapper;
 import com.isles.admin.mapper.AdminUserMapper;
@@ -56,10 +58,15 @@ public class AdminService {
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MUTE_HOURS_FROM_REPORT = 24;
+    /** 通知里评论摘要长度（需求：前 30 字）。 */
+    private static final int COMMENT_EXCERPT_LENGTH = 30;
+    /** notifications.content 列长度上限。 */
+    private static final int MAX_NOTIFY_CONTENT = 500;
 
     private final AdminUserMapper adminUserMapper;
     private final AdminChannelMapper adminChannelMapper;
     private final AdminReportMapper adminReportMapper;
+    private final AdminContentMapper adminContentMapper;
     private final AdminStatsMapper adminStatsMapper;
     private final UserMapper userMapper;
     private final ChannelMapper channelMapper;
@@ -247,6 +254,9 @@ public class AdminService {
         String status = accepted ? Report.Status.ACCEPTED.name() : Report.Status.REJECTED.name();
         String handleAction = accepted && request.handleAction() != null ? request.handleAction() : "NONE";
 
+        // 处置前取标题/摘要快照：下架后按 targetId 可能查不到，通知里就只剩「举报已处理」
+        AdminContentRow target = snapshotTarget(report);
+
         if (accepted) {
             applyHandleAction(report, handleAction, operator);
         }
@@ -255,7 +265,7 @@ public class AdminService {
         if (updated == 0) {
             throw new AppException(ErrorCode.REPORT_ALREADY_HANDLED);
         }
-        notifyReporter(report, accepted, request.note());
+        notifyReporter(report, accepted, handleAction, request.note(), target);
         auditService.record(operator, null, PlatformAuditActions.REPORT_HANDLE, "REPORT", reportId,
                 reportDetail(report, status, handleAction, request.note()));
         log.info("平台管理：举报处置 reportId={} status={} action={}", reportId, status, handleAction);
@@ -302,13 +312,76 @@ public class AdminService {
         return null;
     }
 
-    private void notifyReporter(Report report, boolean accepted, String note) {
+    /**
+     * 举报结果通知举报人：文案必须说明「举报的是哪个对象、被怎么处理」。
+     *
+     * <p>帖子用标题、评论用正文前 30 字摘要；标题/摘要在处置前取快照（下架后可能查不到）。
+     */
+    private void notifyReporter(Report report, boolean accepted, String handleAction, String note,
+                                AdminContentRow target) {
         String title = accepted ? "举报已处理" : "举报未通过";
-        String content = note == null || note.isBlank() ? null : "处理说明：" + note;
+        String summary;
+        if (!accepted) {
+            summary = "你举报的内容经核查未违规";
+        } else if ("DELETE_CONTENT".equals(handleAction)) {
+            summary = describeTarget(report, target) + "已被删除";
+        } else {
+            summary = describeTarget(report, target) + "已处理";
+        }
+        String content = note == null || note.isBlank() ? summary : summary + "。处理说明：" + note;
         String postId = Report.TargetType.POST.name().equals(report.getTargetType()) ? report.getTargetId() : null;
         String commentId = Report.TargetType.COMMENT.name().equals(report.getTargetType()) ? report.getTargetId() : null;
         notificationService.notifySystem(report.getReporterId(), Notification.Type.REPORT_RESULT,
-                report.getChannelId(), postId, commentId, title, content, null);
+                report.getChannelId(), postId, commentId, title, truncate(content, MAX_NOTIFY_CONTENT),
+                null);
+    }
+
+    /**
+     * 描述被举报对象：帖子「你举报的帖子《标题》」；评论「你举报的评论（摘要…）」；其他「你举报的内容」。
+     */
+    private String describeTarget(Report report, AdminContentRow target) {
+        if (Report.TargetType.POST.name().equals(report.getTargetType())) {
+            String title = target == null ? null : target.getTitle();
+            return "你举报的帖子" + (title == null || title.isBlank() ? "" : "《" + truncate(title, 40) + "》");
+        }
+        if (Report.TargetType.COMMENT.name().equals(report.getTargetType())) {
+            String preview = target == null ? null : plainPreview(target.getContentPreview());
+            return preview == null || preview.isBlank()
+                    ? "你举报的评论"
+                    : "你举报的评论（" + truncate(preview, COMMENT_EXCERPT_LENGTH) + "）";
+        }
+        return "你举报的内容";
+    }
+
+    /**
+     * 处置前快照：只对帖子/评论查库，其他目标类型（用户/频道）不需要。
+     */
+    private AdminContentRow snapshotTarget(Report report) {
+        try {
+            if (Report.TargetType.POST.name().equals(report.getTargetType())) {
+                return adminContentMapper.selectPost(report.getTargetId());
+            }
+            if (Report.TargetType.COMMENT.name().equals(report.getTargetType())) {
+                return adminContentMapper.selectComment(report.getTargetId());
+            }
+        } catch (RuntimeException ex) {
+            log.warn("举报对象快照失败 reportId={} targetType={}", report.getId(), report.getTargetType(), ex);
+        }
+        return null;
+    }
+
+    private String plainPreview(String content) {
+        if (content == null) {
+            return null;
+        }
+        return content.replaceAll("<[^>]*>", " ").replaceAll("\\s+", " ").trim();
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null) {
+            return null;
+        }
+        return value.length() <= maxLength ? value : value.substring(0, maxLength) + "…";
     }
 
     private Map<String, Object> reportDetail(Report report, String status, String handleAction, String note) {

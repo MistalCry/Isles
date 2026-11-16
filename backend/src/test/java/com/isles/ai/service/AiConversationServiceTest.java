@@ -171,6 +171,51 @@ class AiConversationServiceTest {
         assertThat(sources.get(0).url()).isEqualTo("/posts/p1");
     }
 
+
+    @Test
+    void should_create_assistant_conversation_for_channel_member() {
+        when(accessService.findMember("ch-1", "user-1")).thenReturn(member("ch-1", "user-1"));
+        when(conversationMapper.insert(any(AiConversation.class))).thenReturn(1);
+
+        AiResponses.ConversationResponse response = service.createConversation("user-1",
+                new AiRequests.CreateConversationRequest("CHANNEL_ASSISTANT", "ch-1", "第一次聊", null));
+
+        assertThat(response.scope()).isEqualTo("CHANNEL_ASSISTANT");
+        assertThat(response.channelId()).isEqualTo("ch-1");
+        assertThat(response.title()).isEqualTo("第一次聊");
+        // 助手私聊是「成员」语义：不走可见性校验
+        verify(accessService, never()).requireVisibleChannel(any(), any());
+    }
+
+    @Test
+    void should_reject_assistant_conversation_for_non_member() {
+        when(accessService.findMember("ch-1", "user-1")).thenReturn(null);
+
+        assertThatThrownBy(() -> service.createConversation("user-1",
+                new AiRequests.CreateConversationRequest("CHANNEL_ASSISTANT", "ch-1", null, null)))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.NOT_JOINED));
+    }
+
+    @Test
+    void should_reject_assistant_conversation_without_channel_id() {
+        assertThatThrownBy(() -> service.createConversation("user-1",
+                new AiRequests.CreateConversationRequest("CHANNEL_ASSISTANT", null, null, null)))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR));
+    }
+
+    @Test
+    void should_reject_unknown_scope() {
+        assertThatThrownBy(() -> service.createConversation("user-1",
+                new AiRequests.CreateConversationRequest("PRIVATE", null, null, null)))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_ERROR));
+    }
+
     private AiConversation conversation(String id, String userId, String scope, String channelId) {
         AiConversation conversation = new AiConversation();
         conversation.setId(id);
@@ -191,5 +236,15 @@ class AiConversationServiceTest {
         channel.setVisibility("PUBLIC_VISIBLE");
         channel.setStatus("ACTIVE");
         return channel;
+    }
+
+    private com.isles.channel.entity.ChannelMember member(String channelId, String userId) {
+        com.isles.channel.entity.ChannelMember member = new com.isles.channel.entity.ChannelMember();
+        member.setId("member-1");
+        member.setChannelId(channelId);
+        member.setUserId(userId);
+        member.setStatus(com.isles.channel.entity.ChannelMember.Status.ACTIVE.name());
+        member.setJoinedAt(LocalDateTime.now());
+        return member;
     }
 }
