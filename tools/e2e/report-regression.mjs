@@ -21,8 +21,11 @@ const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:8080/api/v1'
 /** 后端 @Pattern 白名单；顺序与前端 REPORT_REASON_CODES 一致 */
 const REASON_CODES = ['SPAM', 'ABUSE', 'PORN', 'ILLEGAL', 'OTHER']
 
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin_demo'
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Passw0rd123'
+
 const results = []
-const cleanup = { channelId: null, ownerToken: null }
+const cleanup = { channelId: null, ownerToken: null, adminToken: null, reportIds: [] }
 
 class HttpError extends Error {
   constructor(status, body, label) {
@@ -105,15 +108,48 @@ async function createComment(author, postId, content) {
 }
 
 async function runCleanup() {
+  console.log('\n清理：')
+  // 举报本身不会随频道解散消失：用超管把自己造的待处理举报驳回，避免给别人留待办
+  if (cleanup.reportIds.length > 0) {
+    let adminToken = cleanup.adminToken
+    if (!adminToken) {
+      try {
+        const login = await api('POST', '/auth/login', {
+          body: { username: ADMIN_USERNAME, password: ADMIN_PASSWORD },
+        })
+        adminToken = login.accessToken
+      } catch {
+        adminToken = null
+      }
+    }
+    if (adminToken) {
+      let closed = 0
+      for (const reportId of cleanup.reportIds) {
+        try {
+          await api('POST', `/admin/reports/${reportId}/handle`, {
+            token: adminToken,
+            expect: [200, 409, 422],
+            body: { action: 'DISMISS', note: 'E2E 举报回归收尾' },
+          })
+          closed += 1
+        } catch {
+          // 已被别人处理或已不存在：忽略
+        }
+      }
+      console.log(`  ✓ 已关闭自造举报 ${closed}/${cleanup.reportIds.length} 条`)
+    } else {
+      console.error('  ! 无超管令牌，跳过举报清理（会留下待处理举报）')
+    }
+  }
   if (!cleanup.channelId || !cleanup.ownerToken) return
   try {
     await api('POST', `/channels/${cleanup.channelId}/dissolve`, {
       token: cleanup.ownerToken,
       expect: [204, 404],
     })
-    console.log('\n清理：\n  ✓ 测试频道已解散')
+    console.log('  ✓ 测试频道已解散')
   } catch (error) {
-    console.error(`\n清理：\n  ! 解散频道失败：${error.message}`)
+    console.error(`  ! 解散频道失败：${error.message}`)
   }
 }
 
@@ -172,6 +208,7 @@ async function main() {
     })
     assert(postReport.status === 'PENDING', `帖子举报状态应为 PENDING，实际 ${postReport.status}`)
     assert(postReport.reason === 'SPAM', `落库 reason 应为代码 SPAM，实际 ${postReport.reason}`)
+    cleanup.reportIds.push(postReport.id)
 
     const commentReport = await api('POST', '/reports', {
       token: reporter.token,
@@ -184,6 +221,7 @@ async function main() {
       },
     })
     assert(commentReport.reason === 'ABUSE', `落库 reason 应为代码 ABUSE，实际 ${commentReport.reason}`)
+    cleanup.reportIds.push(commentReport.id)
     reported.push(postReport.id, commentReport.id)
   })
 
@@ -199,6 +237,7 @@ async function main() {
       },
     })
     assert(postReport.reason === 'PORN', `落库 reason 应为代码 PORN，实际 ${postReport.reason}`)
+    cleanup.reportIds.push(postReport.id)
 
     const commentReport = await api('POST', '/reports', {
       token: reporter.token,
@@ -211,6 +250,7 @@ async function main() {
       },
     })
     assert(commentReport.reason === 'ILLEGAL', `落库 reason 应为代码 ILLEGAL，实际 ${commentReport.reason}`)
+    cleanup.reportIds.push(commentReport.id)
     reported.push(postReport.id, commentReport.id)
   })
 
@@ -221,6 +261,7 @@ async function main() {
       body: { targetType: 'POST', targetId: posts.extra.id, reason: 'OTHER', description: '其它原因' },
     })
     assert(report.reason === 'OTHER', `落库 reason 应为代码 OTHER，实际 ${report.reason}`)
+    cleanup.reportIds.push(report.id)
     reported.push(report.id)
 
     const mine = await api('GET', '/reports/mine?limit=20', { token: reporter.token })

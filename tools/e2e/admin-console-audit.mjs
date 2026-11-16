@@ -459,6 +459,43 @@ async function main() {
       '恢复后作者应收到「帖子已恢复」通知')
   })
 
+  await step('举报列表：PENDING 每一条都可处置（前端「处置」按钮不会无故置灰）', async () => {
+    // 用户实测：举报页默认筛「待处理」，但列表里的条目点了没反应/按钮灰着。
+    // 处置按钮的启用条件是 status=PENDING，且需要 targetType/targetId 才能发起处置。
+    const target = await createPost(author, channel.id, board.id, `可处置性探针帖 ${suffix()}`)
+    const report = await api('POST', '/reports', {
+      token: reporter.token,
+      expect: [201],
+      body: { targetType: 'POST', targetId: target.id, reason: 'OTHER', description: '可处置性校验' },
+    })
+
+    const page = await api('GET', '/admin/reports?status=PENDING&size=100', { token: admin.token })
+    assert(page.available !== false, '举报表未就绪（available=false）')
+    const items = page.items ?? []
+    assert(items.length > 0, '按 PENDING 筛选应有待处理举报')
+
+    const TARGET_TYPES = ['POST', 'COMMENT']
+    const bad = items.filter((item) => (
+      !item.id
+      || item.status !== 'PENDING'
+      || !TARGET_TYPES.includes(item.targetType)
+      || !item.targetId
+      || !item.createdAt
+    ))
+    assert(
+      bad.length === 0,
+      `PENDING 列表存在不可处置的条目：${bad.map((item) => `${item.id}(status=${item.status},type=${item.targetType},target=${item.targetId})`).join('; ')}`,
+    )
+    assert(items.some((item) => item.id === report.id), '刚提交的举报应出现在 PENDING 列表里')
+
+    // 收尾：驳回自己造的举报，避免给其它人留待办
+    const handled = await api('POST', `/admin/reports/${report.id}/handle`, {
+      token: admin.token,
+      body: { action: 'DISMISS', note: 'E2E 可处置性校验' },
+    })
+    assert(handled.status === 'REJECTED', `驳回后状态应为 REJECTED，实际 ${handled.status}`)
+  })
+
   // ------------------------------------------------------------------
   // 三、MODERATOR 授权与权限边界
   // ------------------------------------------------------------------

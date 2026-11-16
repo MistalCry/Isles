@@ -11,11 +11,12 @@
 | `permissions-audit.mjs` | 越权与边界：未加入发帖、个人/全员禁言、退出、私密可见性、邀请审批、拉黑、板块范围、重复举报、通配符、媒体、聚合、解散 | 16 步 |
 | `feature-audit.mjs` | 内容协作细节：分享计数、精华筛选、用户卡片、楼中楼、板块 CRUD/排序、身份组层级、频道内搜索、通知过滤、私信分享 | 9 步 |
 | `realtime-check.mjs` | STOMP 鉴权 + 私信/通知实时推送 | 3 步 |
-| `admin-console-audit.mjs` | 平台后台护栏：配置中心闭环（含 60s 内二次修改仍即时 + no-store）、举报→下架→通知→恢复、MODERATOR 授权边界、公告状态机、置顶首屏 | 20 步 + 1 跳过 |
+| `admin-console-audit.mjs` | 平台后台护栏：配置中心闭环（含 60s 内二次修改仍即时 + no-store）、举报→下架→通知→恢复、PENDING 每条可处置、MODERATOR 授权边界、公告状态机、置顶首屏 | 21 步 + 1 跳过 |
 | `report-regression.mjs` | 举报回归：中英文场景各举报帖子+评论、五种原因代码全覆盖、界面文案当 reason 被 400 | 6 步 |
 | `media-regression.mjs` | 上传格式：heic/avif/mov 上传+回读、非法类型拒绝、ffmpeg 缺失降级 | 8 步 |
-| `ai-tools-regression.mjs` | AI 工具调用：模型要工具→检索→二轮回答、来源真实命中、不支持 tools 时降级 | 5 步 |
-| `assistant-model-regression.mjs` | 助手模型：频道指定模型生效、模型禁用后回落默认 | 4 步 + 1 跳过 |
+| `ai-tools-regression.mjs` | AI 工具调用：模型要工具→检索→二轮回答、sources 与落库一致、0 命中发空数组、非工具模式同样下发 sources、不支持 tools 时降级 | 7 步 |
+| `content-regression.mjs` | 内容链路：浏览量去重（作者/30 分钟/换账号）、敏感词 REVIEW/MASK/BLOCK、搜索 coverUrl 与首图 | 10 步 |
+| `assistant-model-regression.mjs` | 助手模型：频道指定模型生效、任务日志记录模型 id、模型禁用后回落默认 | 4 步 |
 
 浏览器级（真实 Chrome + CDP，位于 `tools/dev/`）：
 

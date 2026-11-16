@@ -229,6 +229,22 @@ async function main() {
       requests.every((item) => item.model === 'mock-chat'),
       `请求模型应为 mock-chat，实际 ${requests.map((item) => item.model).join(',')}`,
     )
+
+    // 任务日志必须记录本次使用的模型（V9 新增 model_config_id / model）
+    assert(
+      taskLog.modelConfigId === model.id,
+      `任务日志应记录频道指定模型 id ${model.id}，实际 ${taskLog.modelConfigId}`,
+    )
+    assert(taskLog.model === 'mock-chat', `任务日志应记录模型名 mock-chat，实际 ${taskLog.model}`)
+
+    // 任务日志列表接口同样要带出模型，后台页面才能核对
+    const logs = await api('GET', `/channels/${channel.id}/ai/task-logs?size=10`, { token: user.token })
+    const listed = (logs.items ?? []).find((item) => item.id === taskLog.id)
+    assert(listed, '任务日志列表应包含刚执行的任务')
+    assert(
+      listed.modelConfigId === model.id && listed.model === 'mock-chat',
+      `日志列表应带模型信息，实际 ${listed.modelConfigId} / ${listed.model}`,
+    )
   })
 
   await step('模型被禁用后回落平台默认，任务不失败', async () => {
@@ -247,6 +263,16 @@ async function main() {
       requests.length === 0,
       `已禁用的模型不应再被调用，实际仍收到 ${requests.length} 次请求`,
     )
+    // 日志要如实记录「实际用的是默认模型」，而不是仍写着频道里那个已禁用的 id
+    assert(
+      taskLog.modelConfigId !== model.id,
+      `回落默认后日志不应再记录被禁用的模型 ${model.id}`,
+    )
+    assert(Boolean(taskLog.model), '回落默认后日志仍应记录模型名')
+    assert(
+      taskLog.model !== 'mock-chat',
+      `回落默认后日志的模型名不应是 mock-chat，实际 ${taskLog.model}`,
+    )
     // 恢复正常状态，便于收尾删除
     await api('PUT', `/admin/ai/models/${model.id}`, {
       token: admin.token,
@@ -254,12 +280,6 @@ async function main() {
     })
   })
 
-  // 已知缺口：任务日志没有 model 字段（ai_task_logs / TaskLogResponse）。
-  // 保留 SKIP 让报告里能看见，等后端补字段后改成断言 modelConfigId。
-  skip(
-    '任务日志记录模型 id',
-    'TaskLogResponse 与 ai_task_logs 均无 model 字段（后端未实现），当前只能用 mock 请求日志间接证明；补齐字段后启用断言',
-  )
 
   const passed = results.filter((item) => item.status === 'pass').length
   const failed = results.filter((item) => item.status === 'fail').length

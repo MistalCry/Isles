@@ -5874,5 +5874,37 @@
   "ai.chat.toolCallTag": [
     "工具调用",
     "Tools"
+  ],
+  "admin.reports.emptyPending": [
+    "没有待处理举报",
+    "No pending reports"
+  ],
+  "admin.reports.emptyPendingHint": [
+    "所有举报都已处理完，辛苦了。",
+    "Everything is handled — nice work."
+  ],
+  "post.cardMoreMedia": [
+    "还有 {n} 张媒体，点击查看详情",
+    "{n} more attachments — open the post to view"
+  ],
+  "post.topComment": [
+    "最高赞评论",
+    "Top comment"
+  ],
+  "post.viewAllComments": [
+    "查看全部 {n} 条评论",
+    "View all {n} comments"
+  ],
+  "media.uploadPercent": [
+    "上传中 {percent}%",
+    "Uploading {percent}%"
+  ],
+  "media.uploadRetry": [
+    "重试上传",
+    "Retry upload"
+  ],
+  "media.uploadFailedRetry": [
+    "上传失败，可重试",
+    "Upload failed — you can retry"
   ]
 }
