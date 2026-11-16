@@ -34,6 +34,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Passw0rd123'
 
 const CONFIG_KEYS = [
   'agent.enabled',
+  'agent.twoPhaseEnabled',
   'agent.search.provider',
   'agent.search.baseUrl',
   'agent.search.engines',
@@ -461,6 +462,8 @@ async function main() {
     cleanup.agentIds.push(agent.agentId)
 
     await setConfig(admin.token, 'agent.enabled', 'true')
+    // 本脚本直接驱动单个工具（单轮计划），关掉两阶段；收尾按快照还原
+    await setConfig(admin.token, 'agent.twoPhaseEnabled', 'false')
     assert(agent.agentId && board, '代理与板块应创建成功')
   })
 

@@ -38,7 +38,8 @@ const cleanup = {
   ownerToken: null,
   adminToken: null,
   modelId: null,
-  configTouched: false,
+  /** key → { value, overridden }：收尾按原状还原 */
+  configs: new Map(),
   /** 运行前已有的默认模型：临时配置会清掉它们的 is_default，收尾要还回去 */
   restoreDefaultModels: [],
 }
@@ -248,13 +249,43 @@ async function listRuns(token, agentId, size = 20) {
   return api('GET', `/admin/agents/${agentId}/runs?page=1&size=${size}`, { token })
 }
 
+const CONFIG_KEYS = ['agent.enabled', 'agent.twoPhaseEnabled']
+
+/** 记录配置原状（有覆盖值记值，没有则收尾 reset） */
+async function snapshotConfigs(token) {
+  const view = await api('GET', '/admin/config', { token })
+  const map = new Map()
+  for (const group of view.groups ?? []) {
+    for (const item of group.items ?? []) map.set(item.key, item)
+  }
+  for (const key of CONFIG_KEYS) {
+    const item = map.get(key)
+    assert(item, `配置项缺失：${key}`)
+    cleanup.configs.set(key, { value: item.value, overridden: item.overridden === true })
+  }
+}
+
+async function setConfig(token, key, value) {
+  return api('PUT', `/admin/config/${key}`, { token, body: { value: String(value) } })
+}
+
+async function restoreConfigs() {
+  for (const [key, original] of cleanup.configs) {
+    try {
+      if (original.overridden) {
+        await api('PUT', `/admin/config/${key}`, { token: cleanup.adminToken, body: { value: original.value } })
+      } else {
+        await api('POST', `/admin/config/${key}/reset`, { token: cleanup.adminToken })
+      }
+    } catch (error) {
+      console.error(`  ! 还原配置失败 ${key}：${error.message}`)
+    }
+  }
+  console.log('  ✓ 平台配置已按原状还原')
+}
+
 async function setAgentEnabled(token, enabled) {
-  const item = await api('PUT', '/admin/config/agent.enabled', {
-    token,
-    body: { value: enabled ? 'true' : 'false' },
-  })
-  cleanup.configTouched = true
-  return item
+  return setConfig(token, 'agent.enabled', enabled ? 'true' : 'false')
 }
 
 // ---------------------------------------------------------------------------
@@ -297,16 +328,8 @@ async function runCleanup() {
     }
   }
 
-  if (cleanup.configTouched) {
-    try {
-      await api('POST', '/admin/config/agent.enabled/reset', {
-        token: cleanup.adminToken,
-        expect: [200],
-      })
-      console.log('  ✓ agent.enabled 已恢复默认（覆盖行清除）')
-    } catch (error) {
-      console.error(`  ! 恢复 agent.enabled 失败：${error.message}`)
-    }
+  if (cleanup.configs.size > 0 && cleanup.adminToken) {
+    await restoreConfigs()
   }
 
   if (cleanup.modelId) {
@@ -375,6 +398,10 @@ async function prepare(admin) {
     })
     cleanup.modelId = model.id
     assert(model.isDefault === true, '临时模型应成为默认模型（代理固定用默认模型）')
+
+    await snapshotConfigs(admin.token)
+    // 默认两阶段（研究→产出）：本脚本验的是单轮闸门，显式关掉，收尾还原
+    await setConfig(admin.token, 'agent.twoPhaseEnabled', 'false')
 
     owner = await newUser('agown')
     cleanup.ownerToken = owner.token

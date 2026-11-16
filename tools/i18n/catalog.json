@@ -6926,5 +6926,21 @@
   "admin.agents.toolCallRaw": [
     "原始 JSON",
     "Raw JSON"
+  ],
+  "admin.agents.running": [
+    "正在运行，最长约 3 分钟…",
+    "Running, up to ~3 min…"
+  ],
+  "admin.agents.runTimeout": [
+    "已超时，请稍后刷新运行日志查看结果",
+    "Timed out — refresh the run logs shortly to see the result."
+  ],
+  "admin.agents.avatar": [
+    "头像",
+    "Avatar"
+  ],
+  "admin.agents.avatarHint": [
+    "1:1 裁剪；不设置则用展示名首字母占位",
+    "Cropped 1:1; falls back to the first letter of the display name."
   ]
 }

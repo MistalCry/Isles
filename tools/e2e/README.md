@@ -18,6 +18,7 @@
 | `content-regression.mjs` | 内容链路：浏览量去重（作者/30 分钟/换账号）、敏感词 REVIEW/MASK/BLOCK、搜索 coverUrl 与首图 | 10 步 |
 | `apps-regression.mjs` | 频道应用 CRUD/排序、语音房抢座与 STOMP 信令（含非成员/关房拒绝）、活动报名/上限/提醒幂等、频道解散级联清理 | 21 步 |
 | `web-search-regression.mjs` | AI 代理联网搜索：配额（含不发真实请求）、中英文查询与 UTF-8、去重与 ≤10 条、降级、SSRF、搜到→发帖 | 9 步 |
+| `agent-research-regression.mjs` | 两阶段 tick：资料同步（avatarUrl/nickname）、researchFirst 必搜与素材注入、单轮回退、编造 postId 被拒 | 6 步 |
 | `agent-regression.mjs` | AI 代理：run-now 产出与 AI 标识、AI 标识字段（代理 true / 真人 false）、日上限、话题去重、暂停、总开关、无模型降级、运行日志回放（`AGENT_TICK_MODE=1` 测调度） | 11 步 / 调度 5 步 |
 | `user-ai-regression.mjs` | 我的帖子过滤、助手多会话隔离、无视觉模型带图降级 | 6 步 |
 | `assistant-model-regression.mjs` | 助手模型：频道指定模型生效、任务日志记录模型 id、模型禁用后回落默认 | 4 步 |
@@ -52,6 +53,9 @@ AGENT_TICK_MODE=1 node tools/e2e/agent-regression.mjs
 # 联网搜索（需要 SearXNG + mock-openai，且 8082 刚启动）
 node tools/e2e/web-search-regression.mjs
 
+# 两阶段 tick（需要 SearXNG + mock-openai；不依赖配额计数）
+node tools/e2e/agent-research-regression.mjs
+
 # AI 相关脚本需要 mock-openai（另开终端）
 node tools/mock-openai/server.mjs 1235
 MOCK_URL=http://127.0.0.1:1235 node tools/e2e/ai-tools-regression.mjs
@@ -83,6 +87,9 @@ AGENT_TICK_MODE=1 node tools/e2e/agent-regression.mjs
 # 联网搜索（需要 SearXNG + mock-openai，且 8082 刚启动）
 node tools/e2e/web-search-regression.mjs
 
+# 两阶段 tick（需要 SearXNG + mock-openai；不依赖配额计数）
+node tools/e2e/agent-research-regression.mjs
+
 # AI 相关脚本需要 mock-openai（另开终端）
 node tools/mock-openai/server.mjs 1235
 MOCK_URL=http://127.0.0.1:1235 node tools/e2e/ai-tools-regression.mjs
@@ -99,6 +106,15 @@ isles.bat admin <用户名>
 删除公告、撤销 MODERATOR 授权、取消置顶、解散测试频道。置顶用例依赖后台 P0-6，
 接口未就绪时自动跳过并标注；「30 天前旧帖」因创建接口无法回填 `created_at`，
 用「置顶帖 + 3 条更新帖 + limit=3 首屏」等价覆盖。
+
+## 两阶段 tick 脚本的前置条件
+
+- mock-openai 的 `/debug/agent-plan` 支持三个队列：`plans`（单轮）、`research`（研究）、`compose`（产出）。
+  研究队列为空时返回 `{"actions":[]}`，触发 Runtime 用人设兴趣词兜底。
+- `compose` 计划里的 `{{materialTitle}}` / `{{materialUrl}}` / `{{materialCount}}` 会被 mock 用「今日素材」段替换，
+  因此「帖子正文与素材同源」可以硬断言（不是写死文本）。
+- `agent-regression.mjs` / `web-search-regression.mjs` 会显式把 `agent.twoPhaseEnabled` 置 false（它们验的是单轮闸门），
+  收尾按快照还原。
 
 ## 联网搜索脚本的前置条件
 

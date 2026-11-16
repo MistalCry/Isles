@@ -20,12 +20,15 @@ import http from 'node:http'
  * 模型名用 "mock-no-tools" 时，只要请求带 tools 就返回 400（模拟「模型不支持 function calling」），
  * 用于验证服务端的自动降级（关闭工具 + 关键词检索重试）。
  *
- * AI 代理（V13）计划模式：请求的系统提示词里含「可选动作（必须只选一个）」时，视为代理的计划请求，
- * 按队列返回结构化 JSON 计划（非流式）。队列用调试接口控制：
- *   POST   /debug/agent-plan  {"plans":[{"action":"create_post","args":{...}}]}  追加计划
- *   GET    /debug/agent-plan                                                     查看剩余队列
- *   DELETE /debug/agent-plan                                                     清空
- * 队列为空时返回 {"action":"none","args":{}}（代理「本次不行动」），保证 tick 不会因 mock 报错。
+ * AI 代理（V13）计划模式：按系统提示词区分三种请求，各自走独立队列（非流式）：
+ *   - 单轮     「可选动作（必须只选一个）」→ 队列 plans，返回 {"action":...}
+ *   - 两阶段·研究 「现在先做资料收集」      → 队列 research，返回 {"actions":[...]}
+ *   - 两阶段·产出 「资料已经收集好了」      → 队列 compose，返回 {"action":...}
+ * 调试接口：
+ *   POST   /debug/agent-plan  {"plans":[...], "research":[...], "compose":[...]}  追加到各自队列
+ *   GET    /debug/agent-plan                                                      查看剩余队列
+ *   DELETE /debug/agent-plan                                                      清空
+ * 队列为空时：单轮/产出返回 {"action":"none","args":{}}，研究返回 {"actions":[]}（触发 Runtime 的兴趣词兜底）。
  */
 
 const PORT = Number(process.argv[2] || 1234)
@@ -34,10 +37,14 @@ const PORT = Number(process.argv[2] || 1234)
 const requestLog = []
 const REQUEST_LOG_LIMIT = 200
 
-/** AI 代理计划队列：每次代理计划请求消费一条（测试用，不落盘） */
+/** AI 代理计划队列：单轮 / 两阶段研究 / 两阶段产出，各自独立（测试用，不落盘） */
 const agentPlans = []
-/** 代理计划请求的特征串（AgentPlanner 的系统提示词里固定出现） */
-const AGENT_PLAN_MARKER = '可选动作（必须只选一个）'
+const researchPlans = []
+const composePlans = []
+/** 三种代理请求的系统提示词特征串（AgentPlanner 里固定出现） */
+const MARKER_SINGLE = '可选动作（必须只选一个）'
+const MARKER_RESEARCH = '现在先做资料收集'
+const MARKER_COMPOSE = '资料已经收集好了'
 
 const MODELS = [
   { id: 'mock-chat', object: 'model', owned_by: 'isles-mock' },
@@ -147,15 +154,74 @@ function systemText(body) {
     .join('\n')
 }
 
-/** 是否代理计划请求（AgentPlanner 一次非流式调用，要一段 JSON 计划）。 */
-function isAgentPlanRequest(body) {
-  return systemText(body).includes(AGENT_PLAN_MARKER)
+/** 代理请求阶段：research / compose / single / null（不是代理请求）。 */
+function agentPhaseOf(body) {
+  const text = systemText(body)
+  if (text.includes(MARKER_RESEARCH)) return 'research'
+  if (text.includes(MARKER_COMPOSE)) return 'compose'
+  if (text.includes(MARKER_SINGLE)) return 'single'
+  return null
 }
 
-/** 取一条计划：队列空时回 none，避免 tick 因 mock 无计划而失败。 */
-function nextAgentPlan() {
-  if (agentPlans.length === 0) return { action: 'none', args: {} }
-  return agentPlans.shift()
+/** 取一条计划：队列空时给安全默认值，避免 tick 因 mock 无计划而失败。 */
+function nextAgentPlan(phase) {
+  if (phase === 'research') {
+    return researchPlans.length === 0 ? { actions: [] } : researchPlans.shift()
+  }
+  const queue = phase === 'compose' ? composePlans : agentPlans
+  return queue.length === 0 ? { action: 'none', args: {} } : queue.shift()
+}
+
+/** 解析产出提示词里的「今日素材」段：- [engine] title / url / snippet */
+function materialsOf(body) {
+  const text = systemText(body)
+  const start = text.indexOf('=== 今日素材')
+  const end = text.indexOf('=== 素材结束 ===')
+  if (start < 0) return []
+  const lines = text.slice(start, end > start ? end : text.length).split('\n')
+  const items = []
+  for (let i = 0; i < lines.length; i += 1) {
+    const head = /^- \[([^\]]*)\] (.*)$/.exec(lines[i].trim())
+    if (!head) continue
+    const maybeUrl = (lines[i + 1] || '').trim()
+    items.push({
+      engine: head[1],
+      title: head[2],
+      url: /^https?:\/\//.test(maybeUrl) ? maybeUrl : '',
+    })
+  }
+  return items
+}
+
+/**
+ * 产出计划里的占位符替换：让 mock 的「产出」真的由素材生成，而不是写死一段文本。
+ * 支持 {{materialTitle}} / {{materialUrl}} / {{materialCount}} / {{materialEngine}}。
+ */
+function applyPlaceholders(value, ctx) {
+  if (typeof value === 'string') {
+    return value
+      .replace(/\{\{materialTitle\}\}/g, ctx.title ?? '')
+      .replace(/\{\{materialUrl\}\}/g, ctx.url ?? '')
+      .replace(/\{\{materialEngine\}\}/g, ctx.engine ?? '')
+      .replace(/\{\{materialCount\}\}/g, String(ctx.count ?? 0))
+  }
+  if (Array.isArray(value)) return value.map((item) => applyPlaceholders(item, ctx))
+  if (value && typeof value === 'object') {
+    const out = {}
+    for (const [key, item] of Object.entries(value)) out[key] = applyPlaceholders(item, ctx)
+    return out
+  }
+  return value
+}
+
+/** 从系统提示词里抠出素材段的 url（断言「素材真的注入进产出提示词」） */
+function materialUrlsOf(body) {
+  const text = systemText(body)
+  const start = text.indexOf('=== 今日素材')
+  const end = text.indexOf('=== 素材结束 ===')
+  if (start < 0) return []
+  const block = text.slice(start, end > start ? end : text.length)
+  return [...new Set(block.match(/https?:\/\/[^\s|)]+/g) ?? [])].slice(0, 10)
 }
 
 function json(res, status, payload) {
@@ -268,20 +334,45 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { cleared: true })
   }
   if (url.pathname === '/debug/agent-plan' && req.method === 'GET') {
-    return json(res, 200, { queued: agentPlans.length, plans: agentPlans.slice() })
+    return json(res, 200, {
+      queued: agentPlans.length + researchPlans.length + composePlans.length,
+      plans: agentPlans.slice(),
+      research: researchPlans.slice(),
+      compose: composePlans.slice(),
+    })
   }
   if (url.pathname === '/debug/agent-plan' && req.method === 'DELETE') {
     agentPlans.length = 0
+    researchPlans.length = 0
+    composePlans.length = 0
     return json(res, 200, { cleared: true })
   }
   if (url.pathname === '/debug/agent-plan' && req.method === 'POST') {
     const body = await readBody(req)
-    const plans = Array.isArray(body.plans) ? body.plans : body.action ? [body] : []
-    for (const plan of plans) {
-      if (!plan || typeof plan.action !== 'string') continue
-      agentPlans.push({ action: plan.action, args: plan.args ?? {} })
+    const push = (queue, items) => {
+      for (const item of Array.isArray(items) ? items : []) {
+        if (!item || typeof item !== 'object') continue
+        if (Array.isArray(item.actions)) {
+          // 研究阶段的整包 {"actions":[...]} 原样入队
+          queue.push({ actions: item.actions })
+        } else if (typeof item.action === 'string') {
+          queue.push({ action: item.action, args: item.args ?? {} })
+        }
+      }
     }
-    return json(res, 200, { queued: agentPlans.length })
+    push(agentPlans, body.plans)
+    push(researchPlans, body.research)
+    push(composePlans, body.compose)
+    // 兼容旧写法：直接传一个 {action,args}
+    if (!body.plans && !body.research && !body.compose && typeof body.action === 'string') {
+      agentPlans.push({ action: body.action, args: body.args ?? {} })
+    }
+    return json(res, 200, {
+      queued: agentPlans.length + researchPlans.length + composePlans.length,
+      plans: agentPlans.length,
+      research: researchPlans.length,
+      compose: composePlans.length,
+    })
   }
   if (url.pathname === '/v1/models' && req.method === 'GET') return json(res, 200, { object: 'list', data: MODELS })
   if (url.pathname === '/v1/chat/completions' && req.method === 'POST') {
@@ -309,18 +400,33 @@ const server = http.createServer(async (req, res) => {
         ),
       })
       if (requestLog.length > REQUEST_LOG_LIMIT) requestLog.shift()
-      const agentPlan = isAgentPlanRequest(body)
-      const planned = agentPlan ? nextAgentPlan() : null
-      if (agentPlan) {
+      const agentPhase = agentPhaseOf(body)
+      let planned = agentPhase ? nextAgentPlan(agentPhase) : null
+      const materials = agentPhase === 'compose' ? materialsOf(body) : []
+      if (agentPhase === 'compose' && planned) {
+        planned = applyPlaceholders(planned, {
+          title: materials[0]?.title,
+          url: materials[0]?.url,
+          engine: materials[0]?.engine,
+          count: materials.length,
+        })
+      }
+      if (agentPhase) {
         const last = requestLog[requestLog.length - 1]
-        if (last) last.agentPlan = planned
+        if (last) {
+          last.agentPhase = agentPhase
+          last.agentPlan = planned
+          last.materialUrls = materialUrlsOf(body)
+          last.materialCount = materials.length
+          last.hasMaterials = systemText(body).includes('=== 今日素材')
+        }
       }
       if (body.model === 'mock-no-tools' && Array.isArray(body.tools) && body.tools.length > 0) {
         return json(res, 400, {
           error: { message: 'this model does not support tools', type: 'invalid_request_error' },
         })
       }
-      if (agentPlan) {
+      if (agentPhase) {
         // 代理计划：一次性返回 JSON 计划（AgentPlanner 用 stream=false 调用）
         const content = JSON.stringify(planned)
         if (body.stream === true) {
