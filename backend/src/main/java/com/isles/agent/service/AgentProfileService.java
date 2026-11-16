@@ -1,6 +1,7 @@
 package com.isles.agent.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.isles.agent.dto.AgentDtos;
 import com.isles.agent.entity.AgentProfile;
 import com.isles.agent.entity.AgentRun;
@@ -100,6 +101,7 @@ public class AgentProfileService {
         // 代理不登录：随机 32 位密码，不返回、不记录
         user.setPasswordHash(passwordEncoder.encode(randomPassword()));
         user.setNickname(request.displayName().trim());
+        user.setAvatarUrl(blankToNull(request.avatarUrl()));
         user.setGender(User.Gender.UNKNOWN.name());
         user.setStatus(User.Status.ACTIVE.name());
         user.setIsAgent(true);
@@ -129,8 +131,15 @@ public class AgentProfileService {
         User user = userMapper.selectById(agentUserId);
         if (user != null) {
             user.setNickname(request.displayName().trim());
+            user.setAvatarUrl(blankToNull(request.avatarUrl()));
             user.setUpdatedAt(ClockTimes.nowUtc());
             userMapper.updateById(user);
+            // updateById 默认忽略 null：清空头像必须显式 set null，否则保存后还是旧图
+            if (request.avatarUrl() != null && blankToNull(request.avatarUrl()) == null) {
+                userMapper.update(null, new UpdateWrapper<User>()
+                        .eq("id", agentUserId)
+                        .set("avatar_url", null));
+            }
         }
         auditService.record(operatorId, null, PlatformAuditActions.AGENT_UPDATE, "AGENT", agentUserId,
                 Map.of("displayName", profile.getDisplayName()));
@@ -323,7 +332,9 @@ public class AgentProfileService {
                 ClockTimes.toInstant(profile.getLastRunAt()),
                 todayPosts,
                 todayComments,
-                latest.isEmpty() ? null : latest.get(0).getStatus());
+                latest.isEmpty() ? null : latest.get(0).getStatus(),
+                user == null ? null : user.getAvatarUrl(),
+                user == null ? null : user.getNickname());
     }
 
     /**

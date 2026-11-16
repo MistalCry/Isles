@@ -13,6 +13,7 @@ import com.isles.channel.service.ChannelAccessService;
 import com.isles.channel.service.ChannelService;
 import com.isles.common.json.JsonSupport;
 import com.isles.platform.audit.PlatformAuditService;
+import com.isles.platform.setting.PlatformSettingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -45,6 +46,7 @@ class AgentRuntimeTest {
     private AiModelConfigService modelConfigService;
     private ChannelMapper channelMapper;
     private ChannelAccessService accessService;
+    private PlatformSettingService settingService;
     private AgentRuntime runtime;
 
     @BeforeEach
@@ -59,9 +61,13 @@ class AgentRuntimeTest {
         modelConfigService = mock(AiModelConfigService.class);
         channelMapper = mock(ChannelMapper.class);
         accessService = mock(ChannelAccessService.class);
+        settingService = mock(PlatformSettingService.class);
+        // 默认走单轮（旧行为），两阶段用例单独打桩
+        when(settingService.getBoolean("agent.twoPhaseEnabled")).thenReturn(false);
+        when(settingService.getBoolean("agent.researchFirst")).thenReturn(true);
         runtime = new AgentRuntime(profileMapper, runMapper, toolbox, planner, guard, memoryService,
                 profileService, modelConfigService, channelMapper, mock(ChannelService.class),
-                accessService, new JsonSupport(), mock(PlatformAuditService.class));
+                accessService, new JsonSupport(), mock(PlatformAuditService.class), settingService);
         when(runMapper.insert(any(AgentRun.class))).thenReturn(1);
     }
 
@@ -206,6 +212,152 @@ class AgentRuntimeTest {
         verify(planner, never()).plan(any(), any(), any(), any(), any());
     }
 
+
+    // ------------------------------------------------------------------
+    // 两阶段 tick（P0-1）
+    // ------------------------------------------------------------------
+
+    @Test
+    void should_research_first_then_compose_and_sum_tokens() {
+        stubHappyPath();
+        when(settingService.getBoolean("agent.twoPhaseEnabled")).thenReturn(true);
+        AgentPlanner.AgentPlan research = new AgentPlanner.AgentPlan("web_search",
+                Map.of("query", "minecraft 建筑"), "{\"action\":\"web_search\"}", 10, 5);
+        when(planner.research(any(), any(), any(), any())).thenReturn(List.of(research));
+        when(toolbox.execute(eq("web_search"), any(), any())).thenReturn(new AgentToolbox.ToolOutcome(
+                "NONE", null, "联网搜索「minecraft 建筑」（1 条）",
+                Map.of("query", "minecraft 建筑", "count", 1,
+                        "results", List.of(Map.of("title", "建筑教程", "url", "https://wiki.example.com/build",
+                                "engine", "google cse", "snippet", "从地基开始规划")))));
+        when(planner.compose(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new AgentPlanner.AgentPlan("create_post",
+                        Map.of("channelId", "ch-1", "title", "建筑心得", "content", "从地基开始规划"), "{}", 20, 8));
+        when(toolbox.execute(eq("create_post"), any(), any()))
+                .thenReturn(new AgentToolbox.ToolOutcome("POST", "post-9", "已发帖《建筑心得》"));
+
+        AgentRun run = runtime.runOne(profile(), true);
+
+        assertThat(run.getStatus()).isEqualTo(AgentRun.Status.SUCCESS.name());
+        assertThat(run.getOutputType()).isEqualTo("POST");
+        // 两阶段 token 累加：10+20 / 5+8
+        assertThat(run.getTokensIn()).isEqualTo(30);
+        assertThat(run.getTokensOut()).isEqualTo(13);
+        assertThat(run.getPlanJson()).contains("research").contains("compose");
+        verify(planner).research(any(), any(), any(), any());
+    }
+
+    @Test
+    void should_pass_research_materials_into_compose_prompt() {
+        stubHappyPath();
+        when(settingService.getBoolean("agent.twoPhaseEnabled")).thenReturn(true);
+        when(planner.research(any(), any(), any(), any())).thenReturn(List.of(
+                new AgentPlanner.AgentPlan("web_search", Map.of("query", "红石"), "{}", 1, 1)));
+        when(toolbox.execute(eq("web_search"), any(), any())).thenReturn(new AgentToolbox.ToolOutcome(
+                "NONE", null, "联网搜索", Map.of("count", 1, "results", List.of(
+                Map.of("title", "红石教程", "url", "https://wiki.example.com/redstone",
+                        "engine", "google cse", "snippet", "红石用于传输信号")))));
+        when(planner.compose(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new AgentPlanner.AgentPlan("none", Map.of(), "{}", 1, 1));
+
+        runtime.runOne(profile(), true);
+
+        org.mockito.ArgumentCaptor<String> materials = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(planner).compose(any(), any(), any(), any(), materials.capture(), any(), any());
+        // 素材必须带 url 与摘要，否则产出阶段只能编
+        assertThat(materials.getValue()).contains("https://wiki.example.com/redstone")
+                .contains("红石用于传输信号");
+    }
+
+    @Test
+    void should_reject_fabricated_post_id() {
+        stubHappyPath();
+        when(settingService.getBoolean("agent.twoPhaseEnabled")).thenReturn(true);
+        when(planner.research(any(), any(), any(), any())).thenReturn(List.of(
+                new AgentPlanner.AgentPlan("list_channel_posts", Map.of("channelId", "ch-1"), "{}", 1, 1)));
+        when(toolbox.execute(eq("list_channel_posts"), any(), any())).thenReturn(new AgentToolbox.ToolOutcome(
+                "NONE", null, "频道最新帖", Map.of("postIds", List.of("post-1"))));
+        // 模型凭空拼了一个 id（用户实测：频道ID_2024-06-15_14:30:00）
+        when(planner.compose(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new AgentPlanner.AgentPlan("comment",
+                        Map.of("postId", "ch-1_2024-06-15_14:30:00", "content", "说点什么"), "{}", 1, 1));
+
+        AgentRun run = runtime.runOne(profile(), true);
+
+        assertThat(run.getStatus()).isEqualTo(AgentRun.Status.GUARDED.name());
+        assertThat(run.getError()).contains("不在本轮可见列表");
+        verify(toolbox, never()).execute(eq("comment"), any(), any());
+    }
+
+    @Test
+    void should_allow_comment_when_target_was_seen_this_tick() {
+        stubHappyPath();
+        when(settingService.getBoolean("agent.twoPhaseEnabled")).thenReturn(true);
+        when(planner.research(any(), any(), any(), any())).thenReturn(List.of(
+                new AgentPlanner.AgentPlan("search_site_posts", Map.of("keyword", "红石"), "{}", 1, 1)));
+        when(toolbox.execute(eq("search_site_posts"), any(), any())).thenReturn(new AgentToolbox.ToolOutcome(
+                "NONE", null, "站内检索结果", Map.of("postIds", List.of("post-1", "post-2"))));
+        when(planner.compose(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new AgentPlanner.AgentPlan("comment",
+                        Map.of("postId", "post-2", "content", "这个思路可以"), "{}", 1, 1));
+        when(toolbox.execute(eq("comment"), any(), any()))
+                .thenReturn(new AgentToolbox.ToolOutcome("COMMENT", "comment-1", "已评论帖子 post-2"));
+
+        AgentRun run = runtime.runOne(profile(), true);
+
+        assertThat(run.getStatus()).isEqualTo(AgentRun.Status.SUCCESS.name());
+        assertThat(run.getOutputType()).isEqualTo("COMMENT");
+        assertThat(run.getOutputId()).isEqualTo("comment-1");
+    }
+
+    @Test
+    void should_fallback_to_persona_keywords_when_research_is_empty() {
+        stubHappyPath();
+        when(settingService.getBoolean("agent.twoPhaseEnabled")).thenReturn(true);
+        AgentProfile profile = profile();
+        profile.setInterests("[\"minecraft\",\"建筑\"]");
+        when(planner.research(any(), any(), any(), any())).thenReturn(List.of());
+        when(toolbox.execute(eq("web_search"), any(), any())).thenReturn(new AgentToolbox.ToolOutcome(
+                "NONE", null, "联网搜索", Map.of("count", 0, "results", List.of())));
+        when(planner.compose(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new AgentPlanner.AgentPlan("none", Map.of(), "{}", 1, 1));
+
+        runtime.runOne(profile, true);
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<Map<String, Object>> args =
+                org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(toolbox).execute(eq("web_search"), args.capture(), any());
+        // 人设兴趣词兜底：不交给模型决定「要不要研究」
+        assertThat(String.valueOf(args.getValue().get("query"))).contains("minecraft").contains("建筑");
+    }
+
+    @Test
+    void should_skip_research_when_research_first_disabled() {
+        stubHappyPath();
+        when(settingService.getBoolean("agent.twoPhaseEnabled")).thenReturn(true);
+        when(settingService.getBoolean("agent.researchFirst")).thenReturn(false);
+        when(planner.compose(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new AgentPlanner.AgentPlan("none", Map.of(), "{}", 1, 1));
+
+        AgentRun run = runtime.runOne(profile(), true);
+
+        assertThat(run.getStatus()).isEqualTo(AgentRun.Status.SUCCESS.name());
+        verify(planner, never()).research(any(), any(), any(), any());
+    }
+
+    @Test
+    void should_fall_back_to_single_phase_when_two_phase_disabled() {
+        stubHappyPath();
+        when(planner.plan(any(), any(), any(), any(), any()))
+                .thenReturn(new AgentPlanner.AgentPlan("none", Map.of(), "{}", 1, 1));
+
+        runtime.runOne(profile(), true);
+
+        verify(planner).plan(any(), any(), any(), any(), any());
+        verify(planner, never()).research(any(), any(), any(), any());
+        verify(planner, never()).compose(any(), any(), any(), any(), any(), any(), any());
+    }
+
     private void stubHappyPath() {
         when(guard.enabled()).thenReturn(true);
         when(guard.checkRun()).thenReturn(AgentGuard.GuardResult.ok());
@@ -218,6 +370,9 @@ class AgentRuntimeTest {
         when(channelMapper.selectJoinedChannels("agent-1")).thenReturn(List.of());
         when(channelMapper.selectRecommendationCandidates(eq("agent-1"), any(Integer.class))).thenReturn(List.of());
         when(memoryService.recentTopics(eq("agent-1"), any(Integer.class))).thenReturn(List.of());
+        // none 是「不行动」，也要有返回值，否则 execute 返回 null 会 NPE
+        when(toolbox.execute(eq("none"), any(), any()))
+                .thenReturn(new AgentToolbox.ToolOutcome("NONE", null, "本次不行动"));
     }
 
     private AgentProfile profile() {

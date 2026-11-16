@@ -125,7 +125,8 @@ public class AgentToolbox {
         String channelId = resolveChannelId(str(args, "channelId", null), context);
         List<AiContextPost> posts = contextMapper.searchContextPosts(patterns(keyword), channelId,
                 clampInt(args, "limit", 5, 1, MAX_SEARCH_LIMIT));
-        return new ToolOutcome(AgentRunTypes.NONE, null, summarizePosts("站内检索结果", posts));
+        return new ToolOutcome(AgentRunTypes.NONE, null, summarizePosts("站内检索结果", posts),
+                postIdsData(keyword, posts));
     }
 
     /**
@@ -162,7 +163,22 @@ public class AgentToolbox {
                     truncate(result.title() == null ? result.url() : result.title(), 200) + " " + result.url(),
                     result.url());
         }
-        return new ToolOutcome(AgentRunTypes.NONE, null, summarizeSearchResults(query, results));
+        // 结构化结果（P1-3）：前端/后台不必再从 summary 文本里抠条数与链接
+        List<Map<String, Object>> items = new ArrayList<>(results.size());
+        for (SearchResult result : results) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("title", result.title());
+            item.put("url", result.url());
+            item.put("engine", result.engine());
+            // 摘要（已截断）：产出阶段要「基于素材写」，只给标题等于逼模型编内容
+            item.put("snippet", truncate(result.content(), 200));
+            items.add(item);
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("query", query);
+        data.put("count", items.size());
+        data.put("results", items);
+        return new ToolOutcome(AgentRunTypes.NONE, null, summarizeSearchResults(query, results), data);
     }
 
     /**
@@ -174,15 +190,21 @@ public class AgentToolbox {
             throw new AppException(ErrorCode.VALIDATION_ERROR, "fetch_page 需要 url");
         }
         String text = pageFetcher.fetch(url);
-        return new ToolOutcome(AgentRunTypes.NONE, null, "页面正文（" + url + "）：\n" + text);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("url", url);
+        data.put("chars", text.length());
+        return new ToolOutcome(AgentRunTypes.NONE, null, "页面正文（" + url + "）：\n" + text, data);
     }
 
     private ToolOutcome fallbackToSiteSearch(String keyword, AgentContext context, String reason) {
         String channelId = resolveChannelId(null, context);
         List<AiContextPost> posts = contextMapper.searchContextPosts(patterns(keyword), channelId,
                 MAX_SEARCH_LIMIT);
+        Map<String, Object> data = postIdsData(keyword, posts);
+        Map<String, Object> merged = new LinkedHashMap<>(data);
+        merged.put("fallback", true);
         return new ToolOutcome(AgentRunTypes.NONE, null,
-                reason + "\n" + summarizePosts("站内检索结果", posts));
+                reason + "\n" + summarizePosts("站内检索结果", posts), merged);
     }
 
     private String summarizeSearchResults(String query, List<SearchResult> results) {
@@ -209,7 +231,21 @@ public class AgentToolbox {
         }
         List<AiContextPost> posts = contextMapper.selectRecentPosts(channelId, null,
                 clampInt(args, "limit", 5, 1, MAX_SEARCH_LIMIT));
-        return new ToolOutcome(AgentRunTypes.NONE, null, summarizePosts("频道最新帖", posts));
+        return new ToolOutcome(AgentRunTypes.NONE, null, summarizePosts("频道最新帖", posts),
+                postIdsData(null, posts));
+    }
+
+    /**
+     * 只读工具的结构化输出：{@code postIds} 是「本 tick 可见的帖子」白名单，
+     * 写动作的 comment/like 只能用这里出现过的 id（防模型凭空拼 id）。
+     */
+    private Map<String, Object> postIdsData(String keyword, List<AiContextPost> posts) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        if (keyword != null) {
+            data.put("keyword", keyword);
+        }
+        data.put("postIds", posts == null ? List.of() : posts.stream().map(AiContextPost::getId).toList());
+        return data;
     }
 
     private ToolOutcome getPostDetail(Map<String, Object> args, AgentContext context) {
@@ -428,7 +464,16 @@ public class AgentToolbox {
      * @param outputId   产出内容 id（只读工具为 null）
      * @param summary    给模型/日志看的结果摘要
      */
-    public record ToolOutcome(String outputType, String outputId, String summary) {
+    public record ToolOutcome(String outputType, String outputId, String summary, Map<String, Object> data) {
+
+        public ToolOutcome {
+            data = data == null ? Map.of() : Map.copyOf(data);
+        }
+
+        /** 无结构化数据的工具（写动作、none 等）。 */
+        public ToolOutcome(String outputType, String outputId, String summary) {
+            this(outputType, outputId, summary, Map.of());
+        }
     }
 
     /** 与 {@code AgentRun.OutputType} 对齐的字符串常量（避免工具层依赖实体枚举）。 */

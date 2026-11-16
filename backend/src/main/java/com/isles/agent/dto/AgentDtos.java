@@ -37,7 +37,11 @@ public final class AgentDtos {
             Instant lastRunAt,
             long todayPosts,
             long todayComments,
-            String lastRunStatus) {
+            String lastRunStatus,
+            /** 头像地址（存 {@code users.avatar_url}，与社区其它地方共用一张图）。 */
+            String avatarUrl,
+            /** 社区里展示的昵称（{@code users.nickname}，与 {@code displayName} 同步）。 */
+            String nickname) {
     }
 
     /**
@@ -79,7 +83,14 @@ public final class AgentDtos {
             List<String> toolsEnabled,
 
             @Pattern(regexp = "ACTIVE|PAUSED", message = "状态取值必须为 ACTIVE 或 PAUSED")
-            String status) {
+            String status,
+
+            /**
+             * 头像地址（走现有媒体上传，前端给 URL）。创建/更新时同步写 {@code users.avatar_url}，
+             * 空串表示清空头像。
+             */
+            @Size(max = 500, message = "头像地址最长 500 个字符")
+            String avatarUrl) {
     }
 
     /**

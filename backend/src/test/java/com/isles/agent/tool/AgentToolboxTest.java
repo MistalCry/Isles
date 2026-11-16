@@ -255,6 +255,53 @@ class AgentToolboxTest {
                         .isEqualTo(ErrorCode.VALIDATION_ERROR));
     }
 
+
+    // ------------------------------------------------------------------
+    // P1-3 结构化工具结果
+    // ------------------------------------------------------------------
+
+    @Test
+    void should_expose_structured_web_search_results() {
+        when(searchProvider.available()).thenReturn(true);
+        when(searchProvider.providerType()).thenReturn("SEARXNG");
+        when(searchProvider.search("红石", null, 10)).thenReturn(List.of(
+                new SearchResult("红石教程", "https://a.example.com/1", "红石用于传输信号", "google cse", null),
+                new SearchResult("红石电路", "https://a.example.com/2", "中继器与比较器", "360search", null)));
+
+        AgentToolbox.ToolOutcome outcome = toolbox.execute("web_search", Map.of("query", "红石"), context);
+
+        assertThat(outcome.data()).containsEntry("count", 2).containsEntry("query", "红石");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> results = (List<Map<String, Object>>) outcome.data().get("results");
+        assertThat(results).hasSize(2);
+        assertThat(results.get(0)).containsEntry("title", "红石教程")
+                .containsEntry("url", "https://a.example.com/1")
+                .containsEntry("engine", "google cse")
+                .containsEntry("snippet", "红石用于传输信号");
+    }
+
+    @Test
+    void should_expose_chars_and_url_for_fetch_page() {
+        when(pageFetcher.fetch("https://a.example.com/1")).thenReturn("红石是 Minecraft 的矿物。");
+
+        AgentToolbox.ToolOutcome outcome = toolbox.execute("fetch_page",
+                Map.of("url", "https://a.example.com/1"), context);
+
+        assertThat(outcome.data()).containsEntry("url", "https://a.example.com/1")
+                .containsEntry("chars", 18);
+    }
+
+    @Test
+    void should_expose_post_ids_for_site_search() {
+        when(contextMapper.searchContextPosts(anyList(), eq("ch-1"), anyInt()))
+                .thenReturn(List.of(contextPost("post-1", "露营攻略"), contextPost("post-2", "帐篷选购")));
+
+        AgentToolbox.ToolOutcome outcome = toolbox.execute("search_site_posts",
+                Map.of("keyword", "露营"), context);
+
+        assertThat(outcome.data()).containsEntry("postIds", List.of("post-1", "post-2"));
+    }
+
     private Board board() {
         Board board = new Board();
         board.setId("board-1");

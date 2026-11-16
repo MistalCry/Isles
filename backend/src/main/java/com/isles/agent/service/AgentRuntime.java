@@ -19,6 +19,7 @@ import com.isles.common.json.JsonSupport;
 import com.isles.common.time.ClockTimes;
 import com.isles.platform.audit.PlatformAuditActions;
 import com.isles.platform.audit.PlatformAuditService;
+import com.isles.platform.setting.PlatformSettingService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +56,12 @@ public class AgentRuntime {
     private static final int MEMORY_PROMPT_LIMIT = 10;
     /** 未配置频道时自动加入的公开频道上限（否则代理无频道可活动）。 */
     private static final int AUTO_JOIN_CHANNELS = 3;
+    /** 注入产出阶段的素材条数上限与单条摘要长度（控制提示词预算）。 */
+    private static final int MAX_MATERIALS = 6;
+    private static final int MAX_MATERIAL_SNIPPET = 200;
+    /** 两阶段 tick 的开关（关掉退回单轮，docs/12 §2.1）。 */
+    private static final String SETTING_TWO_PHASE = "agent.twoPhaseEnabled";
+    private static final String SETTING_RESEARCH_FIRST = "agent.researchFirst";
 
     private final AgentProfileMapper profileMapper;
     private final AgentRunMapper runMapper;
@@ -69,6 +76,7 @@ public class AgentRuntime {
     private final ChannelAccessService accessService;
     private final JsonSupport jsonSupport;
     private final PlatformAuditService auditService;
+    private final PlatformSettingService settingService;
 
     // ------------------------------------------------------------------
     // 调度
@@ -216,47 +224,115 @@ public class AgentRuntime {
             List<com.isles.agent.entity.AgentMemory> memories = memoryService.recentTopics(
                     profile.getUserId(), MEMORY_PROMPT_LIMIT);
 
-            AgentPlanner.AgentPlan plan;
-            try {
-                plan = planner.plan(model, profile, memories, briefs, busyHint(profile, channelIds.isEmpty()));
-            } catch (AppException ex) {
-                return finish(run, AgentRun.Status.FAILED, null, null, ex.getMessage(), null, 0, 0);
-            } catch (RuntimeException ex) {
-                log.warn("AI 代理计划阶段失败 agentId={}", profile.getUserId(), ex);
-                return finish(run, AgentRun.Status.FAILED, null, null, "模型调用失败：" + ex.getMessage(), null, 0, 0);
-            }
-            run.setPlanJson(plan.raw());
-            run.setTokensIn(plan.tokensIn());
-            run.setTokensOut(plan.tokensOut());
-
-            if (!AgentToolbox.ALLOWED_ACTIONS.contains(plan.action())) {
-                return finish(run, AgentRun.Status.GUARDED, null, null,
-                        "动作不在白名单：" + plan.action(), null, plan.tokensIn(), plan.tokensOut());
-            }
-            AgentGuard.GuardResult actionGuard = checkAction(profile, plan);
-            if (!actionGuard.allowed()) {
-                return finish(run, AgentRun.Status.GUARDED, null, null, actionGuard.reason(), null,
-                        plan.tokensIn(), plan.tokensOut());
-            }
-
             AgentToolbox.AgentContext context = new AgentToolbox.AgentContext(profile.getUserId(), profile,
                     channelIds);
-            AgentToolbox.ToolOutcome outcome;
-            try {
-                outcome = toolbox.execute(plan.action(), plan.args(), context);
-            } catch (AppException ex) {
-                AgentRun.Status status = isGuardRejection(ex.getErrorCode())
-                        ? AgentRun.Status.GUARDED
-                        : AgentRun.Status.FAILED;
-                return finish(run, status, null, null, ex.getMessage(), toolTrace(plan, null),
-                        plan.tokensIn(), plan.tokensOut());
-            } catch (RuntimeException ex) {
-                log.warn("AI 代理工具执行失败 agentId={} action={}", profile.getUserId(), plan.action(), ex);
-                return finish(run, AgentRun.Status.FAILED, null, null, "工具执行失败：" + ex.getMessage(),
-                        toolTrace(plan, null), plan.tokensIn(), plan.tokensOut());
+            boolean twoPhase = settingService.getBoolean(SETTING_TWO_PHASE);
+
+            // ---------------- 单轮（旧行为）：关掉 twoPhaseEnabled 时使用 ----------------
+            if (!twoPhase) {
+                AgentPlanner.AgentPlan plan;
+                try {
+                    plan = planner.plan(model, profile, memories, briefs, busyHint(profile, channelIds.isEmpty()));
+                } catch (AppException ex) {
+                    return finish(run, AgentRun.Status.FAILED, null, null, ex.getMessage(), null, 0, 0);
+                } catch (RuntimeException ex) {
+                    log.warn("AI 代理计划阶段失败 agentId={}", profile.getUserId(), ex);
+                    return finish(run, AgentRun.Status.FAILED, null, null, "模型调用失败：" + ex.getMessage(),
+                            null, 0, 0);
+                }
+                run.setPlanJson(plan.raw());
+                if (!AgentToolbox.ALLOWED_ACTIONS.contains(plan.action())) {
+                    return finish(run, AgentRun.Status.GUARDED, null, null,
+                            "动作不在白名单：" + plan.action(), null, plan.tokensIn(), plan.tokensOut());
+                }
+                AgentGuard.GuardResult actionGuard = checkAction(profile, plan);
+                if (!actionGuard.allowed()) {
+                    return finish(run, AgentRun.Status.GUARDED, null, null, actionGuard.reason(), null,
+                            plan.tokensIn(), plan.tokensOut());
+                }
+                return executePlan(run, plan, context, null, plan.tokensIn(), plan.tokensOut());
             }
-            return finish(run, AgentRun.Status.SUCCESS, outcome.outputType(), outcome.outputId(), null,
-                    toolTrace(plan, outcome.summary(), outcome.outputId()), plan.tokensIn(), plan.tokensOut());
+
+            // ---------------- 两阶段：研究 → 产出 ----------------
+            boolean researchFirst = settingService.getBoolean(SETTING_RESEARCH_FIRST);
+            List<AgentPlanner.AgentPlan> researchPlans = List.of();
+            if (researchFirst) {
+                try {
+                    researchPlans = planner.research(model, profile, memories, briefs);
+                } catch (AppException ex) {
+                    // 研究阶段失败不阻断 tick：降级为「无素材直接产出」，由闸门兜住
+                    log.warn("代理研究阶段失败，按无素材继续 agentId={} reason={}",
+                            profile.getUserId(), ex.getMessage());
+                } catch (RuntimeException ex) {
+                    log.warn("代理研究阶段异常，按无素材继续 agentId={}", profile.getUserId(), ex);
+                }
+                if (researchPlans.isEmpty()) {
+                    // 模型给不出可执行的研究动作 → 用人设兴趣词兜底（不交给模型决定要不要研究）
+                    researchPlans = List.of(fallbackResearchPlan(profile, channelIds));
+                }
+            }
+
+            List<Map<String, Object>> researchSteps = new ArrayList<>();
+            List<String> visiblePostIds = new ArrayList<>();
+            List<String> materialBlocks = new ArrayList<>();
+            int tokensIn = 0;
+            int tokensOut = 0;
+            for (AgentPlanner.AgentPlan research : researchPlans) {
+                tokensIn += research.tokensIn();
+                tokensOut += research.tokensOut();
+                if (!AgentPlanner.RESEARCH_ACTIONS.contains(research.action())) {
+                    researchSteps.add(stepOf(research, null, "研究阶段忽略非只读动作"));
+                    continue;
+                }
+                try {
+                    AgentToolbox.ToolOutcome outcome = toolbox.execute(research.action(), research.args(), context);
+                    researchSteps.add(stepOf(research, outcome, null));
+                    collectPostIds(outcome, visiblePostIds);
+                    if (materialBlocks.size() < MAX_MATERIALS) {
+                        materialBlocks.add(materialOf(research.action(), outcome));
+                    }
+                } catch (AppException ex) {
+                    log.warn("代理研究动作失败 agentId={} action={} reason={}",
+                            profile.getUserId(), research.action(), ex.getMessage());
+                    researchSteps.add(stepOf(research, null, ex.getMessage()));
+                }
+            }
+
+            String materials = String.join("\n", materialBlocks);
+            AgentPlanner.AgentPlan compose;
+            try {
+                compose = planner.compose(model, profile, memories, briefs, materials,
+                        busyHint(profile, channelIds.isEmpty()), visiblePostIds);
+            } catch (AppException ex) {
+                run.setPlanJson(planJsonOf(researchSteps, null));
+                return finish(run, AgentRun.Status.FAILED, null, null, ex.getMessage(), null, tokensIn, tokensOut);
+            } catch (RuntimeException ex) {
+                log.warn("AI 代理产出阶段失败 agentId={}", profile.getUserId(), ex);
+                run.setPlanJson(planJsonOf(researchSteps, null));
+                return finish(run, AgentRun.Status.FAILED, null, null, "模型调用失败：" + ex.getMessage(),
+                        null, tokensIn, tokensOut);
+            }
+            tokensIn += compose.tokensIn();
+            tokensOut += compose.tokensOut();
+            run.setPlanJson(planJsonOf(researchSteps, compose));
+
+            if (!AgentToolbox.ALLOWED_ACTIONS.contains(compose.action())) {
+                return finish(run, AgentRun.Status.GUARDED, null, null,
+                        "动作不在白名单：" + compose.action(), planJsonOf(researchSteps, compose),
+                        tokensIn, tokensOut);
+            }
+            // 禁止编造 id：comment/like 的目标必须来自本 tick 的只读结果
+            AgentGuard.GuardResult idGuard = checkTargetId(compose, visiblePostIds);
+            if (!idGuard.allowed()) {
+                return finish(run, AgentRun.Status.GUARDED, null, null, idGuard.reason(),
+                        planJsonOf(researchSteps, compose), tokensIn, tokensOut);
+            }
+            AgentGuard.GuardResult actionGuard = checkAction(profile, compose);
+            if (!actionGuard.allowed()) {
+                return finish(run, AgentRun.Status.GUARDED, null, null, actionGuard.reason(),
+                        planJsonOf(researchSteps, compose), tokensIn, tokensOut);
+            }
+            return executePlan(run, compose, context, researchSteps, tokensIn, tokensOut);
         } catch (RuntimeException ex) {
             log.warn("AI 代理运行异常 agentId={}", profile.getUserId(), ex);
             return finish(run, AgentRun.Status.FAILED, null, null, "运行异常：" + ex.getMessage(), null,
@@ -312,17 +388,181 @@ public class AgentRuntime {
         return run;
     }
 
-    private String toolTrace(AgentPlanner.AgentPlan plan, String summary) {
-        return toolTrace(plan, summary, null);
+    /**
+     * 执行产出动作并落库（两阶段与单轮共用）。
+     *
+     * @param researchSteps 研究阶段的轨迹；单轮模式为 null
+     */
+    private AgentRun executePlan(AgentRun run, AgentPlanner.AgentPlan plan, AgentToolbox.AgentContext context,
+                                 List<Map<String, Object>> researchSteps, int tokensIn, int tokensOut) {
+        String trace;
+        try {
+            AgentToolbox.ToolOutcome outcome = toolbox.execute(plan.action(), plan.args(), context);
+            trace = traceOf(researchSteps, plan, outcome, null);
+            return finish(run, AgentRun.Status.SUCCESS, outcome.outputType(), outcome.outputId(), null,
+                    trace, tokensIn, tokensOut);
+        } catch (AppException ex) {
+            AgentRun.Status status = isGuardRejection(ex.getErrorCode())
+                    ? AgentRun.Status.GUARDED
+                    : AgentRun.Status.FAILED;
+            return finish(run, status, null, null, ex.getMessage(),
+                    traceOf(researchSteps, plan, null, ex.getMessage()), tokensIn, tokensOut);
+        } catch (RuntimeException ex) {
+            log.warn("AI 代理工具执行失败 agentId={} action={}", run.getAgentId(), plan.action(), ex);
+            return finish(run, AgentRun.Status.FAILED, null, null, "工具执行失败：" + ex.getMessage(),
+                    traceOf(researchSteps, plan, null, ex.getMessage()), tokensIn, tokensOut);
+        }
     }
 
-    private String toolTrace(AgentPlanner.AgentPlan plan, String summary, String outputId) {
+    /**
+     * 工具轨迹：单轮保持原有的扁平结构（{@code action/args/summary/outputId}），
+     * 两阶段输出 {@code {research:[...], compose:{...}}}。
+     *
+     * <p>结构化结果（P1-3）直接平铺进对应步骤：{@code web_search} 带 {@code count/results/query}，
+     * {@code fetch_page} 带 {@code chars/url}，只读检索带 {@code postIds}——前端不必再从 summary 里抠。
+     */
+    private String traceOf(List<Map<String, Object>> researchSteps, AgentPlanner.AgentPlan plan,
+                           AgentToolbox.ToolOutcome outcome, String error) {
+        Map<String, Object> composeStep = stepOf(plan, outcome, error);
+        if (researchSteps == null) {
+            return jsonSupport.toJson(composeStep);
+        }
         Map<String, Object> trace = new LinkedHashMap<>();
-        trace.put("action", plan.action());
-        trace.put("args", plan.args());
-        trace.put("summary", summary);
-        trace.put("outputId", outputId);
+        trace.put("research", researchSteps);
+        trace.put("compose", composeStep);
         return jsonSupport.toJson(trace);
+    }
+
+    /**
+     * 单个步骤的轨迹：动作 + 入参 + 摘要 + 产出 id + 工具的结构化数据。
+     */
+    private Map<String, Object> stepOf(AgentPlanner.AgentPlan plan, AgentToolbox.ToolOutcome outcome,
+                                       String error) {
+        Map<String, Object> step = new LinkedHashMap<>();
+        step.put("action", plan.action());
+        step.put("args", plan.args());
+        step.put("summary", outcome == null ? null : truncate(outcome.summary(), 2000));
+        step.put("outputId", outcome == null ? null : outcome.outputId());
+        if (outcome != null && !outcome.data().isEmpty()) {
+            // 平铺结构化字段：count / results / query / chars / url / postIds / fallback
+            step.putAll(outcome.data());
+        }
+        if (error != null) {
+            step.put("error", truncate(error, 300));
+        }
+        return step;
+    }
+
+    /**
+     * 研究阶段产出 → 注入产出阶段的「素材」文本（标题 + 摘要 + url）。
+     */
+    private String materialOf(String action, AgentToolbox.ToolOutcome outcome) {
+        StringBuilder block = new StringBuilder();
+        Object results = outcome.data().get("results");
+        if (results instanceof List<?> list && !list.isEmpty()) {
+            for (Object item : list) {
+                if (!(item instanceof Map<?, ?> map)) {
+                    continue;
+                }
+                block.append("- [").append(map.get("engine")).append("] ").append(map.get("title"))
+                        .append('\n').append("  ").append(map.get("url")).append('\n');
+                Object snippet = map.get("snippet");
+                if (snippet != null) {
+                    block.append("  ").append(truncate(String.valueOf(snippet), MAX_MATERIAL_SNIPPET)).append('\n');
+                }
+            }
+        }
+        if (block.isEmpty()) {
+            // 站内检索 / 抓正文 / 兜底：直接用摘要（已含 id、标题、正文片段）
+            block.append("[").append(action).append("]\n")
+                    .append(truncate(outcome.summary(), MAX_MATERIAL_SNIPPET * 3));
+        }
+        return block.toString();
+    }
+
+    /**
+     * 收集「本 tick 可见的帖子 id」：只有只读检索类工具才有意义（写动作的目标白名单）。
+     */
+    private void collectPostIds(AgentToolbox.ToolOutcome outcome, List<String> sink) {
+        Object ids = outcome.data().get("postIds");
+        if (ids instanceof List<?> list) {
+            for (Object id : list) {
+                if (id != null && !sink.contains(String.valueOf(id))) {
+                    sink.add(String.valueOf(id));
+                }
+            }
+        }
+    }
+
+    /**
+     * 研究阶段兜底：模型没给出可执行动作时，用人设兴趣词强制发起一次联网搜索
+     * （没有兴趣/频道就退化为逛频道，至少让产出阶段有站内素材）。
+     */
+    private AgentPlanner.AgentPlan fallbackResearchPlan(AgentProfile profile, List<String> channelIds) {
+        List<String> interests = parseStringList(profile.getInterests());
+        String query = interests.isEmpty() ? null : String.join(" ", interests);
+        if (query == null && profile.getBio() != null && !profile.getBio().isBlank()) {
+            query = profile.getBio().trim();
+        }
+        if (query != null) {
+            return new AgentPlanner.AgentPlan("web_search", Map.of("query", query), "{}", 0, 0);
+        }
+        Map<String, Object> args = new LinkedHashMap<>();
+        if (!channelIds.isEmpty()) {
+            args.put("channelId", channelIds.get(0));
+        }
+        return new AgentPlanner.AgentPlan("list_channel_posts", args, "{}", 0, 0);
+    }
+
+    /**
+     * 两阶段计划原文：{@code {"research":[...原文...],"compose":{...原文...}}}，便于后台回放。
+     */
+    private String planJsonOf(List<Map<String, Object>> researchSteps, AgentPlanner.AgentPlan compose) {
+        Map<String, Object> plan = new LinkedHashMap<>();
+        plan.put("research", researchSteps);
+        if (compose == null) {
+            plan.put("compose", null);
+        } else {
+            // 与成功路径的 traceOf 保持同构：对象而非模型原文，否则前端两种形态都要猜
+            Map<String, Object> composeNode = new LinkedHashMap<>();
+            composeNode.put("action", compose.action());
+            composeNode.put("args", compose.args());
+            plan.put("compose", composeNode);
+        }
+        return jsonSupport.toJson(plan);
+    }
+
+    /**
+     * 禁止编造 id：comment/like 的目标必须出现在本 tick 的只读结果里。
+     *
+     * <p>模型曾经把 postId 拼成「频道ID_2024-06-15_14:30:00」这种凭空构造的值，
+     * 所以这里做硬校验，而不是靠提示词。
+     */
+    private AgentGuard.GuardResult checkTargetId(AgentPlanner.AgentPlan plan, List<String> visiblePostIds) {
+        if ("comment".equals(plan.action())) {
+            String postId = argText(plan.args(), "postId");
+            return requireVisible(postId, visiblePostIds, "postId");
+        }
+        if ("like".equals(plan.action())) {
+            String targetType = argText(plan.args(), "targetType");
+            String targetId = argText(plan.args(), "targetId");
+            if (targetType != null && "COMMENT".equalsIgnoreCase(targetType)) {
+                // 评论 id 不在本 tick 可见列表内（只读工具不返回评论 id），一律拒绝，避免编造
+                return AgentGuard.GuardResult.blocked("点赞评论需要真实评论 id，本轮不可见，已拒绝");
+            }
+            return requireVisible(targetId, visiblePostIds, "targetId");
+        }
+        return AgentGuard.GuardResult.ok();
+    }
+
+    private AgentGuard.GuardResult requireVisible(String id, List<String> visiblePostIds, String field) {
+        if (id == null || id.isBlank()) {
+            return AgentGuard.GuardResult.blocked(field + " 为空，已拒绝");
+        }
+        if (!visiblePostIds.contains(id)) {
+            return AgentGuard.GuardResult.blocked(field + " 不在本轮可见列表内：" + truncate(id, 64));
+        }
+        return AgentGuard.GuardResult.ok();
     }
 
     private String busyHint(AgentProfile profile, boolean noChannels) {

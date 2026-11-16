@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 计划阶段（V13 / docs/12 §2.1「计划」）：一次非流式模型调用，产出结构化动作。
@@ -37,9 +38,196 @@ public class AgentPlanner {
     private static final Logger log = LoggerFactory.getLogger(AgentPlanner.class);
 
     private static final int MAX_TOKENS = 800;
+    /** 研究阶段允许的只读动作（docs/12 §2.1 两阶段 tick）。 */
+    public static final Set<String> RESEARCH_ACTIONS = Set.of(
+            "web_search", "search_site_posts", "list_channel_posts", "fetch_page");
+    /** 单次 tick 最多执行几个研究动作。 */
+    public static final int MAX_RESEARCH_ACTIONS = 2;
 
     private final AiModelConfigService modelConfigService;
     private final JsonSupport jsonSupport;
+
+    /**
+     * 研究阶段（两阶段 tick 的第一步）：只允许只读动作，最多 {@value #MAX_RESEARCH_ACTIONS} 个。
+     *
+     * <p>**不交给模型决定「要不要研究」**——这一步是强制的，模型只决定「研究什么」。
+     * 模型给不出可执行的研究动作时返回空列表，由 Runtime 用人设兴趣词兜底。
+     */
+    public List<AgentPlan> research(AiModelConfig model, AgentProfile profile, List<AgentMemory> memories,
+                                    List<ChannelBrief> channels) {
+        String system = researchPrompt(profile, memories, channels);
+        ModelCall call = callModel(model, system, "请输出研究动作的 JSON。");
+        Map<String, Object> parsed = parseJson(call.content());
+        List<AgentPlan> plans = new ArrayList<>();
+        Object batch = parsed.get("actions");
+        if (batch instanceof List<?> list) {
+            for (Object item : list) {
+                if (!(item instanceof Map<?, ?> map)) {
+                    continue;
+                }
+                Map<String, Object> node = new LinkedHashMap<>();
+                map.forEach((key, value) -> node.put(String.valueOf(key), value));
+                addResearchPlan(plans, node, call);
+                if (plans.size() >= MAX_RESEARCH_ACTIONS) {
+                    break;
+                }
+            }
+        } else {
+            addResearchPlan(plans, parsed, call);
+        }
+        return plans;
+    }
+
+    /**
+     * 产出阶段（两阶段 tick 的第二步）：只允许写动作，并把「今日素材」注入提示。
+     *
+     * <p>提示里明确两条硬规则：只能基于素材写；comment/like 的 postId 必须来自可见列表。
+     */
+    public AgentPlan compose(AiModelConfig model, AgentProfile profile, List<AgentMemory> memories,
+                             List<ChannelBrief> channels, String materials, String busyHint,
+                             List<String> visiblePostIds) {
+        String system = composePrompt(profile, memories, channels, materials, busyHint, visiblePostIds);
+        ModelCall call = callModel(model, system, "请输出一个 JSON 动作。");
+        Map<String, Object> parsed = parseJson(call.content());
+        String action = parsed.get("action") == null ? null : String.valueOf(parsed.get("action")).trim();
+        if (action == null || action.isBlank()) {
+            throw new AppException(ErrorCode.BUSINESS_RULE_VIOLATION, "模型未给出 action");
+        }
+        return new AgentPlan(action, extractArgs(parsed), call.content(), call.tokensIn(), call.tokensOut());
+    }
+
+    private void addResearchPlan(List<AgentPlan> plans, Map<String, Object> node, ModelCall call) {
+        Object action = node.get("action");
+        if (action == null) {
+            return;
+        }
+        String name = String.valueOf(action).trim();
+        if (!RESEARCH_ACTIONS.contains(name)) {
+            log.debug("研究阶段忽略非只读动作 action={}", name);
+            return;
+        }
+        plans.add(new AgentPlan(name, extractArgs(node), call.content(), call.tokensIn(), call.tokensOut()));
+    }
+
+    /**
+     * 研究阶段提示词：人设 + 兴趣（兜底选题依据）+ 只读动作清单。
+     */
+    private String researchPrompt(AgentProfile profile, List<AgentMemory> memories,
+                                  List<ChannelBrief> channels) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("你是社区用户「").append(profile.getDisplayName()).append("」，现在先做资料收集，不要发帖。\n");
+        List<String> interests = parseStringList(profile.getInterests());
+        if (!interests.isEmpty()) {
+            prompt.append("你的兴趣：").append(String.join("、", interests)).append('\n');
+        }
+        if (profile.getBio() != null && !profile.getBio().isBlank()) {
+            prompt.append("简介：").append(profile.getBio()).append('\n');
+        }
+        if (!channels.isEmpty()) {
+            prompt.append("可浏览的频道：");
+            for (ChannelBrief channel : channels) {
+                prompt.append(channel.id()).append("(").append(channel.name()).append(") ");
+            }
+            prompt.append('\n');
+        }
+        if (!memories.isEmpty()) {
+            prompt.append("最近聊过（别重复）：\n");
+            for (AgentMemory memory : memories) {
+                prompt.append("- ").append(memory.getContent()).append('\n');
+            }
+        }
+        prompt.append("""
+                只允许以下只读动作（最多 2 个）：
+                - web_search {"query":"...","freshness":"day|week|month|year（可选）"}
+                - search_site_posts {"keyword":"..."}
+                - list_channel_posts {"channelId":"可选","limit":5}
+                - fetch_page {"url":"https://..."}
+                规则：
+                1. 只输出 JSON，形如 {"actions":[{"action":"web_search","args":{"query":"..."}}]}，不要解释。
+                2. query/keyword 要具体（结合你的兴趣），不要写「热门话题」这种空词。
+                3. 不需要资料就输出 {"actions":[]}。
+                """);
+        return prompt.toString();
+    }
+
+    /**
+     * 产出阶段提示词：素材 + 可见帖子 id + 写动作清单 + 两条硬规则。
+     */
+    private String composePrompt(AgentProfile profile, List<AgentMemory> memories, List<ChannelBrief> channels,
+                                 String materials, String busyHint, List<String> visiblePostIds) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("你是社区用户「").append(profile.getDisplayName()).append("」，资料已经收集好了，现在决定做什么。\n");
+        prompt.append("语气：").append(toneLabel(profile.getTone())).append('\n');
+        if (!channels.isEmpty()) {
+            prompt.append("可发帖的频道：");
+            for (ChannelBrief channel : channels) {
+                prompt.append(channel.id()).append("(").append(channel.name()).append(") ");
+            }
+            prompt.append('\n');
+        }
+        prompt.append("\n=== 今日素材（只能基于这些写，素材没有的内容不许编）===\n");
+        prompt.append(materials == null || materials.isBlank() ? "（本轮没有检索到素材）" : materials);
+        prompt.append("\n=== 素材结束 ===\n");
+        if (!visiblePostIds.isEmpty()) {
+            prompt.append("本轮可见的帖子 id（评论/点赞只能用这些）：")
+                    .append(String.join(", ", visiblePostIds)).append('\n');
+        } else {
+            prompt.append("本轮没有可见帖子 id：**不要评论、不要点赞**，只能发帖或 none。\n");
+        }
+        if (!memories.isEmpty()) {
+            prompt.append("最近聊过（别重复）：\n");
+            for (AgentMemory memory : memories) {
+                prompt.append("- ").append(memory.getContent()).append('\n');
+            }
+        }
+        if (busyHint != null && !busyHint.isBlank()) {
+            prompt.append("限制：").append(busyHint).append('\n');
+        }
+        prompt.append("""
+                只允许以下写动作（只选一个）：
+                - create_post {"channelId":"...","title":"...","content":"..."}
+                - comment {"postId":"...","content":"..."}
+                - like {"targetType":"POST","targetId":"..."}
+                - remember {"kind":"OPINION","content":"..."}
+                - none {}
+                硬规则：
+                1. 只输出一个 JSON 对象 {"action":"...","args":{...}}，不要解释、不要代码块。
+                2. 发帖正文必须能对上素材（观点、事实、数字都要来自素材）；素材里没有的内容不许编，
+                   也不许编造「某某说」「某年某月」这类细节。
+                3. comment/like 的 postId 只能取自上方的「本轮可见的帖子 id」，不许自己拼 id。
+                4. 素材与你的兴趣都不相关就输出 {"action":"none","args":{}}。
+                5. 用你自己的话说，**不许直接抄素材的标题或摘要原文**，也不要大段罗列素材里的条目。
+                6. **正文里不要出现任何 URL**，也不要写「我在网上搜到」「原文在这里」「参考资料」这类
+                   暴露检索过程的句子——你就是这个社区的用户，不是搬运工。
+                7. 标题要像真人发的：具体、口语、能引起讨论（例如「红石新手最容易踩的三个坑」），
+                   不要「查了下《…》」「关于…的分享」这种机器人腔。
+                8. 正文 80-300 字，两到四段，可以带一句自己的看法或提问收尾。
+                """);
+        return prompt.toString();
+    }
+
+    /**
+     * 单次模型调用（两阶段共用）：返回正文与 token。
+     */
+    private ModelCall callModel(AiModelConfig model, String system, String user) {
+        AiProvider provider = modelConfigService.providerFor(model);
+        AiChatRequest request = AiChatRequest.of(model.getModel(),
+                List.of(AiChatMessage.system(system), AiChatMessage.user(user)),
+                false, false, MAX_TOKENS);
+        AiChatResult result = provider.chat(request);
+        String content = result.content() == null ? "" : result.content();
+        int tokensIn = result.usage() == null ? 0 : result.usage().promptTokens();
+        int tokensOut = result.usage() == null ? 0 : result.usage().completionTokens();
+        if (tokensIn == 0 && tokensOut == 0) {
+            tokensIn = Math.max(1, system.length() / 4);
+            tokensOut = Math.max(1, content.length() / 4);
+        }
+        return new ModelCall(content, tokensIn, tokensOut);
+    }
+
+    /** 一次模型调用的结果。 */
+    private record ModelCall(String content, int tokensIn, int tokensOut) {
+    }
 
     /**
      * 生成行动计划。
