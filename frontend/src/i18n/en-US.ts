@@ -1663,6 +1663,7 @@ admin: {
     usernameInvalid: "Username must be 3-32 letters, digits or underscore",
     created: "AI user created",
     createFailed: "Failed to create",
+    runSkippedNoReason: "Skipped (no reason recorded)",
   },
 },
 assistant: {

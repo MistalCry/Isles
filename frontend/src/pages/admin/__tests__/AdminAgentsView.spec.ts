@@ -150,6 +150,35 @@ describe('AdminAgentsView', () => {
     expect(wrapper.text()).toContain('AI 代理已全局停用')
   })
 
+  it('列表只露 userId 后 6 位做标识（id 与人设 id 不混用）', async () => {
+    const wrapper = await mountView()
+    expect(wrapper.text()).toContain('…000001')
+    expect(wrapper.text()).not.toContain(AGENT.id)
+  })
+
+  it('运行日志里 SKIPPED 会显示原因', async () => {
+    mocks.listAdminAgentRuns.mockResolvedValue({
+      items: [
+        {
+          id: 'run-skip',
+          agentId: AGENT.userId,
+          startedAt: '2026-11-16T08:00:00Z',
+          status: 'SKIPPED',
+          outputType: 'NONE',
+          reason: 'AI 代理总开关已关闭（agent.enabled=false）',
+        },
+      ],
+      total: 1,
+      page: 1,
+      size: 20,
+    })
+    const wrapper = await mountView()
+    await wrapper.findAll('button').find((b) => b.text().trim() === '日志')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('已跳过')
+    expect(wrapper.text()).toContain('总开关已关闭')
+  })
+
   it('运行一次 / 暂停分别调用对应接口', async () => {
     const wrapper = await mountView()
     const buttons = wrapper.findAll('button')

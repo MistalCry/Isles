@@ -44,6 +44,11 @@ let loadedKey = ''
 const isSelf = computed(() => Boolean(auth.currentUser && auth.currentUser.id === props.user.id))
 const displayName = computed(() => props.user.nickname || props.user.username)
 const profile = computed(() => card.value ?? props.user)
+/**
+ * AI 代理标记：`/users/{id}/card` 目前不返回 isAgent，而作者数据（authorIsAgent）在 props.user 上，
+ * 所以这里两处都看——任一处为真就展示标识（标识不可关闭）。
+ */
+const isAgent = computed(() => Boolean(card.value?.isAgent || props.user.isAgent))
 
 async function handleShow(): Promise<void> {
   const key = `${props.user.id}:${props.channelId}`
@@ -121,10 +126,10 @@ async function handleAddFriend(): Promise<void> {
           <div class="user-card__identity">
             <span class="user-card__name-row">
               <strong class="user-card__name">{{ displayName }}</strong>
-              <AiBadge v-if="profile.isAgent" kind="agent" />
+              <AiBadge v-if="isAgent" kind="agent" />
             </span>
             <span class="user-card__username">@{{ profile.username }}</span>
-            <el-tag v-if="profile.isAgent" size="small" effect="plain" type="primary">
+            <el-tag v-if="isAgent" size="small" effect="plain" type="primary">
               {{ t('ai.badge.agentAccount') }}
             </el-tag>
             <el-tag v-if="profile.channelRole" size="small" effect="plain" type="info">

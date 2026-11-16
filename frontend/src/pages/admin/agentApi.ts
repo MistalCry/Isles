@@ -8,7 +8,7 @@ import { http } from '@/api/client'
  */
 export type AgentStatus = 'ACTIVE' | 'PAUSED' | 'DISABLED'
 export type AgentTone = 'casual' | 'enthusiastic' | 'dry'
-export type AgentRunStatus = 'SUCCESS' | 'GUARDED' | 'FAILED'
+export type AgentRunStatus = 'SUCCESS' | 'GUARDED' | 'FAILED' | 'SKIPPED'
 export type AgentOutputType = 'POST' | 'COMMENT' | 'LIKE' | 'NONE'
 
 export interface AgentProfile {
@@ -64,6 +64,8 @@ export interface AgentRun {
   outputType: AgentOutputType
   outputId?: string | null
   error?: string | null
+  /** 跳过/拦截的具体原因（如「总开关已关闭」），后端有就展示 */
+  reason?: string | null
   tokensIn?: number | null
   tokensOut?: number | null
   planJson?: unknown
@@ -219,10 +221,11 @@ export function toAgentRun(value: unknown): AgentRun | null {
     agentId: str(raw.agentId) ?? str(raw.agent_id) ?? '',
     startedAt: str(raw.startedAt) ?? str(raw.started_at) ?? '',
     finishedAt: str(raw.finishedAt) ?? str(raw.finished_at),
-    status: (statusRaw === 'GUARDED' || statusRaw === 'FAILED' ? statusRaw : 'SUCCESS') as AgentRunStatus,
+    status: (['GUARDED', 'FAILED', 'SKIPPED'].includes(statusRaw) ? statusRaw : 'SUCCESS') as AgentRunStatus,
     outputType: (['POST', 'COMMENT', 'LIKE'].includes(outputRaw) ? outputRaw : 'NONE') as AgentOutputType,
     outputId: str(raw.outputId) ?? str(raw.output_id),
     error: str(raw.error),
+    reason: str(raw.reason) ?? str(raw.skipReason) ?? str(raw.skip_reason),
     tokensIn: raw.tokensIn === undefined ? null : num(raw.tokensIn),
     tokensOut: raw.tokensOut === undefined ? null : num(raw.tokensOut),
     planJson: raw.planJson ?? raw.plan_json,

@@ -101,6 +101,18 @@ function toolLabel(name: string): string {
   return key ? t(key) : name
 }
 
+/** id 与 userId 并存容易混：列表只露 userId 后 6 位做标识 */
+function shortId(userId?: string | null): string {
+  return (userId ?? '').slice(-6)
+}
+
+function runReason(run: AgentRun): string {
+  if (run.error) return run.error
+  if (run.reason) return run.reason
+  if (run.status === 'SKIPPED') return t('admin.agents.runSkippedNoReason')
+  return ''
+}
+
 function statusLabel(status: AgentStatus): string {
   if (status === 'PAUSED') return t('admin.agents.statusPaused')
   if (status === 'DISABLED') return t('admin.agents.statusDisabled')
@@ -392,12 +404,14 @@ function prettyJson(value: unknown): string {
 function runStatusLabel(status: AgentRun['status']): string {
   if (status === 'GUARDED') return t('admin.agents.runStatusGuarded')
   if (status === 'FAILED') return t('admin.agents.runStatusFailed')
+  if (status === 'SKIPPED') return t('admin.agents.runStatusSkipped')
   return t('admin.agents.runStatusSuccess')
 }
 
-function runStatusType(status: AgentRun['status']): 'success' | 'warning' | 'danger' {
+function runStatusType(status: AgentRun['status']): 'success' | 'warning' | 'danger' | 'info' {
   if (status === 'GUARDED') return 'warning'
   if (status === 'FAILED') return 'danger'
+  if (status === 'SKIPPED') return 'info'
   return 'success'
 }
 
@@ -468,7 +482,7 @@ onMounted(() => {
                 <UserAvatar :src="row.avatarUrl" :name="row.displayName" :size="34" />
                 <div class="agent-cell__meta">
                   <strong>{{ row.displayName }}</strong>
-                  <small>@{{ row.username }}</small>
+                  <small>@{{ row.username }} · …{{ shortId(row.userId) }}</small>
                 </div>
               </div>
             </template>
@@ -677,7 +691,11 @@ onMounted(() => {
               {{ t('admin.agents.tokens', { in: run.tokensIn ?? 0, out: run.tokensOut ?? 0 }) }}
             </span>
           </header>
-          <p v-if="run.error" class="agent-run__error">{{ run.error }}</p>
+          <p
+            v-if="runReason(run)"
+            class="agent-run__reason"
+            :class="{ 'agent-run__reason--error': run.status === 'FAILED' }"
+          >{{ runReason(run) }}</p>
           <el-collapse v-if="run.planJson || run.toolCallsJson" class="agent-run__collapse">
             <el-collapse-item v-if="run.planJson" :title="t('admin.agents.planJson')" :name="`plan-${run.id}`">
               <pre class="agent-run__json">{{ prettyJson(run.planJson) }}</pre>
@@ -814,10 +832,14 @@ onMounted(() => {
   margin-left: auto;
 }
 
-.agent-run__error {
+.agent-run__reason {
   margin-top: var(--isles-space-2);
-  color: var(--isles-danger, #e5484d);
+  color: var(--isles-text-secondary);
   font-size: var(--isles-font-xs);
+
+  &--error {
+    color: var(--isles-danger, #e5484d);
+  }
 }
 
 .agent-run__collapse {

@@ -1663,6 +1663,7 @@ admin: {
     usernameInvalid: "用户名只能包含字母、数字与下划线（3-32 位）",
     created: "AI 用户已创建",
     createFailed: "创建失败",
+    runSkippedNoReason: "本次未执行（未记录原因）",
   },
 },
 assistant: {
