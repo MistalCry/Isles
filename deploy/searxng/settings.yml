@@ -1,0 +1,35 @@
+use_default_settings: true
+
+general:
+  instance_name: "isles-search"
+  donation_url: false
+  contact_url: false
+
+server:
+  # 本地开发实例：仅供后端调用，不对外暴露
+  secret_key: "isles-local-dev-secret-change-me"
+  limiter: false
+  public_instance: false
+  image_proxy: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  # 关键：SearXNG 默认只输出 html，必须显式开启 json 才能当 API 用
+  formats:
+    - html
+    - json
+
+ui:
+  static_use_hash: true
+
+# 中文内容优先：把国内/中文友好的引擎提到前面
+engines:
+  - name: bing
+    disabled: false
+  - name: baidu
+    disabled: false
+  - name: duckduckgo
+    disabled: false
+  - name: google
+    disabled: false
