@@ -5906,5 +5906,565 @@
   "media.uploadFailedRetry": [
     "上传失败，可重试",
     "Upload failed — you can retry"
+  ],
+  "nav.myPosts": [
+    "我的帖子",
+    "My posts"
+  ],
+  "myPosts.title": [
+    "我的帖子",
+    "My posts"
+  ],
+  "myPosts.subtitle": [
+    "你发布过的全部帖子，按时间倒序。",
+    "Everything you've published, newest first."
+  ],
+  "myPosts.allChannels": [
+    "全部频道",
+    "All channels"
+  ],
+  "myPosts.empty": [
+    "还没有发过帖子",
+    "You haven't posted yet"
+  ],
+  "myPosts.emptyFiltered": [
+    "这个频道下还没有你的帖子",
+    "No posts of yours in this channel"
+  ],
+  "myPosts.emptyHint": [
+    "去频道里发一条，或者先逛逛动态。",
+    "Post something in a channel, or browse the feed first."
+  ],
+  "myPosts.view": [
+    "查看",
+    "View"
+  ],
+  "myPosts.delete": [
+    "删除帖子",
+    "Delete post"
+  ],
+  "myPosts.deleteConfirm": [
+    "确定删除「{title}」？删除后无法恢复。",
+    "Delete “{title}”? This can't be undone."
+  ],
+  "myPosts.deleted": [
+    "帖子已删除",
+    "Post deleted"
+  ],
+  "myPosts.deleteFailed": [
+    "删除失败",
+    "Failed to delete"
+  ],
+  "myPosts.loadFailed": [
+    "加载我的帖子失败",
+    "Failed to load your posts"
+  ],
+  "myPosts.pagerHint": [
+    "共 {n} 条",
+    "{n} in total"
+  ],
+  "manage.nav.apps": [
+    "应用管理",
+    "Apps"
+  ],
+  "manage.apps.subtitle": [
+    "给频道添加语音房、直播间或自定义入口，按顺序展示在频道详情右侧。",
+    "Add voice rooms, live rooms or custom entries; they show in the channel sidebar in order."
+  ],
+  "manage.apps.create": [
+    "添加应用",
+    "Add app"
+  ],
+  "manage.apps.edit": [
+    "编辑应用",
+    "Edit app"
+  ],
+  "manage.apps.empty": [
+    "还没有应用",
+    "No apps yet"
+  ],
+  "manage.apps.emptyHint": [
+    "添加一个语音房或自定义入口，成员就能在频道里直接进入。",
+    "Add a voice room or custom entry so members can open it from the channel."
+  ],
+  "manage.apps.readonly": [
+    "你没有修改应用的权限",
+    "You don't have permission to manage apps"
+  ],
+  "manage.apps.loadFailed": [
+    "加载应用失败",
+    "Failed to load apps"
+  ],
+  "manage.apps.type": [
+    "类型",
+    "Type"
+  ],
+  "manage.apps.typeVoiceRoom": [
+    "语音房",
+    "Voice room"
+  ],
+  "manage.apps.typeLiveRoom": [
+    "直播间",
+    "Live room"
+  ],
+  "manage.apps.typeCustom": [
+    "自定义",
+    "Custom"
+  ],
+  "manage.apps.name": [
+    "名称",
+    "Name"
+  ],
+  "manage.apps.nameRequired": [
+    "请填写应用名称",
+    "Please enter a name"
+  ],
+  "manage.apps.url": [
+    "链接地址",
+    "Link URL"
+  ],
+  "manage.apps.urlRequired": [
+    "自定义应用需要填写链接",
+    "Custom apps need a URL"
+  ],
+  "manage.apps.icon": [
+    "图标",
+    "Icon"
+  ],
+  "manage.apps.iconHint": [
+    "选填，建议正方形",
+    "Optional; square recommended"
+  ],
+  "manage.apps.enabled": [
+    "启用",
+    "Enabled"
+  ],
+  "manage.apps.statusOff": [
+    "已停用",
+    "Disabled"
+  ],
+  "manage.apps.created": [
+    "应用已添加",
+    "App added"
+  ],
+  "manage.apps.updated": [
+    "应用已更新",
+    "App updated"
+  ],
+  "manage.apps.saveFailed": [
+    "保存失败",
+    "Failed to save"
+  ],
+  "manage.apps.deleted": [
+    "应用已删除",
+    "App deleted"
+  ],
+  "manage.apps.deleteFailed": [
+    "删除失败",
+    "Failed to delete"
+  ],
+  "manage.apps.deleteTitle": [
+    "删除应用",
+    "Delete app"
+  ],
+  "manage.apps.deleteConfirm": [
+    "确定删除「{name}」？频道里的入口会一起消失。",
+    "Delete “{name}”? Its entry will disappear from the channel."
+  ],
+  "manage.apps.moveUp": [
+    "上移",
+    "Move up"
+  ],
+  "manage.apps.moveDown": [
+    "下移",
+    "Move down"
+  ],
+  "manage.apps.reorderFailed": [
+    "调整顺序失败",
+    "Failed to reorder"
+  ],
+  "channel.apps.title": [
+    "频道应用",
+    "Apps"
+  ],
+  "channel.apps.empty": [
+    "暂无应用",
+    "No apps"
+  ],
+  "channel.apps.voice": [
+    "语音房",
+    "Voice room"
+  ],
+  "channel.apps.live": [
+    "直播间",
+    "Live room"
+  ],
+  "channel.apps.custom": [
+    "应用",
+    "App"
+  ],
+  "channel.apps.soon": [
+    "即将开放",
+    "Coming soon"
+  ],
+  "voice.title": [
+    "语音房",
+    "Voice room"
+  ],
+  "voice.participants": [
+    "{n} 人在房内",
+    "{n} in the room"
+  ],
+  "voice.signalOffline": [
+    "信令未连接，暂时听不到声音",
+    "Signaling offline — audio unavailable"
+  ],
+  "voice.loadFailed": [
+    "加载语音房失败",
+    "Failed to load the voice room"
+  ],
+  "voice.noRoom": [
+    "当前没有进行中的语音房",
+    "No active voice room"
+  ],
+  "voice.noRoomHint": [
+    "开一个房间，邀请频道成员上来聊。",
+    "Start a room and invite channel members in."
+  ],
+  "voice.create": [
+    "开一个语音房",
+    "Start a voice room"
+  ],
+  "voice.created": [
+    "语音房已开启",
+    "Voice room started"
+  ],
+  "voice.createFailed": [
+    "开房失败",
+    "Failed to start the room"
+  ],
+  "voice.roomTitle": [
+    "房间标题",
+    "Room title"
+  ],
+  "voice.roomTitleHint": [
+    "例如：深夜闲聊",
+    "e.g. Late-night chat"
+  ],
+  "voice.seatCount": [
+    "麦位数量",
+    "Seats"
+  ],
+  "voice.emptySeat": [
+    "{n} 号麦位",
+    "Seat {n}"
+  ],
+  "voice.takeSeat": [
+    "上麦",
+    "Take seat"
+  ],
+  "voice.leaveSeat": [
+    "下麦",
+    "Leave seat"
+  ],
+  "voice.seated": [
+    "已上麦",
+    "You're on mic"
+  ],
+  "voice.leftSeat": [
+    "已下麦",
+    "You left the mic"
+  ],
+  "voice.seatFailed": [
+    "麦位操作失败",
+    "Seat action failed"
+  ],
+  "voice.mute": [
+    "静音",
+    "Mute"
+  ],
+  "voice.unmute": [
+    "取消静音",
+    "Unmute"
+  ],
+  "voice.seatedHint": [
+    "你已在麦上，说话其他人都能听到。",
+    "You're on mic — everyone can hear you."
+  ],
+  "voice.listeningHint": [
+    "你在听，点麦位即可上麦发言。",
+    "You're listening; tap a seat to speak."
+  ],
+  "voice.micHint": [
+    "上麦后会请求麦克风权限。",
+    "Mic permission is requested when you take a seat."
+  ],
+  "voice.micDenied": [
+    "麦克风不可用，请检查浏览器权限",
+    "Microphone unavailable — check browser permission"
+  ],
+  "voice.micUnsupported": [
+    "当前浏览器不支持麦克风采集",
+    "This browser doesn't support microphone capture"
+  ],
+  "voice.participantsTitle": [
+    "房内成员",
+    "In the room"
+  ],
+  "voice.participantsEmpty": [
+    "还没有人加入",
+    "Nobody has joined yet"
+  ],
+  "voice.close": [
+    "关闭房间",
+    "Close room"
+  ],
+  "voice.closeConfirm": [
+    "关闭后房间内所有人都会被请出，确定关闭？",
+    "Everyone will be removed. Close the room?"
+  ],
+  "voice.closed": [
+    "房间已关闭",
+    "Room closed"
+  ],
+  "voice.closeFailed": [
+    "关闭房间失败",
+    "Failed to close the room"
+  ],
+  "voice.leave": [
+    "退出房间",
+    "Leave"
+  ],
+  "manage.apps.disabled": [
+    "应用已停用",
+    "App disabled"
+  ],
+  "manage.nav.activities": [
+    "频道活动",
+    "Activities"
+  ],
+  "activities.titleSection": [
+    "活动",
+    "Events"
+  ],
+  "activities.upcoming": [
+    "即将开始",
+    "Upcoming"
+  ],
+  "activities.ongoing": [
+    "进行中",
+    "Ongoing"
+  ],
+  "activities.ended": [
+    "已结束",
+    "Ended"
+  ],
+  "activities.manageSubtitle": [
+    "发布活动、管理报名；活动会展示在频道详情右侧。",
+    "Publish events and manage sign-ups; they show in the channel sidebar."
+  ],
+  "activities.create": [
+    "发布活动",
+    "New event"
+  ],
+  "activities.edit": [
+    "编辑活动",
+    "Edit event"
+  ],
+  "activities.empty": [
+    "还没有活动",
+    "No events yet"
+  ],
+  "activities.emptyHint": [
+    "发布一个活动，成员就能在频道里报名。",
+    "Publish an event so members can sign up from the channel."
+  ],
+  "activities.readonly": [
+    "你没有发布活动的权限",
+    "You can't manage events"
+  ],
+  "activities.loadFailed": [
+    "加载活动失败",
+    "Failed to load events"
+  ],
+  "activities.title": [
+    "活动标题",
+    "Title"
+  ],
+  "activities.titleRequired": [
+    "请填写活动标题",
+    "Please enter a title"
+  ],
+  "activities.start": [
+    "开始时间",
+    "Starts"
+  ],
+  "activities.startRequired": [
+    "请选择开始时间",
+    "Please pick a start time"
+  ],
+  "activities.startPlaceholder": [
+    "选择开始时间",
+    "Pick a start time"
+  ],
+  "activities.end": [
+    "结束时间",
+    "Ends"
+  ],
+  "activities.endPlaceholder": [
+    "选填",
+    "Optional"
+  ],
+  "activities.location": [
+    "地点",
+    "Location"
+  ],
+  "activities.locationPlaceholder": [
+    "例如：主楼 3 层露台",
+    "e.g. Rooftop, 3F"
+  ],
+  "activities.capacity": [
+    "人数上限",
+    "Capacity"
+  ],
+  "activities.capacityHint": [
+    "0 表示不限人数",
+    "0 means unlimited"
+  ],
+  "activities.description": [
+    "活动说明",
+    "Description"
+  ],
+  "activities.created": [
+    "活动已发布",
+    "Event published"
+  ],
+  "activities.updated": [
+    "活动已更新",
+    "Event updated"
+  ],
+  "activities.saveFailed": [
+    "保存失败",
+    "Failed to save"
+  ],
+  "activities.cancel": [
+    "取消活动",
+    "Cancel event"
+  ],
+  "activities.cancelTitle": [
+    "取消活动",
+    "Cancel event"
+  ],
+  "activities.cancelConfirm": [
+    "确定取消「{title}」？已报名的成员会收到通知。",
+    "Cancel “{title}”? Signed-up members will be notified."
+  ],
+  "activities.cancelled": [
+    "活动已取消",
+    "Event cancelled"
+  ],
+  "activities.cancelFailed": [
+    "取消失败",
+    "Failed to cancel"
+  ],
+  "activities.detail": [
+    "活动详情",
+    "Event details"
+  ],
+  "activities.signup": [
+    "报名",
+    "Sign up"
+  ],
+  "activities.cancelSignup": [
+    "取消报名",
+    "Cancel sign-up"
+  ],
+  "activities.signupCount": [
+    "{n} 人报名",
+    "{n} signed up"
+  ],
+  "activities.capacityOf": [
+    "上限 {n} 人",
+    "up to {n}"
+  ],
+  "activities.signedUp": [
+    "报名成功",
+    "You're signed up"
+  ],
+  "activities.signupCancelled": [
+    "已取消报名",
+    "Sign-up cancelled"
+  ],
+  "activities.signupFailed": [
+    "报名失败",
+    "Sign-up failed"
+  ],
+  "activities.signupLoginRequired": [
+    "登录后才能报名",
+    "Please sign in to sign up"
+  ],
+  "common.close": [
+    "关闭",
+    "Close"
+  ],
+  "voice.roomTitleRequired": [
+    "请填写房间标题",
+    "Please enter a room title"
+  ],
+  "voice.onMic": [
+    "{n} 人在麦上",
+    "{n} on mic"
+  ],
+  "voice.closedByHost": [
+    "房主已关闭房间",
+    "The host closed the room"
+  ],
+  "voice.emptyRoomHint": [
+    "还没有人上麦，点一个麦位开始说话。",
+    "Nobody is on mic yet — pick a seat to start talking."
+  ],
+  "activities.draft": [
+    "草稿",
+    "Draft"
+  ],
+  "activities.cancelledState": [
+    "已取消",
+    "Cancelled"
+  ],
+  "activities.publish": [
+    "发布",
+    "Publish"
+  ],
+  "activities.published": [
+    "活动已发布",
+    "Event published"
+  ],
+  "activities.publishFailed": [
+    "发布失败",
+    "Failed to publish"
+  ],
+  "activities.deleteTitle": [
+    "删除活动",
+    "Delete event"
+  ],
+  "activities.deleteConfirm": [
+    "确定删除「{title}」？删除后无法恢复。",
+    "Delete “{title}”? This can't be undone."
+  ],
+  "activities.deleted": [
+    "活动已删除",
+    "Event deleted"
+  ],
+  "activities.deleteFailed": [
+    "删除失败",
+    "Failed to delete"
+  ],
+  "manage.apps.description": [
+    "简介",
+    "Description"
+  ],
+  "manage.apps.descriptionHint": [
+    "选填，展示在应用卡片上",
+    "Optional; shown on the app card"
   ]
 }

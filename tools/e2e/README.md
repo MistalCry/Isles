@@ -16,6 +16,8 @@
 | `media-regression.mjs` | 上传格式：heic/avif/mov 上传+回读、非法类型拒绝、ffmpeg 缺失降级 | 8 步 |
 | `ai-tools-regression.mjs` | AI 工具调用：模型要工具→检索→二轮回答、sources 与落库一致、0 命中发空数组、非工具模式同样下发 sources、不支持 tools 时降级 | 7 步 |
 | `content-regression.mjs` | 内容链路：浏览量去重（作者/30 分钟/换账号）、敏感词 REVIEW/MASK/BLOCK、搜索 coverUrl 与首图 | 10 步 |
+| `apps-regression.mjs` | 频道应用 CRUD/排序、语音房抢座与 STOMP 信令、活动报名/上限/提醒幂等 | 17 步 + 1 跳过 |
+| `user-ai-regression.mjs` | 我的帖子过滤、助手多会话隔离、无视觉模型带图降级 | 6 步 |
 | `assistant-model-regression.mjs` | 助手模型：频道指定模型生效、任务日志记录模型 id、模型禁用后回落默认 | 4 步 |
 
 浏览器级（真实 Chrome + CDP，位于 `tools/dev/`）：
@@ -77,6 +79,17 @@ isles.bat admin <用户名>
 删除公告、撤销 MODERATOR 授权、取消置顶、解散测试频道。置顶用例依赖后台 P0-6，
 接口未就绪时自动跳过并标注；「30 天前旧帖」因创建接口无法回填 `created_at`，
 用「置顶帖 + 3 条更新帖 + limit=3 首屏」等价覆盖。
+
+## 应用/语音房/活动脚本的前置条件
+
+- `apps-regression.mjs` 的「活动提醒」用例需要把扫描间隔调短（默认 10 分钟一次）：
+
+  ```bash
+  java -jar backend/target/*.jar "--app.apps.activity-reminder-cron=0/10 * * * * *"
+  ```
+
+  脚本默认等 25 秒（≥2 个扫描周期）再断言「只提醒一次」；可用 `REMINDER_WAIT_MS` 调整。
+- 信令用例目前会被 STOMP 拦截器挡住（只放行 `/user/queue/**`、且拒绝所有 SEND），脚本记为跳过并输出原因。
 
 ## AI 与媒体脚本的前置条件
 

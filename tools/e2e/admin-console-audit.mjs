@@ -459,6 +459,56 @@ async function main() {
       '恢复后作者应收到「帖子已恢复」通知')
   })
 
+  await step('举报：评论类举报 + DELETE_CONTENT 成功（comments 无 updated_at 曾致 500）', async () => {
+    const post = await createPost(author, channel.id, board.id, `评论举报宿主帖 ${suffix()}`)
+    const excerpt = `待下架评论${suffix()}`
+    const comment = await api('POST', `/posts/${post.id}/comments`, {
+      token: author.token,
+      expect: [201],
+      body: { content: `${excerpt} 这是会被平台下架的评论内容` },
+    })
+
+    const report = await api('POST', '/reports', {
+      token: reporter.token,
+      expect: [201],
+      body: {
+        targetType: 'COMMENT',
+        targetId: comment.id,
+        reason: 'ABUSE',
+        description: '评论含人身攻击',
+      },
+    })
+    assert(report.status === 'PENDING', `新举报应为 PENDING，实际 ${report.status}`)
+
+    // 这里曾因 AdminContentMapper.updateCommentStatus 写了不存在的 updated_at 列而 500
+    const handled = await api('POST', `/admin/reports/${report.id}/handle`, {
+      token: admin.token,
+      body: { action: 'RESOLVE', handleAction: 'DELETE_CONTENT', note: '评论违规' },
+    })
+    assert(handled.status === 'ACCEPTED', `处置后应为 ACCEPTED，实际 ${handled.status}`)
+    assert(handled.action === 'RESOLVE', '回显动作应为 RESOLVE')
+
+    // 评论变 HIDDEN：前台列表不再出现
+    const comments = await api('GET', `/posts/${post.id}/comments?limit=50`)
+    assert(
+      !(comments.items ?? []).some((item) => item.id === comment.id),
+      '下架后评论不应出现在前台评论列表',
+    )
+    const adminComments = await api('GET', `/admin/comments?keyword=${encodeURIComponent(excerpt)}&size=20`, {
+      token: admin.token,
+    })
+    const hidden = (adminComments.items ?? []).find((item) => item.id === comment.id)
+    assert(hidden, '后台内容列表应能查到该评论')
+    assert(hidden.status === 'HIDDEN', `评论状态应为 HIDDEN，实际 ${hidden.status}`)
+
+    // 举报人收到通知，且文案含被处置内容的摘要
+    const notifications = await api('GET', '/notifications?type=REPORT_RESULT&limit=50', { token: reporter.token })
+    const hit = (notifications.items ?? []).find((item) => item.commentId === comment.id)
+    assert(hit, '举报人应收到举报结果通知')
+    assert((hit.content ?? '').includes(excerpt), `通知文案应含内容摘要，实际「${hit.content}」`)
+    assert((hit.content ?? '').includes('已被删除'), '通知文案应说明内容已删除')
+  })
+
   await step('举报列表：PENDING 每一条都可处置（前端「处置」按钮不会无故置灰）', async () => {
     // 用户实测：举报页默认筛「待处理」，但列表里的条目点了没反应/按钮灰着。
     // 处置按钮的启用条件是 status=PENDING，且需要 targetType/targetId 才能发起处置。
@@ -618,10 +668,9 @@ async function main() {
   // ------------------------------------------------------------------
   // 五、置顶回归（依赖后台 P0-6）
   // ------------------------------------------------------------------
-  let pinVerified = false
-  await step('置顶：置顶旧帖后频道首屏（不翻页）可见置顶区', async () => {
+  await step('置顶：latest 不出现置顶帖，置顶帖只在 /posts/pinned 出现', async () => {
     const target = await createPost(author, channel.id, board.id, `置顶目标帖 ${suffix()}`)
-    // 再造 3 条更新的帖子：若列表不按 is_pinned 优先排序，目标帖会被挤出首屏
+    // 再造 3 条更新的帖子，用来验证翻页不重复不漏
     for (let i = 0; i < 3; i += 1) {
       await createPost(author, channel.id, board.id, `后续新帖 ${i} ${suffix()}`)
     }
@@ -638,23 +687,48 @@ async function main() {
     cleanup.pinnedPostId = target.id
     assert(pinned.isPinned === true || pinned.pinned === true, '置顶接口应回显置顶状态')
 
-    // 首屏（limit=3）：只有 3 个位置，置顶帖必须在其中且排第一
-    const firstPage = await api('GET', `/channels/${channel.id}/posts?limit=3`)
-    const ids = (firstPage.items ?? []).map((item) => item.id)
-    assert(ids[0] === target.id, `置顶帖应排在首屏第一位，实际首屏 ${ids.join(',')}`)
+    // 约定（V10 起）：latest 排除置顶帖，置顶由 /posts/pinned 单独提供，避免「同一条出现两次」
+    const latest = await api('GET', `/channels/${channel.id}/posts?limit=20`)
+    const latestIds = (latest.items ?? []).map((item) => item.id)
+    assert(!latestIds.includes(target.id), 'latest 列表不应包含置顶帖（避免重复展示）')
+    assert(
+      (latest.items ?? []).every((item) => item.isPinned !== true),
+      'latest 列表不应出现任何 isPinned=true 的帖子',
+    )
 
     const pinnedArea = await api('GET', `/channels/${channel.id}/posts/pinned?limit=20`)
-    assert((pinnedArea.items ?? []).some((item) => item.id === target.id), '置顶区应包含该帖')
-    pinVerified = true
+    const pinnedIds = (pinnedArea.items ?? []).map((item) => item.id)
+    assert(pinnedIds.includes(target.id), '置顶区应包含该帖')
+    assert(new Set(pinnedIds).size === pinnedIds.length, '置顶区不应有重复条目')
   })
 
-  if (pinVerified) {
-    skip(
-      '置顶：30 天前旧帖场景',
-      '创建接口无法回填 created_at（无测试后门），已用「置顶帖 + 3 条更新帖 + limit=3 首屏」等价覆盖排序优先级；' +
-        '30 天跨度需后台提供数据回填手段后再补',
+  await step('置顶：翻页不重复不漏（latest 逐页拼接 == 全量）', async () => {
+    const collected = []
+    let cursor = null
+    for (let page = 0; page < 6; page += 1) {
+      const query = `/channels/${channel.id}/posts?limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+      const data = await api('GET', query)
+      const items = data.items ?? []
+      collected.push(...items.map((item) => item.id))
+      cursor = data.nextCursor ?? null
+      if (!cursor) break
+    }
+    const unique = new Set(collected)
+    assert(unique.size === collected.length, `翻页出现重复条目：共 ${collected.length} 条，去重后 ${unique.size} 条`)
+    assert(collected.length > 0, '翻页应至少取到一条帖子')
+
+    // 全量一次拿完，比对集合是否一致（不漏）
+    const all = await api('GET', `/channels/${channel.id}/posts?limit=50`)
+    const allIds = new Set((all.items ?? []).map((item) => item.id))
+    assert(
+      collected.every((id) => allIds.has(id)),
+      '翻页结果应全部出现在全量列表里',
     )
-  }
+    assert(allIds.size === collected.length, `翻页条数与全量不一致：翻页 ${collected.length}，全量 ${allIds.size}`)
+  })
+
+  // 说明：V10 起 latest 完全排除置顶帖（置顶只在 /posts/pinned 出现），
+  // 「置顶帖被新帖挤出首屏」这个场景已不存在，原先的「30 天前旧帖」跳过用例随之删除。
 
   const passed = results.filter((item) => item.status === 'pass').length
   const failed = results.filter((item) => item.status === 'fail').length

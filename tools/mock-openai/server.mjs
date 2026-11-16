@@ -248,6 +248,19 @@ const server = http.createServer(async (req, res) => {
         tools: availableToolNames(body),
         toolResultCount: toolMessages(body.messages).length,
         userText: lastUserContent(body.messages).slice(0, 80),
+        // 系统提示词摘要：用来断言「模型不支持图片时服务端是否真的加了忽略提示」
+        systemText: (Array.isArray(body.messages) ? body.messages : [])
+          .filter((m) => m?.role === 'system')
+          .map((m) => textOfContent(m.content))
+          .join(' | ')
+          .slice(0, 300),
+        // 服务端在「模型不支持视觉」时会追加一句系统提示，这里显式标记便于断言（不受截断影响）
+        ignoredImagesNote: /已忽略\s*\d+\s*张图片/.test(
+          (Array.isArray(body.messages) ? body.messages : [])
+            .filter((m) => m?.role === 'system')
+            .map((m) => textOfContent(m.content))
+            .join('\n'),
+        ),
       })
       if (requestLog.length > REQUEST_LOG_LIMIT) requestLog.shift()
       if (body.model === 'mock-no-tools' && Array.isArray(body.tools) && body.tools.length > 0) {
