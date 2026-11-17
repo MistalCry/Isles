@@ -29,6 +29,10 @@ public class AgentRun {
     private String error;
     private Integer tokensIn;
     private Integer tokensOut;
+    /** 本次实际使用的模型配置（V14）；配置被删除后置空。 */
+    private String modelConfigId;
+    /** 本次实际使用的模型名快照（V14，如 qwen2.5-7b）；两阶段两次调用共用同一模型。 */
+    private String model;
 
     public enum Status {
         SUCCESS, GUARDED, FAILED, SKIPPED

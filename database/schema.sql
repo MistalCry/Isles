@@ -2,15 +2,16 @@
 -- 群岛（Isles）数据库结构（仅结构，不含任何数据）
 --
 -- 适用：MySQL 8.0+（utf8mb4 / utf8mb4_0900_ai_ci）
--- 生成：mysqldump --no-data（V1–V13 迁移全部应用后的结构）
+-- 生成：mysqldump --no-data（V1–V14 迁移全部应用后的结构）
 -- 表数：47 张（不含 Flyway 的 flyway_schema_history）
 --       V1–V4：核心/管理/AI/社交；V5：思考模式；V6：平台后台；V7：公告与敏感词；
 --       V8：频道助手可选模型 + 工具开关；V9：任务日志记录模型；
 --       V10：频道应用 / 语音房与麦位 / 频道活动与报名；V11：AI 会话 scope 放宽；
---       V12：频道级数据解散级联；V13：AI 用户代理（人设/记忆/运行日志 + AI 标记列）
+--       V12：频道级数据解散级联；V13：AI 用户代理（人设/记忆/运行日志 + AI 标记列）；
+--       V14：代理可选模型 + 运行日志记实际模型（agent_profiles.model_config_id / agent_runs.model）
 --
 -- 两种初始化方式（二选一）：
---   A. 推荐：只建空库，启动后端由 Flyway 自动执行 V1–V13 迁移
+--   A. 推荐：只建空库，启动后端由 Flyway 自动执行 V1–V14 迁移
 --        CREATE DATABASE my_social_channel DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 --   B. 手工导入本文件（表已建好），启动后端时必须关闭 Flyway，否则会重复建表报错：
 --        CREATE DATABASE my_social_channel DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
@@ -100,11 +101,14 @@ CREATE TABLE `agent_profiles` (
   `comments_per_day` int NOT NULL DEFAULT '8',
   `channels` json DEFAULT NULL COMMENT '允许活动的频道 id 列表；空=全站公开频道',
   `tools_enabled` json DEFAULT NULL COMMENT '启用工具名列表；空=默认 P0 全集',
+  `model_config_id` char(26) DEFAULT NULL COMMENT '代理使用的模型配置；NULL=跟随平台默认',
   `status` varchar(16) NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE / PAUSED',
   `last_run_at` datetime(3) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_agent_profiles_user` (`user_id`),
   KEY `idx_agent_profiles_status` (`status`,`last_run_at`),
+  KEY `idx_agent_profiles_model_config` (`model_config_id`),
+  CONSTRAINT `fk_agent_profiles_model_config` FOREIGN KEY (`model_config_id`) REFERENCES `ai_model_configs` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
   CONSTRAINT `fk_agent_profiles_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI 代理人设';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -129,10 +133,14 @@ CREATE TABLE `agent_runs` (
   `error` varchar(500) DEFAULT NULL,
   `tokens_in` int NOT NULL DEFAULT '0',
   `tokens_out` int NOT NULL DEFAULT '0',
+  `model_config_id` char(26) DEFAULT NULL COMMENT '本次使用的模型配置；配置删除后置空',
+  `model` varchar(128) DEFAULT NULL COMMENT '模型名快照（来自 ai_model_configs.model）；两阶段共用同一模型',
   PRIMARY KEY (`id`),
   KEY `idx_agent_runs_agent_time` (`agent_id`,`started_at`),
   KEY `idx_agent_runs_status_time` (`status`,`started_at`),
-  CONSTRAINT `fk_agent_runs_agent` FOREIGN KEY (`agent_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+  KEY `idx_agent_runs_model_config` (`model_config_id`),
+  CONSTRAINT `fk_agent_runs_agent` FOREIGN KEY (`agent_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
+  CONSTRAINT `fk_agent_runs_model_config` FOREIGN KEY (`model_config_id`) REFERENCES `ai_model_configs` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI 代理运行日志';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1328,4 +1336,4 @@ CREATE TABLE `voice_rooms` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-11-16 18:22:23
+-- Dump completed on 2026-11-17 13:52:57

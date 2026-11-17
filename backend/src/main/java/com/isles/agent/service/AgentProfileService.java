@@ -58,6 +58,7 @@ public class AgentProfileService {
     private final JsonSupport jsonSupport;
     private final PlatformAuditService auditService;
     private final PlatformSettingService settingService;
+    private final AgentModelService modelService;
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -127,6 +128,12 @@ public class AgentProfileService {
         AgentProfile profile = requireProfile(agentUserId);
         applyEditableFields(profile, request);
         profileMapper.updateById(profile);
+        // updateById 默认忽略 null：改成「跟随平台默认」时必须显式把列写空，否则还是旧模型
+        if (profile.getModelConfigId() == null) {
+            profileMapper.update(null, new UpdateWrapper<AgentProfile>()
+                    .eq("id", profile.getId())
+                    .set("model_config_id", null));
+        }
 
         User user = userMapper.selectById(agentUserId);
         if (user != null) {
@@ -208,6 +215,10 @@ public class AgentProfileService {
         profile.setToolsEnabled(toJson(request.toolsEnabled() == null || request.toolsEnabled().isEmpty()
                 ? List.copyOf(AgentToolbox.ALLOWED_ACTIONS)
                 : request.toolsEnabled()));
+        // 指定模型：非空必须存在且启用，否则 422（不能存一个跑不起来的 id）
+        profile.setModelConfigId(modelService.requireUsable(request.modelConfigId()) == null
+                ? null
+                : request.modelConfigId().trim());
         if (request.status() != null) {
             profile.setStatus(request.status());
         }
@@ -334,7 +345,10 @@ public class AgentProfileService {
                 todayComments,
                 latest.isEmpty() ? null : latest.get(0).getStatus(),
                 user == null ? null : user.getAvatarUrl(),
-                user == null ? null : user.getNickname());
+                user == null ? null : user.getNickname(),
+                profile.getModelConfigId(),
+                // 生效模型名：指定可用 → 指定名；否则默认模型名（指定被禁用时前端看到的是回落后的）
+                modelService.effectiveName(profile.getModelConfigId()));
     }
 
     /**
@@ -345,6 +359,9 @@ public class AgentProfileService {
         values.put("enabled", settingService.getBoolean("agent.enabled"));
         values.put("dailyPostLimit", settingService.getInt("agent.dailyPostLimit"));
         values.put("dailyTokenBudget", settingService.getInt("agent.dailyTokenBudget"));
+        // 间隔也是「平台级节奏开关」，后台页头一并展示（0 = 不限）
+        values.put("minPostIntervalMinutes", settingService.getInt(AgentGuard.SETTING_MIN_POST_INTERVAL));
+        values.put("minCommentIntervalMinutes", settingService.getInt(AgentGuard.SETTING_MIN_COMMENT_INTERVAL));
         return values;
     }
 

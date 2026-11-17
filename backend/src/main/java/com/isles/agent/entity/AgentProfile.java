@@ -31,6 +31,8 @@ public class AgentProfile {
     private Integer commentsPerDay;
     private String channels;
     private String toolsEnabled;
+    /** 指定模型配置（V14）；null = 跟随平台默认。模型被删除时库侧置空（ON DELETE SET NULL）。 */
+    private String modelConfigId;
     private String status;
     private LocalDateTime lastRunAt;
 

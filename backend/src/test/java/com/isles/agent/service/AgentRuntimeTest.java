@@ -44,6 +44,7 @@ class AgentRuntimeTest {
     private AgentMemoryService memoryService;
     private AgentProfileService profileService;
     private AiModelConfigService modelConfigService;
+    private AgentModelService agentModelService;
     private ChannelMapper channelMapper;
     private ChannelAccessService accessService;
     private PlatformSettingService settingService;
@@ -65,8 +66,10 @@ class AgentRuntimeTest {
         // 默认走单轮（旧行为），两阶段用例单独打桩
         when(settingService.getBoolean("agent.twoPhaseEnabled")).thenReturn(false);
         when(settingService.getBoolean("agent.researchFirst")).thenReturn(true);
+        // 用真实的解析器 + mock 的模型服务：优先级的逻辑要真跑，不能 mock 掉
+        agentModelService = new AgentModelService(modelConfigService);
         runtime = new AgentRuntime(profileMapper, runMapper, toolbox, planner, guard, memoryService,
-                profileService, modelConfigService, channelMapper, mock(ChannelService.class),
+                profileService, agentModelService, channelMapper, mock(ChannelService.class),
                 accessService, new JsonSupport(), mock(PlatformAuditService.class), settingService);
         when(runMapper.insert(any(AgentRun.class))).thenReturn(1);
     }
@@ -358,8 +361,103 @@ class AgentRuntimeTest {
         verify(planner, never()).compose(any(), any(), any(), any(), any(), any(), any());
     }
 
-    private void stubHappyPath() {
-        when(guard.enabled()).thenReturn(true);
+    // ------------------------------------------------------------------
+    // 第 19 轮 P0-2：每个代理可选模型
+    // ------------------------------------------------------------------
+
+    @Test
+    void should_use_agent_specific_model() {
+        stubHappyPath();
+        AiModelConfig specific = model("cfg-2", "model-b");
+        when(modelConfigService.findEnabled("cfg-2")).thenReturn(specific);
+        AgentProfile profile = profile();
+        profile.setModelConfigId("cfg-2");
+        when(planner.plan(any(), any(), any(), any(), any()))
+                .thenReturn(new AgentPlanner.AgentPlan("none", Map.of(), "{}", 1, 1));
+
+        AgentRun run = runtime.runOne(profile, true);
+
+        ArgumentCaptor<AiModelConfig> captor = ArgumentCaptor.forClass(AiModelConfig.class);
+        verify(planner).plan(captor.capture(), any(), any(), any(), any());
+        // 用的必须是这个代理指定的模型，不是平台默认
+        assertThat(captor.getValue().getId()).isEqualTo("cfg-2");
+        assertThat(run.getModelConfigId()).isEqualTo("cfg-2");
+        assertThat(run.getModel()).isEqualTo("model-b");
+        assertThat(run.getError()).isNull();
+    }
+
+    @Test
+    void should_fall_back_to_default_and_note_it_when_agent_model_disabled() {
+        stubHappyPath();
+        AgentProfile profile = profile();
+        profile.setModelConfigId("cfg-deleted");
+        // 指定模型已被删除/禁用：findEnabled 返回 null（AiModelConfigService:74-80）
+        when(modelConfigService.findEnabled("cfg-deleted")).thenReturn(null);
+        when(planner.plan(any(), any(), any(), any(), any()))
+                .thenReturn(new AgentPlanner.AgentPlan("none", Map.of(), "{}", 1, 1));
+
+        AgentRun run = runtime.runOne(profile, true);
+
+        // 不失败：回落到平台默认，并在 error 里留下可追溯的说明
+        assertThat(run.getStatus()).isEqualTo(AgentRun.Status.SUCCESS.name());
+        assertThat(run.getModel()).isEqualTo("mock-chat");
+        assertThat(run.getError()).contains("指定模型不可用，已回落默认");
+    }
+
+    @Test
+    void should_record_actual_model_for_both_phases() {
+        stubHappyPath();
+        AiModelConfig specific = model("cfg-2", "model-b");
+        when(modelConfigService.findEnabled("cfg-2")).thenReturn(specific);
+        when(settingService.getBoolean("agent.twoPhaseEnabled")).thenReturn(true);
+        AgentProfile profile = profile();
+        profile.setModelConfigId("cfg-2");
+        when(planner.research(any(), any(), any(), any())).thenReturn(List.of(
+                new AgentPlanner.AgentPlan("list_channel_posts", Map.of("channelId", "ch-1"), "{}", 5, 2)));
+        when(toolbox.execute(eq("list_channel_posts"), any(), any())).thenReturn(new AgentToolbox.ToolOutcome(
+                "NONE", null, "频道最新帖", Map.of("postIds", List.of("post-1"))));
+        when(planner.compose(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new AgentPlanner.AgentPlan("none", Map.of(), "{}", 3, 1));
+
+        AgentRun run = runtime.runOne(profile, true);
+
+        ArgumentCaptor<AiModelConfig> researchModel = ArgumentCaptor.forClass(AiModelConfig.class);
+        ArgumentCaptor<AiModelConfig> composeModel = ArgumentCaptor.forClass(AiModelConfig.class);
+        verify(planner).research(researchModel.capture(), any(), any(), any());
+        verify(planner).compose(composeModel.capture(), any(), any(), any(), any(), any(), any());
+        // 两阶段两次调用共用同一个模型：日志里记一次就是对账基准
+        assertThat(researchModel.getValue().getId()).isEqualTo("cfg-2");
+        assertThat(composeModel.getValue().getId()).isEqualTo("cfg-2");
+        assertThat(run.getModel()).isEqualTo("model-b");
+        assertThat(run.getTokensIn()).isEqualTo(8);
+        assertThat(run.getTokensOut()).isEqualTo(3);
+    }
+
+    @Test
+    void should_not_use_default_when_agent_model_is_usable() {
+        stubHappyPath();
+        when(modelConfigService.findEnabled("cfg-2")).thenReturn(model("cfg-2", "model-b"));
+        AgentProfile profile = profile();
+        profile.setModelConfigId("cfg-2");
+        when(planner.plan(any(), any(), any(), any(), any()))
+                .thenReturn(new AgentPlanner.AgentPlan("none", Map.of(), "{}", 1, 1));
+
+        runtime.runOne(profile, true);
+
+        // 指定模型可用时不该再去解析默认模型（避免默认模型异常影响该代理）
+        verify(modelConfigService, never()).resolveDefault();
+    }
+
+    private AiModelConfig model(String id, String name) {
+        AiModelConfig config = new AiModelConfig();
+        config.setId(id);
+        config.setName(name);
+        config.setModel(name);
+        config.setEnabled(true);
+        return config;
+    }
+
+    private void stubHappyPath() {        when(guard.enabled()).thenReturn(true);
         when(guard.checkRun()).thenReturn(AgentGuard.GuardResult.ok());
         when(guard.checkPost(any(), any(), any())).thenReturn(AgentGuard.GuardResult.ok());
         when(guard.checkComment(any())).thenReturn(AgentGuard.GuardResult.ok());

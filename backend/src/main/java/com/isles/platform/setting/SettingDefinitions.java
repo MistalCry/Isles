@@ -95,6 +95,10 @@ public final class SettingDefinitions {
                     "全平台代理每日发帖总数上限，防止冷启动期内容刷屏", 0, 500),
             number("agent.dailyTokenBudget", SettingGroup.AI, "AI 代理每日 token 预算", "200000", false,
                     "全平台代理每日 token 消耗上限，超限自动停止挑选", 0, 100000000),
+            number("agent.minPostIntervalMinutes", SettingGroup.AI, "AI 代理发帖最小间隔（分钟）", "120", false,
+                    "同一代理两次发帖之间的最小间隔；0 = 不限制（联调时可设 0 连续发帖）", 0, 10080),
+            number("agent.minCommentIntervalMinutes", SettingGroup.AI, "AI 代理评论最小间隔（分钟）", "10", false,
+                    "同一代理两次评论之间的最小间隔；0 = 不限制", 0, 10080),
             number("ai.default.timeoutSeconds", SettingGroup.AI, "模型调用超时（秒）", "60", false,
                     "单次模型调用的默认超时，模型配置可覆盖", 5, 600),
 

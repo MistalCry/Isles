@@ -7,7 +7,6 @@ import com.isles.agent.mapper.AgentProfileMapper;
 import com.isles.agent.mapper.AgentRunMapper;
 import com.isles.agent.tool.AgentToolbox;
 import com.isles.ai.entity.AiModelConfig;
-import com.isles.ai.service.AiModelConfigService;
 import com.isles.channel.entity.Channel;
 import com.isles.channel.mapper.ChannelMapper;
 import com.isles.channel.service.ChannelAccessService;
@@ -25,7 +24,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -70,7 +68,8 @@ public class AgentRuntime {
     private final AgentGuard guard;
     private final AgentMemoryService memoryService;
     private final AgentProfileService profileService;
-    private final AiModelConfigService modelConfigService;
+    /** 按人设解析模型（V14：每个代理可选模型，null 跟随平台默认）。 */
+    private final AgentModelService agentModelService;
     private final ChannelMapper channelMapper;
     private final ChannelService channelService;
     private final ChannelAccessService accessService;
@@ -205,18 +204,19 @@ public class AgentRuntime {
             if (!runGuard.allowed()) {
                 return finish(run, AgentRun.Status.SKIPPED, null, null, runGuard.reason(), null, 0, 0);
             }
-            AiModelConfig model;
-            try {
-                model = modelConfigService.resolveDefault();
-            } catch (AppException ex) {
-                // 零启用模型时 resolveDefault 会抛业务异常：按降级处理为 SKIPPED，不记 FAILED
-                log.debug("AI 代理无可用模型，跳过 agentId={} reason={}", profile.getUserId(), ex.getMessage());
-                return finish(run, AgentRun.Status.SKIPPED, null, null, "未配置可用的 AI 模型", null, 0, 0);
-            }
+            AgentModelService.Choice choice = agentModelService.resolve(profile.getModelConfigId());
+            AiModelConfig model = choice.config();
             if (model == null) {
-                // 降级：没有可用模型时只记 SKIPPED，debug 级别，不刷 ERROR
+                // 降级：平台没有任何启用模型时只记 SKIPPED，debug 级别，不刷 ERROR
                 log.debug("AI 代理无可用模型，跳过 agentId={}", profile.getUserId());
                 return finish(run, AgentRun.Status.SKIPPED, null, null, "未配置可用的 AI 模型", null, 0, 0);
+            }
+            // 记「实际用的模型」：两阶段两次调用共用同一个 model，日志里能直接对账
+            run.setModelConfigId(model.getId());
+            run.setModel(model.getModel());
+            if (choice.note() != null) {
+                // error 列只有一个：先把回落备注暂存，finish 时与最终原因合并
+                run.setError(choice.note());
             }
 
             List<String> channelIds = resolveChannels(profile);
@@ -379,7 +379,8 @@ public class AgentRuntime {
         run.setStatus(status.name());
         run.setOutputType(outputType == null ? AgentRun.OutputType.NONE.name() : outputType);
         run.setOutputId(outputId);
-        run.setError(truncate(error, 500));
+        // run.error 可能已存了「模型回落」备注，与最终原因合并后落库（列只有一个）
+        run.setError(truncate(mergeNote(error, run.getError()), 500));
         run.setToolCallsJson(toolCallsJson);
         run.setTokensIn(tokensIn);
         run.setTokensOut(tokensOut);
@@ -700,6 +701,16 @@ public class AgentRuntime {
     }
 
     /**
+     * 合并「最终原因」与「模型回落备注」：原因在前、备注在后，用「；」分隔。
+     */
+    private String mergeNote(String error, String note) {
+        if (note == null || note.isBlank()) {
+            return error;
+        }
+        return error == null || error.isBlank() ? note : error + "；" + note;
+    }
+
+    /**
      * 运行日志分页（后台回放用）。
      */
     public AgentDtos.RunPage listRuns(String agentUserId, Integer page, Integer size) {
@@ -717,15 +728,10 @@ public class AgentRuntime {
                 run.getStatus(), run.getError(),
                 run.getTokensIn() == null ? 0 : run.getTokensIn(),
                 run.getTokensOut() == null ? 0 : run.getTokensOut(),
-                run.getPlanJson(), run.getToolCallsJson());
+                run.getPlanJson(), run.getToolCallsJson(), run.getModel());
     }
 
     /** 一次 tick 的统计。 */
     public record TickSummary(int selected, int ran, int skipped, boolean killSwitchOff) {
-    }
-
-    /** 保留给后续「最小间隔」扩展（当前只在 Guard 内部使用）。 */
-    static Duration minPostInterval() {
-        return AgentGuard.MIN_POST_INTERVAL;
     }
 }

@@ -96,6 +96,7 @@ public enum ErrorCode {
     SETTING_VALIDATION_FAILED(HttpStatus.UNPROCESSABLE_CONTENT, "配置值不合法"),
     PENALTY_ALREADY_ACTIVE(HttpStatus.UNPROCESSABLE_CONTENT, "该用户已有同类生效中的处罚"),
     ADMIN_LAST_SUPER_ADMIN(HttpStatus.UNPROCESSABLE_CONTENT, "至少需要保留一个超级管理员"),
+    AGENT_MODEL_UNAVAILABLE(HttpStatus.UNPROCESSABLE_CONTENT, "指定的 AI 模型不存在或已禁用"),
 
     // 429
     RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "请求过于频繁，请稍后再试"),

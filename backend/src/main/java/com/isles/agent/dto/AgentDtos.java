@@ -41,7 +41,14 @@ public final class AgentDtos {
             /** 头像地址（存 {@code users.avatar_url}，与社区其它地方共用一张图）。 */
             String avatarUrl,
             /** 社区里展示的昵称（{@code users.nickname}，与 {@code displayName} 同步）。 */
-            String nickname) {
+            String nickname,
+            /** 人设指定的模型配置 id（V14）；null = 跟随平台默认。 */
+            String modelConfigId,
+            /**
+             * 当前**实际生效**的模型配置名（前端直接显示「当前用哪个模型」）。
+             * 指定模型被禁用/删除时这里是回落后的默认模型名；平台无启用模型时为 null。
+             */
+            String modelName) {
     }
 
     /**
@@ -90,7 +97,14 @@ public final class AgentDtos {
              * 空串表示清空头像。
              */
             @Size(max = 500, message = "头像地址最长 500 个字符")
-            String avatarUrl) {
+            String avatarUrl,
+
+            /**
+             * 指定模型配置 id（V14）。null/空串 = 跟随平台默认；非空时必须存在且启用，否则 422
+             * {@code AGENT_MODEL_UNAVAILABLE}。
+             */
+            @Size(max = 26, message = "模型配置 id 长度不合法")
+            String modelConfigId) {
     }
 
     /**
@@ -107,7 +121,9 @@ public final class AgentDtos {
             int tokensIn,
             int tokensOut,
             String planJson,
-            String toolCallsJson) {
+            String toolCallsJson,
+            /** 本次实际使用的模型名（V14）；两阶段两次调用共用同一模型。 */
+            String model) {
     }
 
     public record RunPage(List<RunView> items, long total, int page, int size) {

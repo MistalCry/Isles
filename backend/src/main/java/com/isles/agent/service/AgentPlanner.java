@@ -210,10 +210,28 @@ public class AgentPlanner {
      * 单次模型调用（两阶段共用）：返回正文与 token。
      */
     private ModelCall callModel(AiModelConfig model, String system, String user) {
+        ModelCall first = callOnce(model, system, user, MAX_TOKENS);
+        if (!first.content().isBlank()) {
+            return first;
+        }
+        // 思考型模型（如 qwen3.5-9b）会把 token 全花在 reasoning 上，content 直接为空。
+        // 空内容永远没用，所以放大预算重试一次，而不是让它以「输出不是 JSON」失败。
+        log.warn("模型返回空内容，放大 token 预算重试一次 model={}", model.getModel());
+        ModelCall retry = callOnce(model, system, user, MAX_TOKENS * 3);
+        if (!retry.content().isBlank()) {
+            return new ModelCall(retry.content(),
+                    first.tokensIn() + retry.tokensIn(),
+                    first.tokensOut() + retry.tokensOut());
+        }
+        throw new AppException(ErrorCode.BUSINESS_RULE_VIOLATION,
+                "模型返回空内容（思考型模型可能把 token 都用在推理上），请改用非思考模型或提高该模型的 maxTokens");
+    }
+
+    private ModelCall callOnce(AiModelConfig model, String system, String user, int maxTokens) {
         AiProvider provider = modelConfigService.providerFor(model);
         AiChatRequest request = AiChatRequest.of(model.getModel(),
                 List.of(AiChatMessage.system(system), AiChatMessage.user(user)),
-                false, false, MAX_TOKENS);
+                false, false, maxTokens);
         AiChatResult result = provider.chat(request);
         String content = result.content() == null ? "" : result.content();
         int tokensIn = result.usage() == null ? 0 : result.usage().promptTokens();
