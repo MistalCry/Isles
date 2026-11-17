@@ -307,6 +307,31 @@ function shiftPostRunsBack(agentId, hours = 3) {
   )
 }
 
+/**
+ * SearXNG 预检：直接查一次。引擎全挂（CAPTCHA/限流/出站网络断）时 results 为空，
+ * 这不是产品回归——联网相关性断言应当跳过并写明原因，而不是判失败。
+ */
+async function searxPreflight() {
+  try {
+    const url = `${SEARX_URL}/search?format=json&language=all&q=${encodeURIComponent('minecraft')}`
+    const response = await fetch(url, { signal: AbortSignal.timeout(12_000) })
+    const data = await response.json()
+    const count = (data.results ?? []).length
+    const unresponsive = (data.unresponsive_engines ?? []).map((item) => item?.[0]).filter(Boolean)
+    return { ok: count > 0, count, unresponsive }
+  } catch (error) {
+    return { ok: false, count: 0, unresponsive: [], error: error.message }
+  }
+}
+
+/** 联网不可用时的统一跳过理由 */
+function offlineReason(preflight) {
+  const detail = preflight.error
+    ? preflight.error
+    : `results=0，不可用引擎：${preflight.unresponsive.join(', ') || '未知'}`
+  return `SearXNG 当前拿不到结果（${detail}），联网相关性断言跳过；这是环境/出网问题，不是产品回归`
+}
+
 // ---------------------------------------------------------------------------
 // 计数 mock（验证「配额用尽后不再发真实请求」）
 // ---------------------------------------------------------------------------
@@ -424,6 +449,9 @@ async function main() {
   const me = await api('GET', '/admin/me', { token: admin.token })
   assert(me.admin === true, '需要平台管理员账号（ADMIN_USERNAME / ADMIN_PASSWORD）')
 
+  const preflight = await searxPreflight()
+  if (!preflight.ok) console.log(`  ! ${offlineReason(preflight)}`)
+
   let owner
   let channel
   let board
@@ -521,6 +549,7 @@ async function main() {
   // B. 英文查询
   // ------------------------------------------------------------------
   await step('英文查询：results 非空、首条相关、url 不重复、≤10 条', async () => {
+    if (!preflight.ok) throw new SkipCase(offlineReason(preflight))
     const { res, summary } = await runPlan(admin, agent.agentId, {
       action: 'web_search',
       args: { query: 'minecraft official site', limit: 10 },
@@ -547,6 +576,7 @@ async function main() {
   // C. 中文查询（编码回归防线）
   // ------------------------------------------------------------------
   await step('中文查询：UTF-8 编码正确、首条相关（不能搜成汾酒）', async () => {
+    if (!preflight.ok) throw new SkipCase(offlineReason(preflight))
     const { res, summary } = await runPlan(admin, agent.agentId, {
       action: 'web_search',
       args: { query: '我的世界', limit: 10 },
@@ -577,6 +607,7 @@ async function main() {
   })
 
   await step('结果上限与去重：高结果量查询仍 ≤10 条且 url 唯一', async () => {
+    if (!preflight.ok) throw new SkipCase(offlineReason(preflight))
     const { res, summary } = await runPlan(admin, agent.agentId, {
       action: 'web_search',
       args: { query: 'minecraft', limit: 10 },
@@ -667,6 +698,7 @@ async function main() {
   // F. 端到端：搜到 → 发帖
   // ------------------------------------------------------------------
   await step('端到端：web_search 拿到结果后能接着发帖', async () => {
+    if (!preflight.ok) throw new SkipCase(offlineReason(preflight))
     // 前面已经发过一帖，绕开发帖间隔闸门
     shiftPostRunsBack(agent.agentId)
 

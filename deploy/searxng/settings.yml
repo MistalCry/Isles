@@ -20,12 +20,10 @@ search:
     - html
     - json
 
-# 出站代理：SearXNG 不读 HTTP_PROXY/HTTPS_PROXY 环境变量，必须在这里配
-# 宿主机 v2rayN 的 SOCKS5（10808）；若镜像不支持 socks，改成 HTTP 代理端口（10809）
+# 出站设置：SearXNG 不读 HTTP_PROXY/HTTPS_PROXY 环境变量。
+# **代理只挂在需要翻墙的引擎上**（见下方 engines 的 proxies），不要设全局 all://——
+# 否则 v2rayN 一关，连 360/yahoo 这些国内引擎也会一起连不上。
 outgoing:
-  proxies:
-    all://:
-      - socks5h://host.docker.internal:10808
   # 单次请求超时（秒），代理链路慢时适当放大
   request_timeout: 8.0
   max_request_timeout: 20.0
@@ -34,16 +32,30 @@ ui:
   static_use_hash: true
 
 # 引擎选择：按 2026-11 本机网络实测结果配置
-# 走代理后：google / duckduckgo / brave 可用（质量最高，优先）
-# 不走代理时仍可用的：360search / yahoo（中文/英文各一，作为兜底）
-# 关闭：bing（返回 0 条且无报错，解析器问题）、baidu（CAPTCHA，且国内站点无需代理）
+# 需要代理：google / google cse / duckduckgo / brave（不挂代理会 CAPTCHA 或拒绝）
+# 直连可用：360search / yahoo（中文/英文兜底，代理挂了也能用）
+# 关闭：bing（返回 0 条且无报错，解析器问题）、baidu（CAPTCHA，国内站点无需代理）
 engines:
   - name: google
     disabled: false
+    proxies:
+      all://:
+        - socks5h://host.docker.internal:10808
+  - name: google cse
+    disabled: false
+    proxies:
+      all://:
+        - socks5h://host.docker.internal:10808
   - name: duckduckgo
     disabled: false
+    proxies:
+      all://:
+        - socks5h://host.docker.internal:10808
   - name: brave
     disabled: false
+    proxies:
+      all://:
+        - socks5h://host.docker.internal:10808
   - name: 360search
     disabled: false
   - name: yahoo

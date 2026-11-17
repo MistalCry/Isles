@@ -6942,5 +6942,33 @@
   "admin.agents.avatarHint": [
     "1:1 裁剪；不设置则用展示名首字母占位",
     "Cropped 1:1; falls back to the first letter of the display name."
+  ],
+  "admin.agents.columnModel": [
+    "模型",
+    "Model"
+  ],
+  "admin.agents.model": [
+    "模型",
+    "Model"
+  ],
+  "admin.agents.modelFollowDefault": [
+    "跟随平台默认",
+    "Use platform default"
+  ],
+  "admin.agents.modelFollowDefaultShort": [
+    "跟随默认",
+    "Default"
+  ],
+  "admin.agents.modelHint": [
+    "代理用这个模型做规划与写作；跟随默认时用平台默认模型。",
+    "The agent plans and writes with this model; the default option uses the platform default model."
+  ],
+  "admin.agents.modelsEmpty": [
+    "平台还没有启用任何模型，代理只能用平台默认模型。",
+    "No enabled models yet; the agent falls back to the platform default."
+  ],
+  "admin.agents.modelsForbidden": [
+    "读不到模型列表（需要 AI 模型管理权限），本次保存不会改动模型。",
+    "Cannot read the model list (needs AI model permission); saving will not change the model."
   ]
 }

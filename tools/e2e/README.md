@@ -18,6 +18,7 @@
 | `content-regression.mjs` | 内容链路：浏览量去重（作者/30 分钟/换账号）、敏感词 REVIEW/MASK/BLOCK、搜索 coverUrl 与首图 | 10 步 |
 | `apps-regression.mjs` | 频道应用 CRUD/排序、语音房抢座与 STOMP 信令（含非成员/关房拒绝）、活动报名/上限/提醒幂等、频道解散级联清理 | 21 步 |
 | `web-search-regression.mjs` | AI 代理联网搜索：配额（含不发真实请求）、中英文查询与 UTF-8、去重与 ≤10 条、降级、SSRF、搜到→发帖 | 9 步 |
+| `agent-model-interval-regression.mjs` | 模型与间隔：minPostIntervalMinutes 0/60 与即时生效、per-agent 模型对账、禁用模型回落、不存在模型 422 | 7 步 |
 | `agent-research-regression.mjs` | 两阶段 tick：资料同步（avatarUrl/nickname）、researchFirst 必搜与素材注入、单轮回退、编造 postId 被拒 | 6 步 |
 | `agent-regression.mjs` | AI 代理：run-now 产出与 AI 标识、AI 标识字段（代理 true / 真人 false）、日上限、话题去重、暂停、总开关、无模型降级、运行日志回放（`AGENT_TICK_MODE=1` 测调度） | 11 步 / 调度 5 步 |
 | `user-ai-regression.mjs` | 我的帖子过滤、助手多会话隔离、无视觉模型带图降级 | 6 步 |
@@ -56,6 +57,9 @@ node tools/e2e/web-search-regression.mjs
 # 两阶段 tick（需要 SearXNG + mock-openai；不依赖配额计数）
 node tools/e2e/agent-research-regression.mjs
 
+# 模型与发帖间隔（不需要 SearXNG）
+node tools/e2e/agent-model-interval-regression.mjs
+
 # AI 相关脚本需要 mock-openai（另开终端）
 node tools/mock-openai/server.mjs 1235
 MOCK_URL=http://127.0.0.1:1235 node tools/e2e/ai-tools-regression.mjs
@@ -89,6 +93,9 @@ node tools/e2e/web-search-regression.mjs
 
 # 两阶段 tick（需要 SearXNG + mock-openai；不依赖配额计数）
 node tools/e2e/agent-research-regression.mjs
+
+# 模型与发帖间隔（不需要 SearXNG）
+node tools/e2e/agent-model-interval-regression.mjs
 
 # AI 相关脚本需要 mock-openai（另开终端）
 node tools/mock-openai/server.mjs 1235
@@ -124,6 +131,8 @@ isles.bat admin <用户名>
 - 查询词一律走 `encodeURIComponent` / `URLEncoder(UTF-8)`：Windows 上 curl 会按 GBK 发中文，
   「我的世界」会搜成汾酒——这是脚本里中文相关性断言存在的原因。
 - 引擎部分失败（google/duckduckgo/brave 的 CAPTCHA/限流）属正常，只要求 `results` 非空。
+- 脚本开跑前会直接探一次 SearXNG：**引擎全挂时联网断言判跳过并写明原因**（配额/降级/SSRF 仍照常验证），
+  避免把出网问题当成产品回归。
 
 ## AI 代理脚本的前置条件
 

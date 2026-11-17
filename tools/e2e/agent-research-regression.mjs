@@ -286,6 +286,30 @@ function parseTrace(run) {
   }
 }
 
+/**
+ * SearXNG 预检：引擎全挂时 results 为空，此时只能验「研究阶段调用了 web_search」，
+ * 验不了「结构化结果 / 素材注入 / 正文同源」——后者跳过并写明是环境问题。
+ */
+async function searxPreflight() {
+  try {
+    const url = `${SEARX_URL}/search?format=json&language=all&q=${encodeURIComponent('minecraft')}`
+    const response = await fetch(url, { signal: AbortSignal.timeout(12_000) })
+    const data = await response.json()
+    const count = (data.results ?? []).length
+    const unresponsive = (data.unresponsive_engines ?? []).map((item) => item?.[0]).filter(Boolean)
+    return { ok: count > 0, count, unresponsive }
+  } catch (error) {
+    return { ok: false, count: 0, unresponsive: [], error: error.message }
+  }
+}
+
+function offlineReason(preflight) {
+  const detail = preflight.error
+    ? preflight.error
+    : `results=0，不可用引擎：${preflight.unresponsive.join(', ') || '未知'}`
+  return `SearXNG 当前拿不到结果（${detail}），结构化结果/素材断言跳过；这是环境/出网问题，不是产品回归`
+}
+
 /** 把发帖时间回拨，绕开「发帖间隔 ≥2 小时」闸门 */
 function shiftPostRunsBack(agentId, hours = 3) {
   dbExec(
@@ -374,6 +398,9 @@ async function main() {
   const me = await api('GET', '/admin/me', { token: admin.token })
   assert(me.admin === true, '需要平台管理员账号（ADMIN_USERNAME / ADMIN_PASSWORD）')
 
+  const preflight = await searxPreflight()
+  if (!preflight.ok) console.log(`  ! ${offlineReason(preflight)}`)
+
   let owner
   let channel
   let agent
@@ -447,7 +474,7 @@ async function main() {
   let researchRun
   let researchTrace
 
-  await step('researchFirst=true：tool_calls_json 必有 web_search，结构化 results/count 一致', async () => {
+  await step('researchFirst=true：tool_calls_json 必有 web_search（不依赖联网是否可用）', async () => {
     await clearMockRequests()
     await clearPlans()
     await queuePlans({
@@ -475,7 +502,17 @@ async function main() {
     assert(Array.isArray(researchTrace?.research), '两阶段轨迹应有 research 数组')
     const searchStep = researchTrace.research.find((item) => item.action === 'web_search')
     assert(searchStep, `research 里必须有 web_search，实际 ${JSON.stringify(researchTrace.research.map((s) => s.action))}`)
+    // 结构化结果与素材同源需要联网可用，见下一条用例（离线时跳过而不是判失败）
+    assert(
+      researchTrace.compose?.action === 'create_post',
+      `compose 应是发帖，实际 ${researchTrace.compose?.action}`,
+    )
+  })
 
+  await step('researchFirst=true：结构化 results/count 一致（需联网可用）', async () => {
+    if (!preflight.ok) throw new SkipCase(offlineReason(preflight))
+    const searchStep = researchTrace.research.find((item) => item.action === 'web_search')
+    assert(searchStep, 'research 里应有 web_search')
     assert(typeof searchStep.count === 'number', `结构化字段 count 应存在，实际 ${searchStep.count}`)
     assert(Array.isArray(searchStep.results), '结构化字段 results 应存在')
     assert(
@@ -488,13 +525,10 @@ async function main() {
       assert(first[field] !== undefined, `results[0] 应含 ${field}，实际 ${JSON.stringify(first).slice(0, 120)}`)
     }
     assert(searchStep.query === '我的世界', `结构化 query 应回显查询词，实际 ${searchStep.query}`)
-    assert(
-      researchTrace.compose?.action === 'create_post',
-      `compose 应是发帖，实际 ${researchTrace.compose?.action}`,
-    )
   })
 
   await step('researchFirst=true：素材真的注入了产出提示词，帖子正文与素材同源', async () => {
+    if (!preflight.ok) throw new SkipCase(offlineReason(preflight))
     const requests = await mockRequests()
     const composeReq = [...requests].reverse().find((item) => item.agentPhase === 'compose')
     assert(composeReq, 'mock 应收到产出阶段请求')
