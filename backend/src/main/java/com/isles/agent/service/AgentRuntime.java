@@ -277,12 +277,16 @@ public class AgentRuntime {
             List<String> materialBlocks = new ArrayList<>();
             int tokensIn = 0;
             int tokensOut = 0;
+            boolean searched = false;
             for (AgentPlanner.AgentPlan research : researchPlans) {
                 tokensIn += research.tokensIn();
                 tokensOut += research.tokensOut();
                 if (!AgentPlanner.RESEARCH_ACTIONS.contains(research.action())) {
                     researchSteps.add(stepOf(research, null, "研究阶段忽略非只读动作"));
                     continue;
+                }
+                if ("web_search".equals(research.action())) {
+                    searched = true;
                 }
                 try {
                     AgentToolbox.ToolOutcome outcome = toolbox.execute(research.action(), research.args(), context);
@@ -295,6 +299,23 @@ public class AgentRuntime {
                     log.warn("代理研究动作失败 agentId={} action={} reason={}",
                             profile.getUserId(), research.action(), ex.getMessage());
                     researchSteps.add(stepOf(research, null, ex.getMessage()));
+                }
+            }
+            // 模型可能只逛了站内（list_channel_posts），而频道是空的 → 素材全空 → 只能输出 none。
+            // 所以没搜过就强制补一次联网搜索，保证每轮 tick 都有外部素材。
+            if (!searched && researchSteps.size() < AgentPlanner.MAX_RESEARCH_ACTIONS) {
+                AgentPlanner.AgentPlan extra = fallbackResearchPlan(profile, channelIds);
+                if ("web_search".equals(extra.action())) {
+                    try {
+                        AgentToolbox.ToolOutcome outcome = toolbox.execute(extra.action(), extra.args(), context);
+                        researchSteps.add(stepOf(extra, outcome, null));
+                        if (materialBlocks.size() < MAX_MATERIALS) {
+                            materialBlocks.add(materialOf(extra.action(), outcome));
+                        }
+                    } catch (AppException ex) {
+                        log.warn("代理补搜失败 agentId={} reason={}", profile.getUserId(), ex.getMessage());
+                        researchSteps.add(stepOf(extra, null, ex.getMessage()));
+                    }
                 }
             }
 

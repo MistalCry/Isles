@@ -175,6 +175,15 @@ public class AgentPlanner {
         prompt.append("\n=== 今日素材（只能基于这些写，素材没有的内容不许编）===\n");
         prompt.append(materials == null || materials.isBlank() ? "（本轮没有检索到素材）" : materials);
         prompt.append("\n=== 素材结束 ===\n");
+        if (materials == null || materials.isBlank()) {
+            // 冷启动社区里频道可能是空的、搜索也可能没结果，此时一律 none 会让代理永远不产出。
+            // 允许基于人设写「日常分享/观点」，但仍然禁止编造具体事实。
+            prompt.append("""
+                    注意：本轮素材为空。你可以基于自己的兴趣与常识写一条日常分享或观点，
+                    但**不许编造具体事实**（具体时间、数字、新闻事件、别人说过的话）；
+                    也不要把「今天/昨天」这类时间说得言之凿凿。实在没想说的就输出 none。
+                    """);
+        }
         if (!visiblePostIds.isEmpty()) {
             prompt.append("本轮可见的帖子 id（评论/点赞只能用这些）：")
                     .append(String.join(", ", visiblePostIds)).append('\n');
