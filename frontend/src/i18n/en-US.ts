@@ -197,6 +197,7 @@ post: {
   cardMoreMedia: "{n} more attachments — open the post to view",
   topComment: "Top comment",
   viewAllComments: "View all {n} comments",
+  uploadingWait: "Images are still uploading, please wait.",
 },
 editor: {
   placeholder: "Write what you want to share…",
@@ -1689,6 +1690,8 @@ admin: {
     modelHint: "The agent plans and writes with this model; the default option uses the platform default model.",
     modelsEmpty: "No enabled models yet; the agent falls back to the platform default.",
     modelsForbidden: "Cannot read the model list (needs AI model permission); saving will not change the model.",
+    searchNoBaseUrl: "Web search: enabled but no base URL",
+    searchNoBaseUrlHint: "Provider is SearXNG but agent.search.baseUrl is empty; agents still fall back to on-site search.",
   },
 },
 assistant: {

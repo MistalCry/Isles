@@ -9,10 +9,11 @@ const mocks = vi.hoisted(() => ({
   uploadMedia: vi.fn(),
   validateMediaFile: vi.fn(() => null),
   isPreviewUnsupported: vi.fn(() => false),
+  createChannelPost: vi.fn(),
 }))
 
 vi.mock('@/api', () => ({
-  channelsApi: { getBoards: vi.fn().mockResolvedValue([]) },
+  channelsApi: { getBoards: vi.fn().mockResolvedValue([]), createChannelPost: mocks.createChannelPost },
   mediaApi: {
     uploadMedia: mocks.uploadMedia,
     validateMediaFile: mocks.validateMediaFile,
@@ -86,5 +87,36 @@ describe('PostComposer 上传进度', () => {
     await flushPromises()
     expect(mocks.uploadMedia).toHaveBeenCalledTimes(2)
     expect(wrapper.findAll('.post-composer__media-item')).toHaveLength(1)
+  })
+
+  it('上传中不能发布：按钮禁用，且 submit 直接拦下不发请求', async () => {
+    // 用户实测：选图后立刻点发布，帖子发出去了但图没了
+    const pending: { resolve?: () => void } = {}
+    mocks.uploadMedia.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          pending.resolve = () => resolve(UPLOADED)
+        }),
+    )
+    mocks.createChannelPost.mockResolvedValue({ id: 'p1', title: '正文' })
+
+    const wrapper = mount(PostComposer, { props: { channelId: '01CHAN0000000000000000000' } })
+    await flushPromises()
+    await wrapper.find('.el-input-stub').setValue('正文')
+    await pickFile(wrapper, new File(['x'], 'c.png', { type: 'image/png' }))
+
+    const publish = wrapper.findAll('button').find((item) => item.text().trim() === '发布')
+    expect(publish, '应能找到发布按钮').toBeTruthy()
+    expect(publish!.attributes('disabled'), '上传中发布按钮必须禁用').toBeDefined()
+
+    // 即便按钮被强行点击（或回车提交），也不能发出「没有图」的帖子
+    await publish!.trigger('click')
+    await flushPromises()
+    expect(mocks.createChannelPost).not.toHaveBeenCalled()
+
+    pending.resolve?.()
+    await flushPromises()
+    const afterUpload = wrapper.findAll('button').find((item) => item.text().trim() === '发布')
+    expect(afterUpload!.attributes('disabled')).toBeUndefined()
   })
 })

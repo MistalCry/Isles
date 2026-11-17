@@ -14,6 +14,7 @@ import {
   type ReportStatus,
 } from './adminApi'
 import { resolveErrorMessage } from '@/api/client'
+import { useRequestSeq } from '@/composables/useRequestSeq'
 import { formatDateTime } from '@/utils/format'
 import { hasPermission } from './adminPermissions'
 import { reportReasonLabel } from '@/constants/app'
@@ -32,6 +33,8 @@ const size = ref(20)
 const data = ref<AdminReportPage | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+/** 列表请求序号（分页/筛选快速切换时防串页） */
+const loadSeq = useRequestSeq()
 
 const actionDialogVisible = ref(false)
 const actingReport = ref<AdminReport | null>(null)
@@ -79,20 +82,25 @@ function statusTagType(value?: string | null): 'warning' | 'success' | 'info' {
 }
 
 async function load(): Promise<void> {
+  // 快速翻页/切筛选时只认最后一次请求
+  const seq = loadSeq.next()
   loading.value = true
   error.value = null
   try {
-    data.value = await listAdminReports({
+    const result = await listAdminReports({
       status: status.value || undefined,
       targetType: targetType.value || undefined,
       keyword: keyword.value.trim() || undefined,
       page: page.value,
       size: size.value,
     })
+    if (!loadSeq.isLatest(seq)) return
+    data.value = result
   } catch (cause) {
+    if (!loadSeq.isLatest(seq)) return
     error.value = resolveErrorMessage(cause, t('manage.reports.loadFailed'))
   } finally {
-    loading.value = false
+    if (loadSeq.isLatest(seq)) loading.value = false
   }
 }
 

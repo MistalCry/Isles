@@ -23,6 +23,7 @@ import { resolveErrorMessage } from '@/api/client'
 import { formatDateTime } from '@/utils/format'
 import { hasPermission } from './adminPermissions'
 import { useAdminAccess } from '@/composables/useAdminAccess'
+import { useRequestSeq } from '@/composables/useRequestSeq'
 
 const { t } = useI18n()
 const { identity } = useAdminAccess()
@@ -36,6 +37,8 @@ const size = ref(20)
 const data = ref<AdminUserPage | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+/** 列表请求序号（分页/搜索快速切换时防串页） */
+const loadSeq = useRequestSeq()
 
 const penaltyOpen = ref(false)
 const penaltyUser = ref<AdminUser | null>(null)
@@ -85,19 +88,24 @@ function statusLabel(value?: string | null): string {
 }
 
 async function load(): Promise<void> {
+  // 快速翻页/搜索时只认最后一次请求
+  const seq = loadSeq.next()
   loading.value = true
   error.value = null
   try {
-    data.value = await listAdminUsers({
+    const result = await listAdminUsers({
       keyword: keyword.value.trim() || undefined,
       status: status.value || undefined,
       page: page.value,
       size: size.value,
     })
+    if (!loadSeq.isLatest(seq)) return
+    data.value = result
   } catch (cause) {
+    if (!loadSeq.isLatest(seq)) return
     error.value = resolveErrorMessage(cause, t('admin.users.loadFailed'))
   } finally {
-    loading.value = false
+    if (loadSeq.isLatest(seq)) loading.value = false
   }
 }
 
@@ -150,6 +158,19 @@ async function loadPenalties(): Promise<void> {
   }
 }
 
+/**
+ * 处罚会同步 users.status（BAN → BANNED，撤销 → ACTIVE），
+ * 只刷处罚列表会让表格状态列停在旧值，用户以为没生效。这里把用户行一起刷新，
+ * 并把抽屉里的用户对象换成新的一份，避免抽屉头部也显示旧状态。
+ */
+async function refreshPenaltyUserRow(): Promise<void> {
+  const userId = penaltyUser.value?.id
+  await load()
+  if (!userId || !data.value) return
+  const fresh = data.value.items.find((item) => item.id === userId)
+  if (fresh) penaltyUser.value = fresh
+}
+
 async function submitPenalty(): Promise<void> {
   if (!penaltyUser.value) return
   if (!form.value.reason.trim()) {
@@ -170,6 +191,7 @@ async function submitPenalty(): Promise<void> {
     ElMessage.success(t('admin.penalty.created'))
     form.value = { type: 'WARN', duration: '24', reason: '' }
     await loadPenalties()
+    await refreshPenaltyUserRow()
   } catch (cause) {
     ElMessage.error(resolveErrorMessage(cause, t('admin.penalty.failed')))
   } finally {
@@ -191,6 +213,7 @@ async function revoke(penalty: AdminPenalty): Promise<void> {
     await revokePenalty(penalty.id)
     ElMessage.success(t('admin.penalty.revoked'))
     await loadPenalties()
+    await refreshPenaltyUserRow()
   } catch (cause) {
     ElMessage.error(resolveErrorMessage(cause, t('admin.penalty.failed')))
   }

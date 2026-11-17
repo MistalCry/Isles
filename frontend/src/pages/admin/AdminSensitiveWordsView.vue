@@ -22,6 +22,7 @@ import {
   type WordScanHit,
 } from './adminApi'
 import { resolveErrorMessage } from '@/api/client'
+import { useRequestSeq } from '@/composables/useRequestSeq'
 import { formatDateTime } from '@/utils/format'
 
 const { t } = useI18n()
@@ -52,6 +53,8 @@ const size = ref(20)
 const data = ref<AdminSensitiveWordPage | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+/** 列表请求序号（分页/搜索快速切换时防串页） */
+const loadSeq = useRequestSeq()
 
 const hitKeyword = ref('')
 const hitScene = ref('')
@@ -104,18 +107,23 @@ function actionTagType(value?: string | null): 'danger' | 'warning' | 'info' {
 }
 
 async function load(): Promise<void> {
+  // 快速翻页/搜索时只认最后一次请求
+  const seq = loadSeq.next()
   loading.value = true
   error.value = null
   try {
-    data.value = await listAdminSensitiveWords({
+    const result = await listAdminSensitiveWords({
       keyword: keyword.value.trim() || undefined,
       page: page.value,
       size: size.value,
     })
+    if (!loadSeq.isLatest(seq)) return
+    data.value = result
   } catch (cause) {
+    if (!loadSeq.isLatest(seq)) return
     error.value = resolveErrorMessage(cause, t('admin.words.loadFailed'))
   } finally {
-    loading.value = false
+    if (loadSeq.isLatest(seq)) loading.value = false
   }
 }
 

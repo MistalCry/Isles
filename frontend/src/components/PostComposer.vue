@@ -46,6 +46,11 @@ const boardId = ref(props.defaultBoardId || props.boards[0]?.id || '')
 const mediaItems = ref<MediaItem[]>([])
 const coverUrl = ref<string | null>(null)
 const uploading = ref(false)
+/**
+ * 整批上传标记：多选文件是串行上传的，`uploading` 在文件之间会短暂回落，
+ * 用它兜住「刚好在换文件的空档点发布」这一帧。
+ */
+const batchUploading = ref(false)
 /** 当前文件的上传进度（0-100）与失败待重试文件 */
 const uploadPercent = ref(0)
 const failedUpload = ref<File | null>(null)
@@ -56,7 +61,9 @@ const fileInputRef = ref<HTMLInputElement>()
 
 const isFull = computed(() => props.mode === 'full')
 const plainText = computed(() => content.value.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim())
-const canSubmit = computed(() => plainText.value.length > 0 && !submitting.value)
+const canSubmit = computed(
+  () => plainText.value.length > 0 && !submitting.value && !uploading.value && !batchUploading.value,
+)
 
 watch(
   () => props.boards,
@@ -87,17 +94,22 @@ async function handleFiles(event: Event): Promise<void> {
     ElMessage.warning(t('comment.mediaLimit', { n: MAX_MEDIA_COUNT }))
     return
   }
-  for (const file of files.slice(0, remaining)) {
-    const invalid = mediaApi.validateMediaFile(file)
-    if (invalid) {
-      ElMessage.warning(invalid)
-      continue
+  batchUploading.value = true
+  try {
+    for (const file of files.slice(0, remaining)) {
+      const invalid = mediaApi.validateMediaFile(file)
+      if (invalid) {
+        ElMessage.warning(invalid)
+        continue
+      }
+      if (mediaApi.isPreviewUnsupported(file)) {
+        // HEIC 等格式浏览器无法预览，明确告知「按原图上传」，避免用户以为是失败
+        ElMessage.info(t('media.heicNoPreview'))
+      }
+      await uploadFile(file)
     }
-    if (mediaApi.isPreviewUnsupported(file)) {
-      // HEIC 等格式浏览器无法预览，明确告知「按原图上传」，避免用户以为是失败
-      ElMessage.info(t('media.heicNoPreview'))
-    }
-    await uploadFile(file)
+  } finally {
+    batchUploading.value = false
   }
 }
 
@@ -143,6 +155,11 @@ function reset(): void {
 
 async function submit(): Promise<void> {
   if (!requireLogin(t('post.publishLoginRequired'))) return
+  if (uploading.value || batchUploading.value) {
+    // 上传还没结束就发布，会把正在传的图片整批丢掉
+    ElMessage.warning(t('post.uploadingWait'))
+    return
+  }
   if (!plainText.value) {
     ElMessage.warning(t('post.emptyContent'))
     return

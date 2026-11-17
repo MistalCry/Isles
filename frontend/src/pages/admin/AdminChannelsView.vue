@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -15,9 +15,15 @@ import {
   type AdminChannelPage,
 } from './adminApi'
 import { resolveErrorMessage } from '@/api/client'
+import { useRequestSeq } from '@/composables/useRequestSeq'
+import { hasPermission } from './adminPermissions'
+import { useAdminAccess } from '@/composables/useAdminAccess'
 import { formatCount, formatDateTime } from '@/utils/format'
 
 const { t } = useI18n()
+const { identity } = useAdminAccess()
+/** 封禁/解封频道走 CONTENT_TAKEDOWN，只有 CONTENT_READ 的角色点了必 403 */
+const canTakedown = computed(() => hasPermission(identity.value, 'CONTENT_TAKEDOWN'))
 
 const keyword = ref('')
 const status = ref('')
@@ -26,21 +32,28 @@ const size = ref(20)
 const data = ref<AdminChannelPage | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+/** 列表请求序号（分页/筛选快速切换时防串页） */
+const loadSeq = useRequestSeq()
 
 async function load(): Promise<void> {
+  // 快速翻页/切筛选时只认最后一次请求
+  const seq = loadSeq.next()
   loading.value = true
   error.value = null
   try {
-    data.value = await listAdminChannels({
+    const result = await listAdminChannels({
       keyword: keyword.value.trim() || undefined,
       status: status.value || undefined,
       page: page.value,
       size: size.value,
     })
+    if (!loadSeq.isLatest(seq)) return
+    data.value = result
   } catch (cause) {
+    if (!loadSeq.isLatest(seq)) return
     error.value = resolveErrorMessage(cause, t('admin.channels.loadFailed'))
   } finally {
-    loading.value = false
+    if (loadSeq.isLatest(seq)) loading.value = false
   }
 }
 
@@ -144,6 +157,7 @@ onMounted(load)
               size="small"
               link
               :type="row.status === 'BANNED' ? 'primary' : 'danger'"
+              :disabled="!canTakedown"
               @click="toggleStatus(row as AdminChannel)"
             >
               {{ row.status === 'BANNED' ? t('admin.channels.unban') : t('admin.channels.ban') }}

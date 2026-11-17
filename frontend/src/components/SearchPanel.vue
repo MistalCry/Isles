@@ -6,6 +6,7 @@ import { ElMessage } from 'element-plus'
 import { Close, Search } from '@element-plus/icons-vue'
 import { searchApi } from '@/api'
 import { useSearchHistory } from '@/composables/useSearchHistory'
+import { useRequestSeq } from '@/composables/useRequestSeq'
 import UserAvatar from './UserAvatar.vue'
 import type { HotKeyword, SearchSuggestion } from '@/types/models'
 
@@ -39,6 +40,8 @@ const hotLoading = ref(false)
 const { items: history, loading: historyLoading, usingLocalFallback, load, record, remove, clear } = useSearchHistory()
 
 let debounceTimer: number | undefined
+/** 联想请求序号：连打几个字时只认最后一次查询的结果 */
+const suggestSeq = useRequestSeq()
 
 watch(
   () => props.initialKeyword,
@@ -51,16 +54,24 @@ watch(keyword, (value) => {
   window.clearTimeout(debounceTimer)
   const query = value.trim()
   if (!query) {
+    // 清空时把在途联想请求一起作废，避免旧结果回填
+    suggestSeq.invalidate()
     suggestion.value = { channels: [], keywords: [] }
     suggesting.value = false
     return
   }
   debounceTimer = window.setTimeout(async () => {
+    const seq = suggestSeq.next()
     suggesting.value = true
     try {
-      suggestion.value = await searchApi.getSearchSuggestion(query)
+      const result = await searchApi.getSearchSuggestion(query)
+      if (!suggestSeq.isLatest(seq)) return
+      suggestion.value = result
+    } catch {
+      // 联想失败不打扰用户：清空结果即可，输入框本身仍可用
+      if (suggestSeq.isLatest(seq)) suggestion.value = { channels: [], keywords: [] }
     } finally {
-      suggesting.value = false
+      if (suggestSeq.isLatest(seq)) suggesting.value = false
     }
   }, 300)
 })

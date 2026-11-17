@@ -159,6 +159,16 @@ beforeEach(() => {
           overridden: true,
           publicVisible: false,
         },
+        {
+          key: 'agent.search.baseUrl',
+          group: 'AI',
+          label: 'SearXNG 地址',
+          type: 'STRING',
+          value: 'http://127.0.0.1:8888',
+          defaultValue: '',
+          overridden: true,
+          publicVisible: false,
+        },
       ],
     },
   ])
@@ -226,6 +236,41 @@ describe('AdminAgentsView', () => {
     const wrapper = await mountView()
     expect(wrapper.text()).toContain('联网搜索：已启用（SearXNG）')
     expect(wrapper.text()).not.toContain('只能用站内检索')
+  })
+
+  it('provider=SEARXNG 但没填 baseUrl 时不能报「已启用」（K8）', async () => {
+    mocks.listAdminSettings.mockResolvedValue([
+      {
+        group: 'AI',
+        label: 'AI',
+        items: [
+          {
+            key: 'agent.search.provider',
+            group: 'AI',
+            label: 'AI 代理联网搜索',
+            type: 'ENUM',
+            value: 'SEARXNG',
+            defaultValue: 'NONE',
+            overridden: true,
+            publicVisible: false,
+          },
+          {
+            key: 'agent.search.baseUrl',
+            group: 'AI',
+            label: 'SearXNG 地址',
+            type: 'STRING',
+            value: '',
+            defaultValue: '',
+            overridden: false,
+            publicVisible: false,
+          },
+        ],
+      },
+    ])
+    const wrapper = await mountView()
+    expect(wrapper.text()).toContain('联网搜索：已启用但未填地址')
+    expect(wrapper.text()).toContain('agent.search.baseUrl')
+    expect(wrapper.text()).not.toContain('联网搜索：已启用（SearXNG）')
   })
 
   it('agent.search.provider=NONE 时提示未配置且只能站内检索', async () => {
@@ -456,6 +501,25 @@ describe('AdminAgentsView', () => {
     const orphan = select.findAll('.el-option-stub').find((item) => item.attributes('data-value') === 'm-9')
     expect(orphan).toBeTruthy()
     expect(orphan!.text()).toBe('旧模型')
+  })
+
+  it('保存人设后行内 userId 不被写坏，日志/运行一次仍指向正确的代理（K7）', async () => {
+    // 真实故障：PUT 返回的人设视图可能没有 id，toAgentUser 会拿 userId 当 id；
+    // 若直接整体覆盖行数据，行内 userId 就被写坏，之后「日志」「运行一次」全部 404。
+    mocks.updateAdminAgent.mockResolvedValue({ id: AGENT.id, displayName: AGENT.displayName })
+    const wrapper = await mountView()
+
+    await wrapper.findAll('button').find((b) => b.text().trim() === '编辑')!.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find((b) => b.text().trim() === '保存')!.trigger('click')
+    await flushPromises()
+
+    // 行内标识仍是 userId 后 6 位（没被替换成别的东西）
+    expect(wrapper.text()).toContain('…000001')
+
+    await wrapper.findAll('button').find((b) => b.text().trim() === '日志')!.trigger('click')
+    await flushPromises()
+    expect(mocks.listAdminAgentRuns).toHaveBeenCalledWith(AGENT.userId, { page: 1, size: 30 })
   })
 
   it('运行一次 / 暂停分别调用对应接口', async () => {

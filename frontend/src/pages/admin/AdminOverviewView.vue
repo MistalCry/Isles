@@ -16,9 +16,17 @@ import {
   type AdminTrendPoint,
 } from './adminApi'
 import { resolveErrorMessage } from '@/api/client'
+import { hasPermission } from './adminPermissions'
+import { useAdminAccess } from '@/composables/useAdminAccess'
 import { formatCount, formatDateTime } from '@/utils/format'
 
 const { t } = useI18n()
+const { identity } = useAdminAccess()
+/**
+ * 概览页只要 STATS_READ，但「下线热词」走 CONFIG_WRITE：
+ * MODERATOR 这类角色点下去必 403，所以按接口权限点单独门控。
+ */
+const canRemoveKeyword = computed(() => hasPermission(identity.value, 'CONFIG_WRITE'))
 
 const overview = ref<AdminOverview | null>(null)
 const trend = ref<AdminTrendPoint[]>([])
@@ -137,7 +145,14 @@ onMounted(load)
             <span class="hot-keyword__text">{{ item.keyword }}</span>
             <span class="muted">{{ t('admin.trend.searchCount', { n: item.searchCount }) }}</span>
             <span class="muted">{{ formatDateTime(item.lastSearchedAt) }}</span>
-            <el-button size="small" link type="danger" :icon="Delete" @click="removeKeyword(item)">
+            <el-button
+              size="small"
+              link
+              type="danger"
+              :icon="Delete"
+              :disabled="!canRemoveKeyword"
+              @click="removeKeyword(item)"
+            >
               {{ t('common.delete') }}
             </el-button>
           </li>

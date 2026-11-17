@@ -17,6 +17,7 @@ import { AppError, resolveErrorMessage } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useChannelStore } from '@/stores/channel'
 import { useCursorList } from '@/composables/useCursorList'
+import { useRequestSeq } from '@/composables/useRequestSeq'
 import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import { useRequireLogin } from '@/composables/useRequireLogin'
 import { excerpt, formatCount, formatDateTime, formatRelativeTime } from '@/utils/format'
@@ -90,6 +91,15 @@ const canUseComposer = computed(
  * 后端已把置顶帖从 latest/essence 列表排除，不能再从列表里 filter。
  */
 const pinnedPosts = ref<Post[]>([])
+/**
+ * 每个「频道相关」的异步加载各带一个请求序号：
+ * 切频道时旧请求回来必须整包丢弃，否则 URL 是 B、内容是 A。
+ */
+const channelSeq = useRequestSeq()
+const pinnedSeq = useRequestSeq()
+const boardsSeq = useRequestSeq()
+const appsSeq = useRequestSeq()
+const activitiesSeq = useRequestSeq()
 const pinnedCount = computed(() => pinnedPosts.value.length)
 const pinnedIds = computed(() => new Set(pinnedPosts.value.map((post) => post.id)))
 /** 列表再兜底过滤一次：万一后端尚未排除，也不会出现同一帖重复 */
@@ -124,20 +134,26 @@ useInfiniteScroll(
 )
 
 async function loadActivities(): Promise<void> {
+  const seq = activitiesSeq.next()
   try {
-    activities.value = await listChannelActivities(channelId.value)
+    const list = await listChannelActivities(channelId.value)
+    if (!activitiesSeq.isLatest(seq)) return
+    activities.value = list
   } catch {
     // 活动区失败不影响频道主内容
-    activities.value = []
+    if (activitiesSeq.isLatest(seq)) activities.value = []
   }
 }
 
 async function loadApps(): Promise<void> {
+  const seq = appsSeq.next()
   try {
-    apps.value = (await listChannelApps(channelId.value)).filter((app) => app.enabled)
+    const list = await listChannelApps(channelId.value)
+    if (!appsSeq.isLatest(seq)) return
+    apps.value = list.filter((app) => app.enabled)
   } catch {
     // 应用区失败不影响频道主内容
-    apps.value = []
+    if (appsSeq.isLatest(seq)) apps.value = []
   }
 }
 
@@ -203,30 +219,40 @@ function appFallbackIcon(app: ChannelApp): string {
 }
 
 async function loadPinned(): Promise<void> {
+  const seq = pinnedSeq.next()
   try {
-    pinnedPosts.value = await channelsApi.getPinnedPosts(channelId.value)
+    const posts = await channelsApi.getPinnedPosts(channelId.value)
+    if (!pinnedSeq.isLatest(seq)) return
+    pinnedPosts.value = posts
   } catch {
     // 置顶区失败不影响主列表
-    pinnedPosts.value = []
+    if (pinnedSeq.isLatest(seq)) pinnedPosts.value = []
   }
 }
 
 async function loadBoards(): Promise<void> {
+  const seq = boardsSeq.next()
   try {
-    boards.value = await channelsApi.getBoards(channelId.value)
+    const list = await channelsApi.getBoards(channelId.value)
+    if (!boardsSeq.isLatest(seq)) return
+    boards.value = list
   } catch {
-    boards.value = []
+    if (boardsSeq.isLatest(seq)) boards.value = []
   }
 }
 
 async function loadChannel(): Promise<void> {
   if (!channelId.value) return
+  const seq = channelSeq.next()
   loadingChannel.value = true
   channelError.value = null
   channelErrorStatus.value = 0
   pinnedExpanded.value = false
   try {
-    channel.value = await channelsApi.getChannel(channelId.value)
+    const detail = await channelsApi.getChannel(channelId.value)
+    // 期间又切了频道：这次结果属于上一个频道，整包丢弃
+    if (!channelSeq.isLatest(seq)) return
+    channel.value = detail
     if (channel.value.isJoined) {
       channelStore.upsertMyChannel(channel.value)
     }
@@ -236,13 +262,14 @@ async function loadChannel(): Promise<void> {
     void loadActivities()
     await postList.refresh()
   } catch (err) {
+    if (!channelSeq.isLatest(seq)) return
     channel.value = null
     const status = err instanceof AppError ? err.status : 0
     channelErrorStatus.value = status
     channelError.value =
       status === 404 ? t('channel.page.notFound') : resolveErrorMessage(err, t('channel.page.loadFailed'))
   } finally {
-    loadingChannel.value = false
+    if (channelSeq.isLatest(seq)) loadingChannel.value = false
   }
 }
 

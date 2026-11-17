@@ -7,6 +7,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ChatDotRound, Delete, EditPen, Star, View } from '@element-plus/icons-vue'
 import { usersApi } from '@/api'
 import { http, resolveErrorMessage } from '@/api/client'
+import { useRequestSeq } from '@/composables/useRequestSeq'
 import { useAuthStore } from '@/stores/auth'
 import { useChannelStore } from '@/stores/channel'
 import { excerpt, formatCount, formatRelativeTime } from '@/utils/format'
@@ -30,10 +31,14 @@ const size = 20
 const total = ref(0)
 const channelId = ref('')
 const deletingId = ref<string | null>(null)
+/** 列表请求序号（分页/切频道快速切换时防串页） */
+const loadSeq = useRequestSeq()
 
 const hasMore = computed(() => items.value.length < total.value)
 
 async function load(): Promise<void> {
+  // 快速翻页/切频道时只认最后一次请求
+  const seq = loadSeq.next()
   loading.value = true
   error.value = null
   try {
@@ -42,14 +47,16 @@ async function load(): Promise<void> {
       size,
       channelId: channelId.value || undefined,
     })
+    if (!loadSeq.isLatest(seq)) return
     items.value = result.items
     total.value = result.total ?? result.items.length
   } catch (cause) {
+    if (!loadSeq.isLatest(seq)) return
     error.value = resolveErrorMessage(cause, t('myPosts.loadFailed'))
     items.value = []
     total.value = 0
   } finally {
-    loading.value = false
+    if (loadSeq.isLatest(seq)) loading.value = false
   }
 }
 

@@ -20,6 +20,7 @@ import { resolveErrorMessage } from '@/api/client'
 import { formatDateTime } from '@/utils/format'
 import { hasPermission } from './adminPermissions'
 import { useAdminAccess } from '@/composables/useAdminAccess'
+import { useRequestSeq } from '@/composables/useRequestSeq'
 
 const { t } = useI18n()
 const { identity } = useAdminAccess()
@@ -35,6 +36,8 @@ const size = ref(20)
 const data = ref<AdminContentPage | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+/** 列表请求序号（tab/分页/筛选快速切换时防串页） */
+const loadSeq = useRequestSeq()
 
 const takedownVisible = ref(false)
 const takedownTarget = ref<AdminContentItem | null>(null)
@@ -53,6 +56,8 @@ function statusLabel(value?: string | null): string {
 }
 
 async function load(): Promise<void> {
+  // 快速切 tab / 翻页时只认最后一次请求
+  const seq = loadSeq.next()
   loading.value = true
   error.value = null
   const params = {
@@ -62,11 +67,14 @@ async function load(): Promise<void> {
     size: size.value,
   }
   try {
-    data.value = tab.value === 'posts' ? await listAdminPosts(params) : await listAdminComments(params)
+    const result = tab.value === 'posts' ? await listAdminPosts(params) : await listAdminComments(params)
+    if (!loadSeq.isLatest(seq)) return
+    data.value = result
   } catch (cause) {
+    if (!loadSeq.isLatest(seq)) return
     error.value = resolveErrorMessage(cause, t('admin.content.loadFailed'))
   } finally {
-    loading.value = false
+    if (loadSeq.isLatest(seq)) loading.value = false
   }
 }
 

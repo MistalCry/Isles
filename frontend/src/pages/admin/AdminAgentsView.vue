@@ -55,10 +55,11 @@ const busyId = ref<string | null>(null)
 const runningId = ref<string | null>(null)
 
 /**
- * 联网搜索配置 agent.search.provider（NONE / SEARXNG）。
+ * 联网搜索配置：agent.search.provider（NONE / SEARXNG）+ agent.search.baseUrl。
  * null = 读不到配置项，页面显示「状态未知」而不是误报「未配置」。
  */
 const searchProvider = ref<string | null>(null)
+const searchBaseUrl = ref<string | null>(null)
 const searchLoaded = ref(false)
 
 const SEARCH_PROVIDER_LABELS: Record<string, string> = { SEARXNG: 'SearXNG', TAVILY: 'Tavily' }
@@ -73,6 +74,11 @@ const searchState = computed(() => {
   }
   if (provider === 'NONE' || provider === 'OFF' || provider === 'DISABLED') {
     return { kind: 'off', tagType: 'info' as const, label: t('admin.agents.searchOff') }
+  }
+  const baseUrl = (searchBaseUrl.value ?? '').trim()
+  // K8：provider 开着但没填地址 = 实际用不了，不能报「已启用」
+  if (provider === 'SEARXNG' && !baseUrl) {
+    return { kind: 'no-base-url', tagType: 'warning' as const, label: t('admin.agents.searchNoBaseUrl') }
   }
   const name = SEARCH_PROVIDER_LABELS[provider] ?? provider
   return { kind: 'on', tagType: 'success' as const, label: t('admin.agents.searchEnabled', { provider: name }) }
@@ -216,10 +222,14 @@ async function loadGlobalSwitch(): Promise<void> {
 async function loadSearchProvider(): Promise<void> {
   try {
     const groups = await listAdminSettings()
-    const item = groups.flatMap((group) => group.items ?? []).find((entry) => entry.key === 'agent.search.provider')
-    searchProvider.value = item ? String(item.value ?? '') : null
+    const items = groups.flatMap((group) => group.items ?? [])
+    const provider = items.find((entry) => entry.key === 'agent.search.provider')
+    const baseUrl = items.find((entry) => entry.key === 'agent.search.baseUrl')
+    searchProvider.value = provider ? String(provider.value ?? '') : null
+    searchBaseUrl.value = baseUrl ? String(baseUrl.value ?? '') : null
   } catch {
     searchProvider.value = null
+    searchBaseUrl.value = null
   } finally {
     searchLoaded.value = true
   }
@@ -381,7 +391,8 @@ async function saveProfile(): Promise<void> {
   try {
     // 模型没改过就不下发（undefined 语义），改了才把「跟随默认」转成 null
     const modelChanged = (form.value.modelConfigId || null) !== initialModelId.value
-    const updated = await updateAdminAgent(editing.value.userId, {
+    const savedModelId = modelChanged ? form.value.modelConfigId || null : (editing.value.modelConfigId ?? null)
+    await updateAdminAgent(editing.value.userId, {
       displayName: form.value.displayName.trim(),
       bio: form.value.bio.trim() || null,
       status: form.value.status,
@@ -389,8 +400,9 @@ async function saveProfile(): Promise<void> {
       modelConfigId: modelChanged ? form.value.modelConfigId || null : undefined,
       profile,
     })
-    if (updated) applyAgent(updated)
-    else await load()
+    // K7：保存后必须让列表立刻反映新值。这里不依赖 PUT 的返回体（它可能缺 id / modelName），
+    // 直接用刚提交的表单值就地更新该行，统计类字段保留列表里的旧值。
+    applySavedRow(profile, savedModelId)
     ElMessage.success(t('admin.agents.saved'))
     editOpen.value = false
   } catch (cause) {
@@ -400,9 +412,30 @@ async function saveProfile(): Promise<void> {
   }
 }
 
-function applyAgent(agent: AgentUser): void {
+/**
+ * 保存成功后就地更新列表行（K7：不等用户手动刷新）。
+ *
+ * <p>为什么不直接用 PUT 的返回体：后端返回的是人设视图，可能没有 `id`，
+ * `toAgentUser` 会退回拿 userId 当 id，按 id 匹配就「匹配不上 → 行不更新」；
+ * 也可能缺 modelName / 统计字段。这里以「刚提交的表单值 + 已加载的模型列表」为准，
+ * id / userId / 今日产出 / 失败率等字段保持列表里的原值。
+ */
+function applySavedRow(profile: AgentProfile, modelConfigId: string | null): void {
   if (!data.value) return
-  data.value.items = data.value.items.map((item) => (item.id === agent.id ? agent : item))
+  const index = data.value.items.findIndex((item) => item.userId === editing.value?.userId)
+  if (index < 0) return
+  const current = data.value.items[index]
+  const chosenModel = models.value.find((model) => model.id === modelConfigId)
+  data.value.items[index] = {
+    ...current,
+    displayName: form.value.displayName.trim(),
+    bio: form.value.bio.trim() || null,
+    avatarUrl: form.value.avatarUrl,
+    status: form.value.status,
+    profile,
+    modelConfigId,
+    modelName: chosenModel?.name ?? null,
+  }
 }
 
 async function togglePause(agent: AgentUser): Promise<void> {
@@ -557,6 +590,9 @@ onMounted(() => {
           <el-tag size="small" :type="searchState.tagType" effect="plain">{{ searchState.label }}</el-tag>
           <span v-if="searchState.kind === 'off'" class="admin-agents__search-hint">
             {{ t('admin.agents.searchOffHint') }}
+          </span>
+          <span v-else-if="searchState.kind === 'no-base-url'" class="admin-agents__search-hint">
+            {{ t('admin.agents.searchNoBaseUrlHint') }}
           </span>
           <span v-else-if="searchState.kind === 'unknown'" class="admin-agents__search-hint">
             {{ t('admin.agents.searchUnknownHint') }}

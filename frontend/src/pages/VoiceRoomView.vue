@@ -6,6 +6,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Close, Microphone, Mute, VideoPlay } from '@element-plus/icons-vue'
 import { channelsApi } from '@/api'
 import { resolveErrorMessage } from '@/api/client'
+import { useRequestSeq } from '@/composables/useRequestSeq'
 import {
   closeVoiceRoom,
   createVoiceRoom,
@@ -38,6 +39,8 @@ const myId = computed(() => auth.currentUser?.id ?? '')
 
 const channel = ref<Channel | null>(null)
 const room = ref<VoiceRoom | null>(null)
+/** 房间快照刷新序号（3s 轮询 + state 推送双通道） */
+const roomSeq = useRequestSeq()
 const loading = ref(true)
 const error = ref<string | null>(null)
 const creating = ref(false)
@@ -170,8 +173,12 @@ function scheduleRefresh(): void {
 
 async function refreshRoom(): Promise<void> {
   if (!room.value) return
+  // 轮询与 state 推送会同时触发刷新：只认最后一次，避免旧快照把麦位回退
+  const seq = roomSeq.next()
+  const roomId = room.value.id
   try {
-    const next = await getVoiceRoom(room.value.id)
+    const next = await getVoiceRoom(roomId)
+    if (!roomSeq.isLatest(seq)) return
     if (next.status === 'CLOSED') {
       cleanup()
       room.value = null

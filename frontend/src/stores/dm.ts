@@ -103,7 +103,9 @@ export const useDmStore = defineStore('dm', () => {
     try {
       const page = await dmApi.getMessages(conversationId, reset ? null : messageCursor)
       if (seq !== messageSeq) return
-      messages.value = reset ? page.items : [...page.items, ...messages.value]
+      // reset 拉取期间可能收到 WS 推送（已 append 到本地）：以服务端列表打底，
+      // 再把「本地有、服务端没有」的在途消息补在后面，否则刚收到的消息会凭空消失。
+      messages.value = reset ? mergeInFlight(page.items, messages.value) : [...page.items, ...messages.value]
       messageCursor = page.nextCursor ?? null
       messagesHasMore.value = Boolean(messageCursor)
       if (reset) {
@@ -152,6 +154,17 @@ export const useDmStore = defineStore('dm', () => {
     if (message.conversationId === currentConversationId.value) {
       messages.value = [...messages.value, message]
     }
+  }
+
+  /**
+   * 合并「拉取期间新到的消息」：服务端列表打底，本地独有的按到达顺序追加在末尾。
+   * 消息列表是「旧 → 新」排列，所以新消息放后面才是正确位置。
+   */
+  function mergeInFlight(serverItems: DmMessage[], localItems: DmMessage[]): DmMessage[] {
+    if (localItems.length === 0) return serverItems
+    const serverIds = new Set(serverItems.map((item) => item.id))
+    const inFlight = localItems.filter((item) => item.id && !serverIds.has(item.id))
+    return inFlight.length === 0 ? serverItems : [...serverItems, ...inFlight]
   }
 
   /** 实时私信：兼容裸消息与 { message } 包装；不在会话列表的会话触发补拉。 */

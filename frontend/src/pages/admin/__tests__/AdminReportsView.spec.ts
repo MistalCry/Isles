@@ -137,4 +137,44 @@ describe('AdminReportsView 举报状态列', () => {
     expect(buttons.length).toBe(3)
     expect(buttons.every((item) => item.attributes('disabled') !== undefined)).toBe(true)
   })
+
+  it('连续两次查询时只采用最后一次响应（旧响应不能盖新结果）', async () => {
+    // 分页/筛选共用同一个 load()：序号判断失效时，第 1 页会盖住第 2 页
+    const first = deferred<unknown>()
+    const second = deferred<unknown>()
+    mocks.listAdminReports
+      .mockResolvedValueOnce(PAGE)
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+
+    const wrapper = await mountView()
+    const query = wrapper.findAll('button').find((item) => item.text().includes('查询'))!
+    await query.trigger('click')
+    await flushPromises()
+    await query.trigger('click')
+    await flushPromises()
+
+    second.resolve({
+      ...PAGE,
+      items: [{ ...makeReport('01REPORT00000000000000009', 'PENDING'), detail: '第二次查询' }],
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('第二次查询')
+
+    first.resolve({
+      ...PAGE,
+      items: [{ ...makeReport('01REPORT00000000000000008', 'PENDING'), detail: '第一次查询' }],
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('第二次查询')
+    expect(wrapper.text()).not.toContain('第一次查询')
+  })
 })
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}

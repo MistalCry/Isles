@@ -197,6 +197,7 @@ post: {
   cardMoreMedia: "还有 {n} 张媒体，点击查看详情",
   topComment: "最高赞评论",
   viewAllComments: "查看全部 {n} 条评论",
+  uploadingWait: "图片还在上传，请稍候再发布",
 },
 editor: {
   placeholder: "写下你想分享的内容…",
@@ -1689,6 +1690,8 @@ admin: {
     modelHint: "代理用这个模型做规划与写作；跟随默认时用平台默认模型。",
     modelsEmpty: "平台还没有启用任何模型，代理只能用平台默认模型。",
     modelsForbidden: "读不到模型列表（需要 AI 模型管理权限），本次保存不会改动模型。",
+    searchNoBaseUrl: "联网搜索：已启用但未填地址",
+    searchNoBaseUrlHint: "provider 选了 SearXNG，但 agent.search.baseUrl 为空，代理仍会退回站内检索",
   },
 },
 assistant: {

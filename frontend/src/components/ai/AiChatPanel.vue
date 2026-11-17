@@ -30,6 +30,7 @@ import {
 } from '@/api/ai'
 import { AppError, resolveErrorMessage } from '@/api/client'
 import { isPreviewUnsupported, uploadMedia, validateMediaFile } from '@/api/media'
+import { useRequestSeq } from '@/composables/useRequestSeq'
 
 const { t } = useI18n()
 
@@ -93,6 +94,8 @@ const messageLoading = ref(false)
 const messageError = ref<string | null>(null)
 const nextMessageCursor = ref<string | null>(null)
 const loadingOlder = ref(false)
+/** 消息列表的请求序号：快速切会话时防止旧响应覆盖新会话 */
+const messageSeq = useRequestSeq()
 
 const input = ref('')
 const pendingImages = ref<PendingImage[]>([])
@@ -190,15 +193,19 @@ async function selectConversation(conversationId: string): Promise<void> {
   messageError.value = null
   streamError.value = null
   messageLoading.value = true
+  // 连点两个会话时，先发的请求可能后到：只认最后一次
+  const seq = messageSeq.next()
   try {
     const page = await listMessages(conversationId, { limit: 50 })
+    if (!messageSeq.isLatest(seq)) return
     messages.value = page.items
     nextMessageCursor.value = page.nextCursor
     scrollToBottom()
   } catch (cause) {
+    if (!messageSeq.isLatest(seq)) return
     messageError.value = resolveErrorMessage(cause, t('ai.chat.messagesFailed'))
   } finally {
-    messageLoading.value = false
+    if (messageSeq.isLatest(seq)) messageLoading.value = false
   }
 }
 
@@ -254,11 +261,15 @@ async function loadOlderMessages(): Promise<void> {
   if (!activeConversation.value || !nextMessageCursor.value || loadingOlder.value) return
   loadingOlder.value = true
   const cursor = nextMessageCursor.value
+  // 翻页途中切了会话：这批历史属于上一个会话，不能再往新会话里拼
+  const conversationId = activeConversation.value.id
   try {
-    const page = await listMessages(activeConversation.value.id, { cursor, limit: 50 })
+    const page = await listMessages(conversationId, { cursor, limit: 50 })
+    if (activeConversation.value?.id !== conversationId) return
     messages.value = [...page.items, ...messages.value]
     nextMessageCursor.value = page.nextCursor
   } catch (cause) {
+    if (activeConversation.value?.id !== conversationId) return
     ElMessage.error(resolveErrorMessage(cause, t('ai.chat.earlierFailed')))
   } finally {
     loadingOlder.value = false
