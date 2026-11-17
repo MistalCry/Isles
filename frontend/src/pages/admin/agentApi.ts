@@ -37,6 +37,10 @@ export interface AgentUser {
   runCount: number
   /** 后端暂未提供时保持 null，页面显示「—」而不是假 0 */
   failureRate: number | null
+  /** 指定模型（AiModel.id）；null = 跟随平台默认 */
+  modelConfigId?: string | null
+  /** 模型展示名，后端顺带返回；null = 跟随默认 */
+  modelName?: string | null
   lastRunStatus?: string | null
   lastRunAt?: string | null
   createdAt?: string | null
@@ -106,6 +110,8 @@ export interface AgentProfilePayload {
   status?: AgentStatus
   /** 头像 URL（上传后回填）；null = 清空，走首字母占位 */
   avatarUrl?: string | null
+  /** 指定模型；null = 跟随平台默认。undefined = 本次不改 */
+  modelConfigId?: string | null
   profile: Partial<AgentProfile>
 }
 
@@ -221,6 +227,8 @@ export function toAgentUser(value: unknown): AgentUser | null {
           : Number(failureRateRaw) / 100,
     lastRunStatus: str(raw.lastRunStatus) ?? str(raw.last_run_status),
     lastRunAt: str(raw.lastRunAt) ?? str(raw.last_run_at),
+    modelConfigId: str(raw.modelConfigId) ?? str(raw.model_config_id),
+    modelName: str(raw.modelName) ?? str(raw.model_name),
     createdAt: str(raw.createdAt),
   }
 }
@@ -293,6 +301,8 @@ export async function updateAdminAgent(agentId: string, payload: AgentProfilePay
   }
   // 头像单独判断：undefined 表示「本次不改」，null 表示「清空」
   if (payload.avatarUrl !== undefined) body.avatarUrl = payload.avatarUrl
+  // 模型同理：undefined 不下发，null 才是「跟随平台默认」
+  if (payload.modelConfigId !== undefined) body.modelConfigId = payload.modelConfigId
   if (profile.interests !== undefined) body.interests = profile.interests
   if (profile.tone !== undefined) body.tone = profile.tone
   if (profile.activeHours !== undefined) body.activeHours = profile.activeHours

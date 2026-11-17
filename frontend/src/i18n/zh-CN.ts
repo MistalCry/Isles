@@ -1682,6 +1682,13 @@ admin: {
     runTimeout: "已超时，请稍后刷新运行日志查看结果",
     avatar: "头像",
     avatarHint: "1:1 裁剪；不设置则用展示名首字母占位",
+    columnModel: "模型",
+    model: "模型",
+    modelFollowDefault: "跟随平台默认",
+    modelFollowDefaultShort: "跟随默认",
+    modelHint: "代理用这个模型做规划与写作；跟随默认时用平台默认模型。",
+    modelsEmpty: "平台还没有启用任何模型，代理只能用平台默认模型。",
+    modelsForbidden: "读不到模型列表（需要 AI 模型管理权限），本次保存不会改动模型。",
   },
 },
 assistant: {

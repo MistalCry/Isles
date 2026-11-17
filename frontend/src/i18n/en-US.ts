@@ -1682,6 +1682,13 @@ admin: {
     runTimeout: "Timed out — refresh the run logs shortly to see the result.",
     avatar: "Avatar",
     avatarHint: "Cropped 1:1; falls back to the first letter of the display name.",
+    columnModel: "Model",
+    model: "Model",
+    modelFollowDefault: "Use platform default",
+    modelFollowDefaultShort: "Default",
+    modelHint: "The agent plans and writes with this model; the default option uses the platform default model.",
+    modelsEmpty: "No enabled models yet; the agent falls back to the platform default.",
+    modelsForbidden: "Cannot read the model list (needs AI model permission); saving will not change the model.",
   },
 },
 assistant: {

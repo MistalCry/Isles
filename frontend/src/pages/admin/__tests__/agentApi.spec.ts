@@ -12,6 +12,7 @@ import {
   isRequestTimeout,
   runAdminAgentNow,
   RUN_NOW_TIMEOUT_MS,
+  toAgentUser,
   updateAdminAgent,
 } from '@/pages/admin/agentApi'
 
@@ -55,5 +56,40 @@ describe('updateAdminAgent（头像字段）', () => {
     mocks.put.mockResolvedValue({ data: { id: 'p1', userId: 'u1' } })
     await updateAdminAgent('u1', { displayName: '小助手', avatarUrl: null, profile: {} })
     expect(mocks.put.mock.calls[0][1]).toHaveProperty('avatarUrl', null)
+  })
+})
+
+describe('updateAdminAgent（模型字段）', () => {
+  it('选了模型就下发 modelConfigId', async () => {
+    mocks.put.mockResolvedValue({ data: { id: 'p1', userId: 'u1' } })
+    await updateAdminAgent('u1', { displayName: '小助手', modelConfigId: 'm-2', profile: {} })
+    expect(mocks.put.mock.calls[0][1]).toHaveProperty('modelConfigId', 'm-2')
+  })
+
+  it('跟随默认时下发 null（不是空串）', async () => {
+    mocks.put.mockResolvedValue({ data: { id: 'p1', userId: 'u1' } })
+    await updateAdminAgent('u1', { displayName: '小助手', modelConfigId: null, profile: {} })
+    expect(mocks.put.mock.calls[0][1]).toHaveProperty('modelConfigId', null)
+  })
+
+  it('没改过就不下发（undefined），避免覆盖别处改的模型', async () => {
+    mocks.put.mockResolvedValue({ data: { id: 'p1', userId: 'u1' } })
+    await updateAdminAgent('u1', { displayName: '小助手', profile: {} })
+    expect(mocks.put.mock.calls[0][1]).not.toHaveProperty('modelConfigId')
+  })
+})
+
+describe('toAgentUser（模型字段）', () => {
+  it('兼容 camelCase / snake_case，缺省为 null', () => {
+    expect(toAgentUser({ id: 'u1', modelName: 'Qwen3 8B', modelConfigId: 'm-1' })).toMatchObject({
+      modelName: 'Qwen3 8B',
+      modelConfigId: 'm-1',
+    })
+    expect(toAgentUser({ id: 'u2', model_name: 'Qwen3 8B', model_config_id: 'm-2' })).toMatchObject({
+      modelName: 'Qwen3 8B',
+      modelConfigId: 'm-2',
+    })
+    // 跟随默认：后端不给字段，页面显示「跟随默认」
+    expect(toAgentUser({ id: 'u3' })).toMatchObject({ modelName: null, modelConfigId: null })
   })
 })

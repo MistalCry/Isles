@@ -41,6 +41,7 @@ const stubs = {
     template: '<span class="el-option-stub">{{ label }}</span>',
   },
   'el-input-number': {
+    name: 'ElInputNumberStub',
     props: ['modelValue', 'min', 'max', 'disabled'],
     template:
       '<div class="el-input-number-stub" :data-value="String(modelValue ?? \'\')" :data-min="String(min ?? \'\')" :data-max="String(max ?? \'\')" />',
@@ -192,6 +193,55 @@ describe('AdminSettingsView 配置中心', () => {
     expect(readonly.text()).toContain('只能查看配置')
     expect(rowOf(wrapper, 'auth.register.enabled').find('.el-switch-stub').attributes('data-disabled')).toBe('true')
     expect(rowOf(wrapper, 'site.name').find('.el-input-stub').attributes('disabled')).toBeDefined()
+  })
+
+  it('INT 为 0 时渲染成数字框，且 0 能被提交（不会被当空值丢掉）', async () => {
+    // agent.minPostIntervalMinutes / minCommentIntervalMinutes 是通用 INT 配置项，
+    // 0 是合法值（不限制间隔），这是最容易在「空值判断」里被吃掉的边界。
+    mocks.identity.value = WRITER
+    const zeroItem = {
+      key: 'agent.minPostIntervalMinutes',
+      group: 'agent',
+      label: '发帖最小间隔',
+      type: 'INT',
+      value: '0',
+      defaultValue: '30',
+      overridden: true,
+      publicVisible: false,
+      minValue: 0,
+      maxValue: 720,
+      allowedValues: [],
+    }
+    const thirtyItem = {
+      ...zeroItem,
+      key: 'agent.minCommentIntervalMinutes',
+      label: '评论最小间隔',
+      value: '30',
+      overridden: false,
+    }
+    mocks.listAdminSettings.mockResolvedValue([{ group: 'agent', label: 'AI 代理', items: [zeroItem, thirtyItem] }])
+    mocks.updateAdminSettings.mockResolvedValue([{ ...thirtyItem, value: '0' }])
+
+    const wrapper = mount(AdminSettingsView, { global: { stubs } })
+    await flushPromises()
+
+    // 渲染：0 不能变成空输入框
+    const zeroRow = rowOf(wrapper, 'agent.minPostIntervalMinutes')
+    expect(zeroRow.find('.el-input-number-stub').attributes('data-value')).toBe('0')
+    expect(zeroRow.find('.el-input-number-stub').attributes('data-min')).toBe('0')
+
+    // 提交：30 改成 0，草稿要记成 '0' 并原样提交
+    const thirtyRow = rowOf(wrapper, 'agent.minCommentIntervalMinutes')
+    thirtyRow.findComponent({ name: 'ElInputNumberStub' }).vm.$emit('update:modelValue', 0)
+    await flushPromises()
+
+    const saveAll = wrapper.findAll('button').find((item) => item.text().includes('保存全部'))!
+    expect(saveAll.text()).toContain('(1)')
+    await saveAll.trigger('click')
+    await flushPromises()
+    expect(mocks.updateAdminSettings).toHaveBeenCalledWith([
+      { key: 'agent.minCommentIntervalMinutes', value: '0' },
+    ])
   })
 
   it('有 CONFIG_WRITE 时不显示只读提示，改动后「保存全部」可用并显示待保存条数', async () => {

@@ -30,7 +30,8 @@ import {
   type AgentTone,
   type AgentUser,
 } from './agentApi'
-import { listAdminChannels, listAdminSettings, type AdminChannel } from './adminApi'
+import { listAdminChannels, listAdminAiModels, listAdminSettings, type AdminChannel } from './adminApi'
+import type { AiModel } from '@/api/ai'
 import { isFetchCall, isWebSearchCall, parseToolCalls, type ToolCallView } from './toolCalls'
 
 const { t } = useI18n()
@@ -90,6 +91,8 @@ const form = ref({
   displayName: '',
   bio: '',
   avatarUrl: null as string | null,
+  /** '' = 跟随平台默认（提交时转成 null） */
+  modelConfigId: '',
   status: 'ACTIVE' as AgentStatus,
   tone: 'casual' as AgentTone,
   interests: [] as string[],
@@ -102,6 +105,15 @@ const form = ref({
 
 const channels = ref<AdminChannel[]>([])
 const channelsLoading = ref(false)
+
+/** 可选模型（只列 enabled）；数据源复用后台 AI 模型列表 */
+const models = ref<AiModel[]>([])
+const modelsLoading = ref(false)
+const modelsLoaded = ref(false)
+/** 读不到模型列表（多半是缺 AI_MANAGE 权限）：下拉禁用，避免误把模型改成默认 */
+const modelsFailed = ref(false)
+/** 打开抽屉时的原始模型 id：用来判断「用户到底改没改」，没改就不下发 */
+const initialModelId = ref<string | null>(null)
 
 const runsOpen = ref(false)
 const runsAgent = ref<AgentUser | null>(null)
@@ -249,6 +261,39 @@ async function loadChannels(): Promise<void> {
   }
 }
 
+/** 模型列表只列 enabled；「跟随平台默认」是前端加的第一项，不占后端数据 */
+async function loadModels(): Promise<void> {
+  if (modelsLoaded.value) return
+  modelsLoading.value = true
+  try {
+    const items = await listAdminAiModels()
+    models.value = items.filter((item) => item.enabled)
+    modelsLoaded.value = true
+    modelsFailed.value = false
+  } catch {
+    models.value = []
+    modelsFailed.value = true
+  } finally {
+    modelsLoading.value = false
+  }
+}
+
+/** 列表里展示的模型名：没指定就说明跟随默认 */
+function modelLabel(agent: AgentUser): string {
+  return agent.modelName?.trim() || t('admin.agents.modelFollowDefaultShort')
+}
+
+/**
+ * 代理指定的模型可能已被停用（不在 enabled 列表里），
+ * 补一个只读选项，避免下拉把 26 位 id 原样显示出来。
+ */
+const orphanModel = computed(() => {
+  const id = form.value.modelConfigId
+  if (!id || !modelsLoaded.value) return null
+  if (models.value.some((model) => model.id === id)) return null
+  return { id, label: editing.value?.modelName?.trim() || id }
+})
+
 function openCreate(): void {
   createForm.value = { username: '', displayName: '', bio: '' }
   createError.value = null
@@ -282,10 +327,12 @@ async function submitCreate(): Promise<void> {
 
 async function openEdit(agent: AgentUser): Promise<void> {
   editing.value = agent
+  initialModelId.value = agent.modelConfigId ?? null
   form.value = {
     displayName: agent.displayName,
     bio: agent.bio ?? '',
     avatarUrl: agent.avatarUrl ?? null,
+    modelConfigId: agent.modelConfigId ?? '',
     status: agent.status,
     tone: agent.profile.tone,
     interests: [...agent.profile.interests],
@@ -298,6 +345,7 @@ async function openEdit(agent: AgentUser): Promise<void> {
   formError.value = null
   editOpen.value = true
   void loadChannels()
+  void loadModels()
 }
 
 function addHourRange(): void {
@@ -331,11 +379,14 @@ async function saveProfile(): Promise<void> {
     toolsEnabled: form.value.toolsEnabled,
   }
   try {
+    // 模型没改过就不下发（undefined 语义），改了才把「跟随默认」转成 null
+    const modelChanged = (form.value.modelConfigId || null) !== initialModelId.value
     const updated = await updateAdminAgent(editing.value.userId, {
       displayName: form.value.displayName.trim(),
       bio: form.value.bio.trim() || null,
       status: form.value.status,
       avatarUrl: form.value.avatarUrl,
+      modelConfigId: modelChanged ? form.value.modelConfigId || null : undefined,
       profile,
     })
     if (updated) applyAgent(updated)
@@ -573,6 +624,15 @@ onMounted(() => {
               </p>
             </template>
           </el-table-column>
+          <el-table-column :label="t('admin.agents.columnModel')" width="150">
+            <template #default="{ row }">
+              <span
+                class="agent-model"
+                :class="{ 'agent-model--default': !row.modelName }"
+                :title="modelLabel(row as AgentUser)"
+              >{{ modelLabel(row as AgentUser) }}</span>
+            </template>
+          </el-table-column>
           <el-table-column :label="t('common.status')" width="100">
             <template #default="{ row }">
               <el-tag size="small" :type="statusTagType(row.status)" effect="plain">{{ statusLabel(row.status) }}</el-tag>
@@ -682,6 +742,28 @@ onMounted(() => {
         </el-form-item>
         <el-form-item :label="t('admin.agents.bio')">
           <el-input v-model="form.bio" type="textarea" :rows="2" maxlength="200" show-word-limit />
+        </el-form-item>
+        <el-form-item :label="t('admin.agents.model')">
+          <el-select
+            v-model="form.modelConfigId"
+            :loading="modelsLoading"
+            :disabled="modelsFailed"
+            class="agent-form__full"
+          >
+            <el-option :label="t('admin.agents.modelFollowDefault')" value="" />
+            <el-option v-for="model in models" :key="model.id" :label="model.name" :value="model.id">
+              <div class="model-option">
+                <span class="model-option__name">{{ model.name }}</span>
+                <span class="model-option__code">{{ model.model }}</span>
+              </div>
+            </el-option>
+            <el-option v-if="orphanModel" :label="orphanModel.label" :value="orphanModel.id" disabled />
+          </el-select>
+          <p class="agent-form__hint">
+            <template v-if="modelsFailed">{{ t('admin.agents.modelsForbidden') }}</template>
+            <template v-else-if="modelsLoaded && models.length === 0">{{ t('admin.agents.modelsEmpty') }}</template>
+            <template v-else>{{ t('admin.agents.modelHint') }}</template>
+          </p>
         </el-form-item>
         <el-form-item :label="t('common.status')">
           <el-select v-model="form.status" class="agent-form__full">
@@ -903,6 +985,33 @@ onMounted(() => {
 
 .agent-profile-summary {
   font-size: var(--isles-font-sm);
+}
+
+.agent-model {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--isles-font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.agent-model--default {
+  color: var(--isles-text-muted);
+  font-size: var(--isles-font-xs);
+}
+
+.model-option {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.model-option__code {
+  color: var(--isles-text-muted);
+  font-family: var(--isles-font-mono, monospace);
+  font-size: 11px;
 }
 
 .agent-failure--high {
