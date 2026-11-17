@@ -192,12 +192,31 @@ async function main() {
   await api('POST', `/posts/${post.id}/like`, { token: bob.token })
   const notifyFrame = await aliceClient.next((f) => f.command === 'MESSAGE' && f.body.includes('NOTIFICATION'))
   const notifyEvent = parseEvent(notifyFrame)
+  // 严格断言（第 21 轮）：原来写成 `includes('NOTIFICATION') || data?.type`，
+  // 任意事件只要有 data.type 就能过——事件被路由到错误队列（如私信跑到通知队列）也判绿。
+  assert(notifyEvent.type === 'NOTIFICATION', `事件类型应严格等于 NOTIFICATION，实际 ${notifyEvent.type}`)
   assert(
-    String(notifyEvent.type).includes('NOTIFICATION') || notifyEvent.data?.type,
-    '通知事件应包含类型',
+    notifyEvent.data?.type === 'POST_LIKED',
+    `通知类型应为 POST_LIKED（bob 点赞 alice 的帖子），实际 ${notifyEvent.data?.type}`,
   )
-  console.log(`  ✓ 通知实时推送（type=${notifyEvent.type}）`)
+  assert(
+    notifyEvent.data?.postId === post.id,
+    `通知应指向被点赞的帖子 ${post.id}，实际 ${notifyEvent.data?.postId}`,
+  )
+  assert(
+    notifyEvent.data?.actorId === bob.id,
+    `通知的触发者应为 bob ${bob.id}，实际 ${notifyEvent.data?.actorId}`,
+  )
+  assert(notifyEvent.data?.read === false, '新推送的通知应为未读')
+  console.log(`  ✓ 通知实时推送（type=${notifyEvent.type}/${notifyEvent.data?.type}）`)
   aliceClient.close()
+
+  // 收尾：解散本脚本造的频道（之前一直没清）
+  await api('POST', `/channels/${channel.id}/dissolve`, {
+    token: alice.token,
+    expect: [204, 200, 404],
+  }).catch(() => null)
+  console.log('  ✓ 测试频道已解散')
 
   console.log('\n结果：3/3 步通过\n')
 }

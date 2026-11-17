@@ -35,7 +35,7 @@ class HttpError extends Error {
   }
 }
 
-async function api(method, path, { token, body, expect = [200] } = {}) {
+async function api(method, path, { token, body, expect = [200], raw = false } = {}) {
   const headers = { Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (token) headers.Authorization = `Bearer ${token}`
@@ -54,7 +54,30 @@ async function api(method, path, { token, body, expect = [200] } = {}) {
   if (!expect.includes(response.status)) {
     throw new HttpError(response.status, data, `${method} ${path}`)
   }
-  return data
+  return raw ? { status: response.status, data } : data
+}
+
+/**
+ * 负向用例：状态码 + 业务错误码双断言（第 21 轮加固）。
+ *
+ * <p>举报接口的 400 有两个来源：Bean Validation（`VALIDATION_ERROR`）和业务校验，
+ * 只验 400 会把「reason 被别的规则拒掉」也算通过。
+ */
+async function expectError(method, path, { token, body, status, code, messageIncludes }) {
+  const res = await api(method, path, { token, body, expect: [status], raw: true })
+  const actual = res.data?.error?.code
+  assert(
+    actual === code,
+    `${method} ${path} 期望 ${status} ${code}，实际 ${res.status} ${actual}（${JSON.stringify(res.data).slice(0, 160)}）`,
+  )
+  if (messageIncludes) {
+    const message = res.data?.error?.message ?? ''
+    assert(
+      message.includes(messageIncludes),
+      `${method} ${path} 错误信息应提到「${messageIncludes}」，实际「${message}」`,
+    )
+  }
+  return res.data
 }
 
 function assert(condition, message) {
@@ -277,26 +300,36 @@ async function main() {
     )
   })
 
-  await step('反例：把界面文案当 reason 发 → 400（当初必挂的形态必须继续被拒）', async () => {
+  await step('反例：把界面文案当 reason 发 → 400 VALIDATION_ERROR（当初必挂的形态必须继续被拒）', async () => {
     for (const label of ['垃圾广告', 'Spam', 'spam']) {
-      await api('POST', '/reports', {
+      await expectError('POST', '/reports', {
         token: reporter.token,
-        expect: [400],
+        status: 400,
+        code: 'VALIDATION_ERROR',
         body: { targetType: 'POST', targetId: posts.extra.id, reason: label },
       })
     }
+    // 判别性对照：同一帖子换成合法 reason 必须**不再是 400**（201 新建 / 409 已举报都行）。
+    // 这样「400 是因为 reason 非法」才成立——不依赖错误文案（后端目前把字段级信息丢掉了）。
+    await api('POST', '/reports', {
+      token: reporter.token,
+      expect: [201, 409],
+      body: { targetType: 'POST', targetId: posts.extra.id, reason: 'SPAM' },
+    })
   })
 
   await step('反例：targetType 非法 / targetId 不存在被拒', async () => {
-    await api('POST', '/reports', {
+    await expectError('POST', '/reports', {
       token: reporter.token,
-      expect: [400],
+      status: 400,
+      code: 'VALIDATION_ERROR',
       body: { targetType: 'CHANNEL', targetId: posts.extra.id, reason: 'SPAM' },
     })
     // 目标不存在返回 422 REPORT_TARGET_INVALID（不是 404：举报接口不泄露目标是否存在）
-    await api('POST', '/reports', {
+    await expectError('POST', '/reports', {
       token: reporter.token,
-      expect: [422],
+      status: 422,
+      code: 'REPORT_TARGET_INVALID',
       body: { targetType: 'POST', targetId: '01NOTEXIST00000000000000', reason: 'SPAM' },
     })
   })

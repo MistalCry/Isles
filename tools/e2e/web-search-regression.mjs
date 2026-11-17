@@ -54,6 +54,9 @@ const cleanup = {
   configs: new Map(),
 }
 
+/** 配额用例的计数 mock（模块级：收尾函数也要能关掉它） */
+let counting = null
+
 class HttpError extends Error {
   constructor(status, body, label) {
     super(`${status} ${label}: ${typeof body === 'string' ? body : JSON.stringify(body)}`)
@@ -264,31 +267,80 @@ async function listRuns(token, agentId, size = 20) {
   return api('GET', `/admin/agents/${agentId}/runs?page=1&size=${size}`, { token })
 }
 
-/** 队列里放一个计划 → run-now → 返回 {res, summary} */
+/** 配额用例的收尾：恢复真实 SearXNG、正常配额，并关掉计数 mock */
+async function restoreSearchConfig() {
+  try {
+    await setConfig(cleanup.adminToken, 'agent.search.provider', 'SEARXNG')
+    await setConfig(cleanup.adminToken, 'agent.search.baseUrl', SEARX_URL)
+    await setConfig(cleanup.adminToken, 'agent.search.dailyQuota', '200')
+  } catch (error) {
+    console.error(`  ! 恢复搜索配置失败：${error.message}`)
+  }
+  if (counting) {
+    try {
+      counting.server.close()
+    } catch {
+      // 已关闭
+    }
+    counting = null
+  }
+}
+
+/** 队列里放一个计划 → run-now → 返回 {res, summary, trace} */
 async function runPlan(admin, agentId, plan) {
   await clearPlans()
   await queuePlans([plan])
   const res = await api('POST', `/admin/agents/${agentId}/run-now`, { token: admin.token })
+  let trace = null
   let summary = ''
   if (res.run?.toolCallsJson) {
     try {
-      summary = JSON.parse(res.run.toolCallsJson).summary ?? ''
+      trace = JSON.parse(res.run.toolCallsJson)
+      summary = trace?.summary ?? ''
     } catch {
       summary = res.run.toolCallsJson
     }
   }
-  return { res, summary }
+  return { res, summary, trace }
 }
 
-/** 解析 summarizeSearchResults 的输出：联网搜索「q」（N 条）：\n- [engine] title | url */
+/**
+ * 搜索结果的权威来源：`tool_calls_json` 里的结构化 `results`（title 不截断、url 完整）。
+ *
+ * <p>**不要只靠解析 summary**：`AgentRuntime#stepOf` 把 summary 截到 2000 字符，
+ * 结果条数多时最后一行会断在 url 中间（第 21 轮实际踩到「声明 10 条、解析 9 条」）。
+ * summary 只用来做「文本格式 / 回显查询词」这类断言。
+ */
+function searchItems(trace, summary) {
+  if (Array.isArray(trace?.results)) {
+    return trace.results.map((item) => ({
+      title: item.title ?? '',
+      url: item.url ?? '',
+      engine: item.engine ?? '',
+    }))
+  }
+  return parseWebSummary(summary).items
+}
+
+/**
+ * 解析 summarizeSearchResults 的输出：联网搜索「q」（N 条）：\n- [engine] title | url
+ *
+ * <p>标题里可能出现 ` | `（英文标题很常见），所以分隔符要**从右往左**取：
+ * 用贪婪的 `(.*)` 让正则咬住最后一个「 | http…」。非贪婪会把这类条目整行丢掉，
+ * 表现为「声明 10 条、解析 9 条」（第 21 轮实际踩到过）。
+ */
 function parseWebSummary(summary) {
   const header = /联网搜索「([^」]*)」（(\d+) 条）/.exec(summary)
   const items = []
-  for (const line of summary.split('\n')) {
-    const match = /^- \[([^\]]*)\] (.*?) \| (https?:\/\/\S+)$/.exec(line.trim())
+  const unparsed = []
+  for (const rawLine of summary.split('\n')) {
+    const line = rawLine.trim()
+    if (!line.startsWith('- [')) continue
+    const match = /^- \[([^\]]*)\] (.*) \| (https?:\/\/\S+)$/.exec(line)
     if (match) items.push({ engine: match[1], title: match[2], url: match[3] })
+    else unparsed.push(line)
   }
-  return { query: header?.[1] ?? null, count: header ? Number(header[2]) : null, items }
+  return { query: header?.[1] ?? null, count: header ? Number(header[2]) : null, items, unparsed }
 }
 
 function normalizeUrl(url) {
@@ -337,25 +389,29 @@ function offlineReason(preflight) {
 // ---------------------------------------------------------------------------
 
 function startCountingSearxng() {
-  const state = { count: 0 }
+  // mode='empty' 时返回 0 结果，用来验证「引擎全挂 / 0 命中要退还配额」
+  const state = { count: 0, mode: 'ok' }
   const server = http.createServer((req, res) => {
     state.count += 1
     const payload = {
       query: new URL(req.url, 'http://127.0.0.1').searchParams.get('q') || '',
-      results: [
-        {
-          title: 'Mock 结果 A',
-          url: 'https://example.com/a',
-          content: '计数用 mock 返回的第一条结果',
-          engine: 'mock',
-        },
-        {
-          title: 'Mock 结果 B',
-          url: 'https://example.com/b',
-          content: '计数用 mock 返回的第二条结果',
-          engine: 'mock',
-        },
-      ],
+      results:
+        state.mode === 'empty'
+          ? []
+          : [
+              {
+                title: 'Mock 结果 A',
+                url: 'https://example.com/a',
+                content: '计数用 mock 返回的第一条结果',
+                engine: 'mock',
+              },
+              {
+                title: 'Mock 结果 B',
+                url: 'https://example.com/b',
+                content: '计数用 mock 返回的第二条结果',
+                engine: 'mock',
+              },
+            ],
     }
     const body = JSON.stringify(payload)
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
@@ -498,51 +554,90 @@ async function main() {
   // ------------------------------------------------------------------
   // A. 配额（必须最先跑：SearchQuota 是进程内计数，要求当日用量 0）
   // ------------------------------------------------------------------
-  let counting
 
-  await step('配额：dailyQuota=1 → 第一次成功、第二次明确报错且不再发请求', async () => {
+  await step('配额：provider=NONE 不扣配额 → 0 结果退还 → 真结果才计数 → 超限拒绝', async () => {
+    // 一条单调序列同时证明四件事（SearchQuota 是进程内计数，不能分段重置）：
+    //   1) provider=NONE 没有任何上游请求，配额一分不动；
+    //   2) 上游返回 0 结果时退还配额（否则代理会被「引擎全挂」白扣光）；
+    //   3) 只有真正拿到结果才计数；
+    //   4) 用尽后明确报错且不再发真实请求。
+    // 若第 1/2 段误扣，第 3 段就会直接 GUARDED —— 这正是本轮要防的回归。
     counting = await startCountingSearxng()
-    await setConfig(admin.token, 'agent.search.provider', 'SEARXNG')
+    try {
     await setConfig(admin.token, 'agent.search.baseUrl', counting.baseUrl)
     await setConfig(admin.token, 'agent.search.dailyQuota', '1')
     await setConfig(admin.token, 'agent.search.timeoutSeconds', '5')
 
-    const first = await runPlan(admin, agent.agentId, {
+    // ---- 1) provider=NONE：退回站内检索，不扣配额、不发请求
+    await setConfig(admin.token, 'agent.search.provider', 'NONE')
+    const off = await runPlan(admin, agent.agentId, {
       action: 'web_search',
-      args: { query: 'quota probe', limit: 5 },
+      args: { query: 'quota none probe', limit: 5 },
     })
-    if (first.res.status === 'GUARDED' && (first.res.reason ?? '').includes('配额已用尽')) {
+    assert(off.res.status === 'SUCCESS', `provider=NONE 不应失败，实际 ${off.res.status} ${off.res.reason ?? ''}`)
+    assert(
+      off.summary.includes('未启用'),
+      `provider=NONE 应说明「未启用，已退回站内检索」，实际「${off.summary.slice(0, 120)}」`,
+    )
+    assert(
+      counting.state.count === 0,
+      `provider=NONE 不应发出任何上游请求，实际 mock 收到 ${counting.state.count} 次`,
+    )
+
+    // ---- 2) 0 结果：发出请求但没产出 → 退还配额
+    await setConfig(admin.token, 'agent.search.provider', 'SEARXNG')
+    counting.state.mode = 'empty'
+    const empty = await runPlan(admin, agent.agentId, {
+      action: 'web_search',
+      args: { query: 'quota empty probe', limit: 5 },
+    })
+    assert(empty.res.status === 'SUCCESS', `0 结果应降级而不是失败，实际 ${empty.res.status} ${empty.res.reason ?? ''}`)
+    assert(
+      empty.summary.includes('无结果'),
+      `0 结果应说明「无结果，已退回站内检索」，实际「${empty.summary.slice(0, 120)}」`,
+    )
+    assert(counting.state.count === 1, `0 结果这次应打到 mock 1 次，实际 ${counting.state.count}`)
+
+    // ---- 3) 有结果：此时配额必须仍可用（证明前两段没白扣）
+    counting.state.mode = 'ok'
+    const hit = await runPlan(admin, agent.agentId, {
+      action: 'web_search',
+      args: { query: 'quota hit probe', limit: 5 },
+    })
+    if (hit.res.status === 'GUARDED' && (hit.res.reason ?? '').includes('配额已用尽')) {
       throw new SkipCase(
         '当前 8082 进程今天已经用过联网搜索（SearchQuota 进程内计数），配额用例无法从 0 开始；' +
           '重启 8082 后重跑即可（不是产品缺陷）',
       )
     }
-    assert(first.res.status === 'SUCCESS', `第一次搜索应成功，实际 ${first.res.status} ${first.res.reason ?? ''}`)
-    const parsed = parseWebSummary(first.summary)
-    assert(parsed.count === 2, `计数 mock 应返回 2 条，实际 ${parsed.count}`)
-    assert(counting.state.count === 1, `第一次搜索应打到 mock 1 次，实际 ${counting.state.count}`)
+    assert(hit.res.status === 'SUCCESS', `有结果时应成功，实际 ${hit.res.status} ${hit.res.reason ?? ''}`)
+    assert(hit.trace?.count === 2, `计数 mock 应返回 2 条，实际 ${hit.trace?.count}`)
+    assert(
+      (hit.trace?.results ?? []).length === 2,
+      `结构化 results 应有 2 条，实际 ${(hit.trace?.results ?? []).length}`,
+    )
+    assert(counting.state.count === 2, `有结果这次应打到 mock 第 2 次，实际 ${counting.state.count}`)
 
-    const second = await runPlan(admin, agent.agentId, {
+    // ---- 4) 超限：明确报错且不再发请求
+    const over = await runPlan(admin, agent.agentId, {
       action: 'web_search',
-      args: { query: 'quota probe 2', limit: 5 },
+      args: { query: 'quota over probe', limit: 5 },
     })
+    assert(over.res.status === 'GUARDED', `超配额应记 GUARDED，实际 ${over.res.status} ${over.res.reason ?? ''}`)
     assert(
-      second.res.status === 'GUARDED',
-      `超配额应记 GUARDED，实际 ${second.res.status} ${second.res.reason ?? ''}`,
+      (over.res.reason ?? '').includes('配额已用尽'),
+      `错误应说明配额已用尽，实际「${over.res.reason}」`,
     )
     assert(
-      (second.res.reason ?? '').includes('配额已用尽'),
-      `错误应说明配额已用尽，实际「${second.res.reason}」`,
-    )
-    assert(
-      counting.state.count === 1,
+      counting.state.count === 2,
       `超配额后不应再发出真实请求，实际 mock 收到 ${counting.state.count} 次`,
     )
 
-    // 收尾：换回真实 SearXNG 与正常配额
-    await setConfig(admin.token, 'agent.search.baseUrl', SEARX_URL)
-    await setConfig(admin.token, 'agent.search.dailyQuota', '200')
-    counting.server.close()
+    } finally {
+      // 换回真实 SearXNG 与正常配额：SkipCase / 断言失败提前退出时也必须恢复，
+      // 否则后续步骤会带着「limit=1 + mock 地址」继续跑，全变成配额用尽
+      await restoreSearchConfig()
+    }
   })
 
   // ------------------------------------------------------------------
@@ -550,25 +645,30 @@ async function main() {
   // ------------------------------------------------------------------
   await step('英文查询：results 非空、首条相关、url 不重复、≤10 条', async () => {
     if (!preflight.ok) throw new SkipCase(offlineReason(preflight))
-    const { res, summary } = await runPlan(admin, agent.agentId, {
+    const { res, summary, trace } = await runPlan(admin, agent.agentId, {
       action: 'web_search',
       args: { query: 'minecraft official site', limit: 10 },
     })
     assert(res.status === 'SUCCESS', `搜索应成功，实际 ${res.status} ${res.reason ?? ''}`)
-    const parsed = parseWebSummary(summary)
-    assert(parsed.count !== null, `summary 应包含结果条数，实际「${summary.slice(0, 120)}」`)
-    assert(parsed.count >= 1, `英文查询应有结果（部分引擎失败也算成功），实际 ${parsed.count}`)
-    assert(parsed.count <= 10, `单次最多 10 条，实际 ${parsed.count}`)
-    assert(parsed.items.length === parsed.count, `解析条数应与声明一致：${parsed.items.length} vs ${parsed.count}`)
+    const items = searchItems(trace, summary)
+    const count = trace?.count ?? items.length
+    assert(count >= 1, `英文查询应有结果（部分引擎失败也算成功），实际 ${count}`)
+    assert(count <= 10, `单次最多 10 条，实际 ${count}`)
+    assert(items.length === count, `结构化条数应与 count 一致：${items.length} vs ${count}`)
+    // 文本层：summary 必须带「联网搜索「q」（N 条）」头，模型看到的是这段
+    assert(
+      summary.startsWith('联网搜索「minecraft official site」（'),
+      `summary 头应回显查询词，实际「${summary.slice(0, 80)}」`,
+    )
 
-    const first = parsed.items[0]
+    const first = items[0]
     const haystack = `${first.title} ${first.url}`.toLowerCase()
     assert(
       haystack.includes('minecraft') || haystack.includes('mojang'),
       `首条应与查询相关，实际「${first.title} | ${first.url}」`,
     )
 
-    const urls = parsed.items.map((item) => normalizeUrl(item.url))
+    const urls = items.map((item) => normalizeUrl(item.url))
     assert(new Set(urls).size === urls.length, `同一 url 不应重复，实际 ${urls.length} 条中 ${new Set(urls).size} 个唯一`)
   })
 
@@ -577,45 +677,53 @@ async function main() {
   // ------------------------------------------------------------------
   await step('中文查询：UTF-8 编码正确、首条相关（不能搜成汾酒）', async () => {
     if (!preflight.ok) throw new SkipCase(offlineReason(preflight))
-    const { res, summary } = await runPlan(admin, agent.agentId, {
+    const { res, summary, trace } = await runPlan(admin, agent.agentId, {
       action: 'web_search',
       args: { query: '我的世界', limit: 10 },
     })
     assert(res.status === 'SUCCESS', `中文搜索应成功，实际 ${res.status} ${res.reason ?? ''}`)
-    const parsed = parseWebSummary(summary)
-    assert(parsed.count >= 1, `中文查询应有结果，实际 ${parsed.count}`)
-    assert(parsed.query === '我的世界', `summary 回显的查询词应是「我的世界」，实际「${parsed.query}」`)
+    const items = searchItems(trace, summary)
+    const count = trace?.count ?? items.length
+    assert(count >= 1, `中文查询应有结果，实际 ${count}`)
+    // 回显查询词：结构化 query 与 summary 头都要是「我的世界」
+    assert(trace?.query === '我的世界', `结构化 query 应是「我的世界」，实际「${trace?.query}」`)
+    assert(
+      summary.startsWith('联网搜索「我的世界」（'),
+      `summary 头应回显「我的世界」，实际「${summary.slice(0, 80)}」`,
+    )
 
     // GBK 乱码特征只看**标题**：URL 里的 %XX 是正常的 UTF-8 百分号编码（如维基百科条目地址），
     // 拿整段 summary 匹配会误报。标题里连续 3 段以上百分号转义才是编码事故。
-    const mojibake = parsed.items.filter((item) => /%[0-9A-F]{2}(%[0-9A-F]{2}){2,}/i.test(item.title))
+    const mojibake = items.filter((item) => /%[0-9A-F]{2}(%[0-9A-F]{2}){2,}/i.test(item.title))
     assert(
       mojibake.length === 0,
       `标题出现百分号转义（GBK 编码回归特征）：「${mojibake[0]?.title}」`,
     )
     assert(!summary.includes('汾酒'), '搜到「汾酒」说明中文查询被按 GBK 编码发出（编码回归）')
 
-    const first = parsed.items[0]
+    const first = items[0]
     const haystack = `${first.title} ${first.url}`.toLowerCase()
     assert(
       haystack.includes('我的世界') || haystack.includes('minecraft') || haystack.includes('mc.163'),
       `中文首条应相关（我的世界 / Minecraft），实际「${first.title} | ${first.url}」`,
     )
     // 相关性再收紧一层：不只首条，前 10 条里至少要有 2 条明确提到「我的世界」
-    const relevant = parsed.items.filter((item) => `${item.title} ${item.url}`.toLowerCase().includes('我的世界'))
-    assert(relevant.length >= 2, `前 ${parsed.items.length} 条里提到「我的世界」的应 ≥2 条，实际 ${relevant.length}`)
+    const relevant = items.filter((item) => `${item.title} ${item.url}`.toLowerCase().includes('我的世界'))
+    assert(relevant.length >= 2, `前 ${items.length} 条里提到「我的世界」的应 ≥2 条，实际 ${relevant.length}`)
   })
 
   await step('结果上限与去重：高结果量查询仍 ≤10 条且 url 唯一', async () => {
     if (!preflight.ok) throw new SkipCase(offlineReason(preflight))
-    const { res, summary } = await runPlan(admin, agent.agentId, {
+    const { res, summary, trace } = await runPlan(admin, agent.agentId, {
       action: 'web_search',
       args: { query: 'minecraft', limit: 10 },
     })
     assert(res.status === 'SUCCESS', `搜索应成功，实际 ${res.status} ${res.reason ?? ''}`)
-    const parsed = parseWebSummary(summary)
-    assert(parsed.count <= 10, `单次最多 10 条，实际 ${parsed.count}`)
-    const urls = parsed.items.map((item) => normalizeUrl(item.url))
+    const items = searchItems(trace, summary)
+    const count = trace?.count ?? items.length
+    assert(count <= 10, `单次最多 10 条，实际 ${count}`)
+    assert(items.length === count, `结构化条数应与 count 一致：${items.length} vs ${count}`)
+    const urls = items.map((item) => normalizeUrl(item.url))
     assert(new Set(urls).size === urls.length, `url 应唯一，实际 ${urls.length} 条中 ${new Set(urls).size} 个唯一`)
   })
 

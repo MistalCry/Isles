@@ -413,25 +413,39 @@ async function main() {
     await api('POST', `/voice-rooms/${room.id}/join`, { token: outsider.token, expect: [403] })
   })
 
-  await step('语音房：并发抢同一麦位，只有一个成功', async () => {
-    const attempts = await Promise.all([
+  await step('语音房：并发抢同一麦位，只有一个成功且失败方是 VOICE_SEAT_OCCUPIED', async () => {
+    // 不再用 `expect: [200, 409]` 把失败方吞掉：那样只统计成功数，
+    // 失败原因变成 500 或别的 409 也照样判绿（第 21 轮加固）
+    const attempts = await Promise.allSettled([
       api('POST', `/voice-rooms/${room.id}/seats`, {
         token: owner.token,
-        expect: [200, 409],
+        expect: [200],
         body: { seatIndex: 0 },
       }),
       api('POST', `/voice-rooms/${room.id}/seats`, {
         token: member.token,
-        expect: [200, 409],
+        expect: [200],
         body: { seatIndex: 0 },
       }),
     ])
-    const ok = attempts.filter((item) => item && item.seats)
-    // 只有一个请求拿到 RoomView（另一个抛 409 被 expect 接受，返回 undefined）
+    const ok = attempts.filter((item) => item.status === 'fulfilled')
+    const failed = attempts.filter((item) => item.status === 'rejected')
     assert(ok.length === 1, `同一麦位应只有一个成功，实际 ${ok.length} 个成功`)
+    assert(failed.length === 1, `应恰好一个请求被拒，实际 ${failed.length} 个`)
+    const loser = failed[0].reason
+    assert(loser?.status === 409, `失败方应为 409，实际 ${loser?.status} ${loser?.message?.slice(0, 120)}`)
+    assert(
+      loser?.body?.error?.code === 'VOICE_SEAT_OCCUPIED',
+      `失败方错误码应为 VOICE_SEAT_OCCUPIED，实际 ${loser?.body?.error?.code}`,
+    )
+    const winner = ok[0].value
     const detail = await api('GET', `/voice-rooms/${room.id}`)
     const seat0 = (detail.seats ?? []).find((seat) => seat.seatIndex === 0)
     assert(seat0?.userId, '麦位 0 应被占用')
+    assert(
+      seat0.userId === winner.seats?.find((seat) => seat.seatIndex === 0)?.userId,
+      '麦位上的人应是抢座成功的那位',
+    )
   })
 
   await step('语音房：静音与下麦', async () => {

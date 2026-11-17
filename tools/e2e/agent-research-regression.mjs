@@ -8,7 +8,7 @@
  *   B. researchFirst=true：一次 run-now 的 tool_calls_json 必须有 research.web_search，
  *      且结构化 count 与 results.length 一致、results 含 title/url/engine/snippet；
  *      产出提示词里真的注入了素材（mock 侧 materialUrls），帖子正文与素材同源。
- *   C. researchFirst=false：退回单轮产出（tool_calls_json.research 为空、只 1 次模型调用）。
+ *   C. researchFirst=false：省掉研究阶段的模型调用（只 1 次 compose），但仍会兜底补一次 web_search。
  *   D. 禁止编造 postId：comment 指向不存在的 postId → GUARDED「postId 不在本轮可见列表内」，且不写库。
  *
  * 前置：
@@ -557,7 +557,7 @@ async function main() {
   // ------------------------------------------------------------------
   // C. researchFirst=false：退回单轮
   // ------------------------------------------------------------------
-  await step('researchFirst=false：退回单轮产出（无 web_search、只 1 次模型调用）', async () => {
+  await step('researchFirst=false：省掉研究阶段模型调用，但仍兜底补一次搜索', async () => {
     await setConfig(admin.token, 'agent.researchFirst', 'false')
     shiftPostRunsBack(agent.agentId)
     await clearMockRequests()
@@ -581,16 +581,39 @@ async function main() {
 
     const trace = parseTrace(res.run)
     const researchSteps = Array.isArray(trace?.research) ? trace.research : []
-    assert(researchSteps.length === 0, `关掉强制研究后 research 应为空，实际 ${researchSteps.length} 步`)
+    // 第 21 轮后端契约变更（commit「研究阶段强制补搜与空素材兜底」）：
+    // 关掉 researchFirst 只省掉「让模型决定研究什么」这一次调用；没搜过时仍会**兜底补一次**
+    // web_search，保证产出阶段一定有外部素材。所以 research 最多只有这 1 步兜底。
     assert(
-      !JSON.stringify(trace).includes('"web_search"'),
-      '关掉强制研究后不应出现 web_search',
+      researchSteps.length <= 1,
+      `关掉强制研究后最多只有 1 步兜底补搜，实际 ${researchSteps.length} 步`,
     )
+    if (researchSteps.length === 1) {
+      assert(
+        researchSteps[0].action === 'web_search',
+        `兜底补搜应是 web_search，实际 ${researchSteps[0].action}`,
+      )
+    }
 
     const requests = await mockRequests()
-    assert(requests.length === 1, `单轮应只调用 1 次模型，实际 ${requests.length} 次`)
+    assert(requests.length === 1, `单轮应只调用 1 次模型（省掉研究阶段），实际 ${requests.length} 次`)
     assert(requests[0].agentPhase === 'compose', '单轮调用应直接进入产出阶段')
-    assert(requests[0].materialCount === 0, `无研究时素材应为空，实际 ${requests[0].materialCount}`)
+    assert(
+      !requests.some((item) => item.agentPhase === 'research'),
+      '关掉强制研究后不应出现研究阶段的模型调用',
+    )
+
+    // 兜底搜索真的拿到结果时，素材必须注入产出提示词（否则「有素材」只是自说自话）
+    const fallbackStep = researchSteps[0]
+    const gotResults = typeof fallbackStep?.count === 'number' && fallbackStep.count > 0
+    if (gotResults) {
+      assert(
+        requests[0].materialCount > 0,
+        `兜底补搜的素材应注入产出提示词，实际 materialCount=${requests[0].materialCount}`,
+      )
+    } else {
+      console.log('      ! 兜底补搜未拿到结果（联网不可用），跳过「素材注入」断言')
+    }
   })
 
   // ------------------------------------------------------------------

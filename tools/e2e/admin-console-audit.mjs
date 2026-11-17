@@ -70,6 +70,25 @@ async function apiRaw(method, path, { token, body, expect = [200], headers: extr
   return { status: response.status, data, headers: response.headers, text }
 }
 
+/**
+ * 负向用例：状态码 + 业务错误码双断言（第 21 轮加固）。
+ *
+ * <p>后台越权/状态机用例原来只写 `expect: [403]`，权限点写错、403 换成 400 都判绿。
+ */
+async function expectError(method, path, { token, body, status, code, messageIncludes }) {
+  const res = await apiRaw(method, path, { token, body, expect: [status] })
+  const actual = res.data?.error?.code
+  assert(
+    actual === code,
+    `${method} ${path} 期望 ${status} ${code}，实际 ${res.status} ${actual}（${JSON.stringify(res.data).slice(0, 160)}）`,
+  )
+  if (messageIncludes) {
+    const message = res.data?.error?.message ?? ''
+    assert(message.includes(messageIncludes), `${method} ${path} 错误信息应提到「${messageIncludes}」，实际「${message}」`)
+  }
+  return res.data
+}
+
 async function api(method, path, options = {}) {
   const { data } = await apiRaw(method, path, options)
   return data
@@ -432,8 +451,12 @@ async function main() {
     const groups = await adminSettings(admin.token)
     assert(findSetting(groups, 'site.name').overridden === false, '处置不应污染配置')
 
-    await api('GET', `/posts/${reportPost.id}`, { expect: [404] })
-    await api('GET', `/posts/${reportPost.id}`, { token: author.token, expect: [404] })
+    await expectError('GET', `/posts/${reportPost.id}`, { status: 404, code: 'POST_NOT_FOUND' })
+    await expectError('GET', `/posts/${reportPost.id}`, {
+      token: author.token,
+      status: 404,
+      code: 'POST_NOT_FOUND',
+    })
     const feed = await api('GET', `/channels/${channel.id}/posts?limit=20`)
     assert(!(feed.items ?? []).some((item) => item.id === reportPost.id), '下架后频道流不应出现该帖')
   })
@@ -583,9 +606,12 @@ async function main() {
   await step('权限：MODERATOR 改配置返回 403（读配置仍允许）', async () => {
     const groups = await adminSettings(moderator.token)
     assert(findSetting(groups, 'site.name'), 'MODERATOR 应可读配置（CONFIG_READ）')
-    await api('PUT', '/admin/config/site.name', {
+    await expectError('PUT', '/admin/config/site.name', {
       token: moderator.token,
-      expect: [403],
+      status: 403,
+      code: 'FORBIDDEN',
+      // 错误信息用的是权限中文名（「需要平台权限：修改平台配置」），不是枚举名
+      messageIncludes: '平台权限',
       body: { value: '不该生效的名字' },
     })
     const publicAfter = await publicConfig()
@@ -593,19 +619,20 @@ async function main() {
   })
 
   await step('权限：MODERATOR 不能授权管理员、不能看管理员列表', async () => {
-    await api('POST', '/admin/admins', {
+    await expectError('POST', '/admin/admins', {
       token: moderator.token,
-      expect: [403],
+      status: 403,
+      code: 'FORBIDDEN',
       body: { userId: reporter.id, role: 'VIEWER' },
     })
-    await api('GET', '/admin/admins', { token: moderator.token, expect: [403] })
+    await expectError('GET', '/admin/admins', { token: moderator.token, status: 403, code: 'FORBIDDEN' })
   })
 
   await step('权限：撤销 MODERATOR 后立即失去后台访问（缓存失效）', async () => {
     await api('DELETE', `/admin/admins/${moderator.id}`, { token: admin.token, expect: [204] })
     cleanup.moderatorUserId = null
     // 后台接口 403
-    await api('GET', '/admin/reports', { token: moderator.token, expect: [403] })
+    await expectError('GET', '/admin/reports', { token: moderator.token, status: 403, code: 'FORBIDDEN' })
     // /admin/me 对任意登录用户可用（前端探测后台入口），撤销后应回落为 admin=false
     const me = await api('GET', '/admin/me', { token: moderator.token })
     assert(me.admin === false, `撤销后 /admin/me 应返回 admin=false，实际 ${me.admin}`)
@@ -642,9 +669,11 @@ async function main() {
   })
 
   await step('公告：已发布直接删除返回 422（必须先归档）', async () => {
-    await api('DELETE', `/admin/announcements/${cleanup.announcementId}`, {
+    await expectError('DELETE', `/admin/announcements/${cleanup.announcementId}`, {
       token: admin.token,
-      expect: [422],
+      status: 422,
+      code: 'BUSINESS_RULE_VIOLATION',
+      messageIncludes: '归档',
     })
     const publicList = await api('GET', '/platform/announcements')
     assert((publicList.items ?? []).some((item) => item.id === cleanup.announcementId),

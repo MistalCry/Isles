@@ -16,7 +16,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(`断言失败：${message}`)
 }
 
-async function api(method, path, { token, body, expect = [200] } = {}) {
+async function api(method, path, { token, body, expect = [200], raw = false } = {}) {
   const headers = { Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (token) headers.Authorization = `Bearer ${token}`
@@ -35,8 +35,25 @@ async function api(method, path, { token, body, expect = [200] } = {}) {
   if (!expect.includes(response.status)) {
     throw new Error(`期望 ${expect} 实际 ${response.status} ${method} ${path} → ${text.slice(0, 160)}`)
   }
-  return data
+  return raw ? { status: response.status, data } : data
 }
+
+/**
+ * 负向用例：状态码 + 业务错误码双断言（第 21 轮加固）。
+ * 只验状态码会让「403 换成 400」「错误码重构」都判绿。
+ */
+async function expectError(method, path, { token, body, status, code }) {
+  const res = await api(method, path, { token, body, expect: [status], raw: true })
+  const actual = res.data?.error?.code
+  assert(
+    actual === code,
+    `${method} ${path} 期望 ${status} ${code}，实际 ${res.status} ${actual}（${JSON.stringify(res.data).slice(0, 160)}）`,
+  )
+  return res.data
+}
+
+/** 本脚本造的频道（收尾统一解散） */
+const createdChannels = []
 
 async function step(name, fn) {
   try {
@@ -71,6 +88,7 @@ async function main() {
     expect: [201],
     body: { name: `Feature ${suffix()}`, avatarUrl: '/uploads/default-avatar.png', type: 'PUBLIC' },
   })
+  createdChannels.push({ id: channel.id, token: owner.token })
   await api('POST', `/channels/${channel.id}/join`, { token: member.token })
   const boards = await api('GET', `/channels/${channel.id}/boards`)
   const defaultBoard = boards.items[0]
@@ -145,9 +163,10 @@ async function main() {
     const afterReorder = await api('GET', `/channels/${channel.id}/boards`)
     assert(afterReorder.items[0].id === extra.id, '排序后首个板块应为指定板块')
     await api('DELETE', `/channels/${channel.id}/boards/${extra.id}`, { token: owner.token, expect: [204] })
-    await api('DELETE', `/channels/${channel.id}/boards/${defaultBoard.id}`, {
+    await expectError('DELETE', `/channels/${channel.id}/boards/${defaultBoard.id}`, {
       token: owner.token,
-      expect: [422],
+      status: 422,
+      code: 'LAST_BOARD_CANNOT_DELETE',
     })
   })
 
@@ -155,9 +174,10 @@ async function main() {
     const roles = (await api('GET', `/channels/${channel.id}/roles`, { token: owner.token })).items
     const ownerRole = roles.find((role) => role.system && role.name.includes('频道主'))
     assert(ownerRole, '应存在频道主系统身份组')
-    await api('DELETE', `/channels/${channel.id}/roles/${ownerRole.id}`, {
+    await expectError('DELETE', `/channels/${channel.id}/roles/${ownerRole.id}`, {
       token: owner.token,
-      expect: [403],
+      status: 403,
+      code: 'SYSTEM_ROLE_PROTECTED',
     })
     // 给成员一个只有「发帖」的自定义身份组，再让他尝试创建含 channel.dissolve 的身份组
     const limited = await api('POST', `/channels/${channel.id}/roles`, {
@@ -165,22 +185,29 @@ async function main() {
       expect: [201],
       body: { name: `Limited ${suffix()}`, permissions: ['post.create'] },
     })
-    await api('POST', `/channels/${channel.id}/members/${member.id}/role`, {
-      token: owner.token,
-      body: { roleId: limited.id },
-    })
-    await api('POST', `/channels/${channel.id}/roles`, {
-      token: member.token,
-      expect: [403],
-      body: { name: `Escalate ${suffix()}`, permissions: ['channel.dissolve'] },
-    })
-    // 恢复为普通成员身份组，避免影响后续「评论触发通知」场景
+    // 先把成员降级成「只有发帖」的身份组，再验证他不能建高权限身份组。
+    // 用 try/finally 保证无论断言是否失败都恢复成普通成员——否则后续「评论/通知」场景全 403。
     const memberRole = roles.find((role) => role.system && role.name.includes('普通成员'))
-    if (memberRole) {
+    try {
       await api('POST', `/channels/${channel.id}/members/${member.id}/role`, {
         token: owner.token,
-        body: { roleId: memberRole.id },
+        body: { roleId: limited.id },
       })
+      // 当前 fixture 里成员只有 post.create，连 role.manage 都没有 → 先被权限位拦成 FORBIDDEN。
+      // 「越权授予（有 role.manage 但没 channel.dissolve）」需要另一套身份组 fixture，见第 20 轮审查清单。
+      await expectError('POST', `/channels/${channel.id}/roles`, {
+        token: member.token,
+        status: 403,
+        code: 'FORBIDDEN',
+        body: { name: `Escalate ${suffix()}`, permissions: ['channel.dissolve'] },
+      })
+    } finally {
+      if (memberRole) {
+        await api('POST', `/channels/${channel.id}/members/${member.id}/role`, {
+          token: owner.token,
+          body: { roleId: memberRole.id },
+        }).catch(() => null)
+      }
     }
   })
 
@@ -190,6 +217,7 @@ async function main() {
       expect: [201],
       body: { name: `Other ${suffix()}`, avatarUrl: '/uploads/default-avatar.png', type: 'PUBLIC' },
     })
+    createdChannels.push({ id: other.id, token: owner.token })
     const otherBoards = await api('GET', `/channels/${other.id}/boards`)
     const otherPost = await api('POST', `/channels/${other.id}/posts`, {
       token: owner.token,
@@ -251,10 +279,20 @@ async function main() {
       body: { boardId: defaultBoard.id, content: 'member own post', contentFormat: 'PLAIN' },
     })
     // 无 post.delete 权限的普通成员不能删除他人帖子（频道主属管理员，允许删除）
-    await api('DELETE', `/posts/${ownPost.id}`, { token: bystander.token, expect: [403] })
+    await expectError('DELETE', `/posts/${ownPost.id}`, {
+      token: bystander.token,
+      status: 403,
+      code: 'FORBIDDEN',
+    })
     await api('DELETE', `/posts/${ownPost.id}`, { token: member.token, expect: [204] })
-    await api('GET', `/posts/${ownPost.id}`, { expect: [404] })
+    await expectError('GET', `/posts/${ownPost.id}`, { status: 404, code: 'POST_NOT_FOUND' })
   })
+
+  // 收尾：解散本脚本造的频道
+  for (const { id, token } of createdChannels) {
+    await api('POST', `/channels/${id}/dissolve`, { token, expect: [204, 200, 404] }).catch(() => null)
+  }
+  if (createdChannels.length > 0) console.log(`  ✓ 已解散测试频道 ${createdChannels.length} 个`)
 
   const passed = results.filter((item) => item.ok).length
   console.log(`\n结果：${passed}/${results.length} 步通过\n`)

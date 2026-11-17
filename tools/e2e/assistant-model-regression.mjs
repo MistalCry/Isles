@@ -13,10 +13,38 @@
  * 这属于环境问题而不是用例问题。
  */
 
+import { execFileSync } from 'node:child_process'
+
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:8080/api/v1'
 const MOCK_URL = (process.env.MOCK_URL || 'http://127.0.0.1:1235').replace(/\/$/, '')
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin_demo'
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Passw0rd123'
+
+const DB = {
+  host: process.env.E2E_DB_HOST || '127.0.0.1',
+  port: process.env.E2E_DB_PORT || '3306',
+  name: process.env.E2E_DB_NAME || 'my_social_channel',
+  user: process.env.E2E_DB_USERNAME || 'isles_app',
+  password: process.env.E2E_DB_PASSWORD || 'IslesDev2026a7',
+}
+
+/**
+ * 清理本脚本造的任务日志。频道解散后接口读不到这些行，只能走库；
+ * 没有 mysql 客户端时只警告，不判失败（本脚本的核心断言不依赖数据库）。
+ */
+function deleteTaskLogs(channelId) {
+  try {
+    execFileSync(
+      'mysql',
+      ['-h', DB.host, '-P', DB.port, '-u', DB.user, `-p${DB.password}`, DB.name, '-N', '-B',
+        '-e', `DELETE FROM ai_task_logs WHERE channel_id='${channelId}'`],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    )
+    console.log(`  ✓ 任务日志已清理 ${channelId}`)
+  } catch (error) {
+    console.error(`  ! 清理任务日志失败（缺 mysql 客户端？）：${String(error.message).split('\n')[0]}`)
+  }
+}
 
 const results = []
 const cleanup = { modelId: null, channelId: null, ownerToken: null }
@@ -88,6 +116,27 @@ function suffix() {
   return `${Date.now().toString(36)}${Math.floor(Math.random() * 1000)}`
 }
 
+/**
+ * 解析「平台默认模型」——镜像 `AiModelConfigService#resolveDefault()` 的取法：
+ * 先取 enabled && isDefault 的第一条，否则取 enabled 里 createdAt/id 最小的那条。
+ *
+ * <p>用于把「回落默认」从 `!== 被禁用模型` 收紧成 `=== 具体默认模型`（第 21 轮）：
+ * 原来的写法在 modelConfigId 为 null/空时也能过。
+ */
+async function resolvePlatformDefaultModel(token) {
+  const list = await api('GET', '/admin/ai/models', { token })
+  const enabled = (list.items ?? []).filter((item) => item.enabled === true)
+  if (enabled.length === 0) return null
+  const explicit = enabled.find((item) => item.isDefault === true)
+  if (explicit) return explicit
+  return enabled.slice().sort((a, b) => {
+    const ta = a.createdAt ?? ''
+    const tb = b.createdAt ?? ''
+    if (ta !== tb) return ta < tb ? -1 : 1
+    return String(a.id) < String(b.id) ? -1 : 1
+  })[0]
+}
+
 function modelPayload(overrides = {}) {
   return {
     baseUrl: `${MOCK_URL}/v1`,
@@ -116,6 +165,10 @@ async function resetMockRequests() {
 
 async function runCleanup() {
   console.log('\n清理：')
+  if (cleanup.channelId) {
+    deleteTaskLogs(cleanup.channelId)
+  }
+
   if (cleanup.channelId && cleanup.ownerToken) {
     try {
       await api('POST', `/channels/${cleanup.channelId}/dissolve`, {
@@ -255,6 +308,11 @@ async function main() {
   })
 
   await step('模型被禁用后回落平台默认，任务不失败', async () => {
+    const defaultModel = await resolvePlatformDefaultModel(admin.token)
+    if (!defaultModel) {
+      throw new SkipCase('平台没有任何启用的模型，无法验证「回落默认」')
+    }
+    assert(defaultModel.id !== model.id, '平台默认模型不应是即将被禁用的临时模型')
     await api('PUT', `/admin/ai/models/${model.id}`, {
       token: admin.token,
       body: { name: model.name, ...modelPayload({ enabled: false }) },
@@ -278,12 +336,16 @@ async function main() {
       requests.length === 0,
       `已禁用的模型不应再被调用，实际仍收到 ${requests.length} 次请求`,
     )
-    // 日志要如实记录「实际用的是默认模型」，而不是仍写着频道里那个已禁用的 id
+    // 日志要如实记录「实际用的是默认模型」，且必须是那个具体模型——
+    // 原来只写 `!== 被禁用 id`，字段为 null 也能过（第 21 轮收紧）
     assert(
-      taskLog.modelConfigId !== model.id,
-      `回落默认后日志不应再记录被禁用的模型 ${model.id}`,
+      taskLog.modelConfigId === defaultModel.id,
+      `回落默认后日志应记录平台默认模型 ${defaultModel.id}（${defaultModel.name}），实际 ${taskLog.modelConfigId}`,
     )
-    assert(Boolean(taskLog.model), '回落默认后日志仍应记录模型名')
+    assert(
+      taskLog.model === defaultModel.model,
+      `回落默认后日志的模型名应为 ${defaultModel.model}，实际 ${taskLog.model}`,
+    )
     assert(
       taskLog.model !== 'mock-chat',
       `回落默认后日志的模型名不应是 mock-chat，实际 ${taskLog.model}`,

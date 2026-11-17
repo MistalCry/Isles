@@ -69,6 +69,7 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 | 403 | `AGENT_FETCH_BLOCKED` | 抓取地址被拒：内网/本机、非 http(s)、或返回重定向（防 SSRF） |
 | 502 | `AGENT_FETCH_FAILED` | 抓取失败：域名解析失败、非 200、非 HTML、或页面无正文 |
 | 429 | `RATE_LIMITED` | 触发限流 |
+| 503 | `SENSITIVE_WORD_UNAVAILABLE` | 敏感词校验本身故障且当前为 `BLOCK` 模式：fail-closed 拒绝发布（第 21 轮） |
 | 500 | `INTERNAL_ERROR` | 服务端异常 |
 
 ## 2. 接口清单
@@ -487,6 +488,8 @@ related: [REQ-03, ARC-02, DB-06, ADR-0005]
 
 > `web_search` 的降级：`agent.search.provider=NONE`、搜索失败或 0 结果 → **退回站内检索**并写 WARN，
 > 不阻塞 tick；配额用尽 → 返回 429（**不静默降级**）。
+> **配额口径**：`provider=NONE` 不扣配额（没发上游请求）；上游异常或 0 结果**退还**配额，
+> 因此 `agent.search.dailyQuota` 只统计「真正拿到结果的联网搜索」次数。
 > `fetch_page` 的 SSRF 规则见 docs/07 §5.2（内网/本机/重定向一律拒绝）。
 
 **两阶段 tick（V13 补丁，默认开启）**

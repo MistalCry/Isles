@@ -17,9 +17,11 @@
 | `ai-tools-regression.mjs` | AI 工具调用：模型要工具→检索→二轮回答、sources 与落库一致、0 命中发空数组、非工具模式同样下发 sources、不支持 tools 时降级 | 7 步 |
 | `content-regression.mjs` | 内容链路：浏览量去重（作者/30 分钟/换账号）、敏感词 REVIEW/MASK/BLOCK、搜索 coverUrl 与首图 | 10 步 |
 | `apps-regression.mjs` | 频道应用 CRUD/排序、语音房抢座与 STOMP 信令（含非成员/关房拒绝）、活动报名/上限/提醒幂等、频道解散级联清理 | 21 步 |
-| `web-search-regression.mjs` | AI 代理联网搜索：配额（含不发真实请求）、中英文查询与 UTF-8、去重与 ≤10 条、降级、SSRF、搜到→发帖 | 9 步 |
+| `web-search-regression.mjs` | AI 代理联网搜索：配额四段（NONE 不扣 / 0 结果退还 / 有结果计数 / 超限拒绝）、中英文查询与 UTF-8、去重与 ≤10 条、降级、SSRF、搜到→发帖 | 9 步 |
+| `wordfilter-failclosed.mjs` | 敏感词 fail-closed：BLOCK + 词库查询异常 → 503 且不落库、恢复后可发布 | 4 步 |
+| `ai-task-dissolve.mjs` | 频道助手定时任务：解散后设置关闭、任务日志不再新增（含存活频道对照组） | 4 步 |
 | `agent-model-interval-regression.mjs` | 模型与间隔：minPostIntervalMinutes 0/60 与即时生效、per-agent 模型对账、禁用模型回落、不存在模型 422 | 7 步 |
-| `agent-research-regression.mjs` | 两阶段 tick：资料同步（avatarUrl/nickname）、researchFirst 必搜与素材注入、单轮回退、编造 postId 被拒 | 6 步 |
+| `agent-research-regression.mjs` | 两阶段 tick：资料同步（avatarUrl/nickname）、researchFirst 必搜与素材注入、关掉后省掉研究阶段调用（仍兜底补搜）、编造 postId 被拒 | 7 步 |
 | `agent-regression.mjs` | AI 代理：run-now 产出与 AI 标识、AI 标识字段（代理 true / 真人 false）、日上限、话题去重、暂停、总开关、无模型降级、运行日志回放（`AGENT_TICK_MODE=1` 测调度） | 11 步 / 调度 5 步 |
 | `user-ai-regression.mjs` | 我的帖子过滤、助手多会话隔离、无视觉模型带图降级 | 6 步 |
 | `assistant-model-regression.mjs` | 助手模型：频道指定模型生效、任务日志记录模型 id、模型禁用后回落默认 | 4 步 |
@@ -53,6 +55,12 @@ AGENT_TICK_MODE=1 node tools/e2e/agent-regression.mjs
 
 # 联网搜索（需要 SearXNG + mock-openai，且 8082 刚启动）
 node tools/e2e/web-search-regression.mjs
+
+# 敏感词 fail-closed（会临时改名 sensitive_words，跑完自动改回）
+node tools/e2e/wordfilter-failclosed.mjs
+
+# 频道助手定时任务（8082 需 --app.ai.task-cron=0/10 * * * * *）
+node tools/e2e/ai-task-dissolve.mjs
 
 # 两阶段 tick（需要 SearXNG + mock-openai；不依赖配额计数）
 node tools/e2e/agent-research-regression.mjs
@@ -91,6 +99,12 @@ AGENT_TICK_MODE=1 node tools/e2e/agent-regression.mjs
 # 联网搜索（需要 SearXNG + mock-openai，且 8082 刚启动）
 node tools/e2e/web-search-regression.mjs
 
+# 敏感词 fail-closed（会临时改名 sensitive_words，跑完自动改回）
+node tools/e2e/wordfilter-failclosed.mjs
+
+# 频道助手定时任务（8082 需 --app.ai.task-cron=0/10 * * * * *）
+node tools/e2e/ai-task-dissolve.mjs
+
 # 两阶段 tick（需要 SearXNG + mock-openai；不依赖配额计数）
 node tools/e2e/agent-research-regression.mjs
 
@@ -122,6 +136,13 @@ isles.bat admin <用户名>
   因此「帖子正文与素材同源」可以硬断言（不是写死文本）。
 - `agent-regression.mjs` / `web-search-regression.mjs` 会显式把 `agent.twoPhaseEnabled` 置 false（它们验的是单轮闸门），
   收尾按快照还原。
+
+## 断言约定（第 21 轮）
+
+- **负向用例双断言**：状态码 + `error.code`。只验状态码会让「403 换成 400/404」「权限点写错」判绿。
+- **条数/去重读结构化字段**：`tool_calls_json.summary` 被截到 2000 字符，结果多时最后一行会断在 url 中间；
+  用 `count` / `results` 断言，summary 只用于「文本格式 / 查询词回显」。
+- **脚本自造频道必须收尾解散**（`permissions-audit` / `feature-audit` / `realtime-check` 已补）。
 
 ## 联网搜索脚本的前置条件
 

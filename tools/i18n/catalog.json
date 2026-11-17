@@ -6970,5 +6970,17 @@
   "admin.agents.modelsForbidden": [
     "读不到模型列表（需要 AI 模型管理权限），本次保存不会改动模型。",
     "Cannot read the model list (needs AI model permission); saving will not change the model."
+  ],
+  "admin.agents.searchNoBaseUrl": [
+    "联网搜索：已启用但未填地址",
+    "Web search: enabled but no base URL"
+  ],
+  "admin.agents.searchNoBaseUrlHint": [
+    "provider 选了 SearXNG，但 agent.search.baseUrl 为空，代理仍会退回站内检索",
+    "Provider is SearXNG but agent.search.baseUrl is empty; agents still fall back to on-site search."
+  ],
+  "post.uploadingWait": [
+    "图片还在上传，请稍候再发布",
+    "Images are still uploading, please wait."
   ]
 }

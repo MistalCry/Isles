@@ -39,6 +39,22 @@ async function api(method, path, { token, body, expect = [200], raw = false } = 
   return raw ? { status: response.status, data, response } : data
 }
 
+/**
+ * 负向用例：既断言 HTTP 状态码，也断言业务错误码。
+ *
+ * <p>只验状态码（第 20 轮审查结论）会让「403 换成 400/404」「权限点写错」都判绿；
+ * 越权脚本尤其需要错误码，否则边界收窄/放宽都发现不了。
+ */
+async function expectError(method, path, { token, body, status, code }) {
+  const res = await api(method, path, { token, body, expect: [status], raw: true })
+  const actual = res.data?.error?.code
+  assert(
+    actual === code,
+    `${method} ${path} 期望 ${status} ${code}，实际 ${res.status} ${actual}（${JSON.stringify(res.data).slice(0, 160)}）`,
+  )
+  return res.data
+}
+
 async function step(name, fn) {
   try {
     await fn()
@@ -62,6 +78,9 @@ async function newUser(prefix) {
   return { username, password, id: login.user.id, token: login.accessToken }
 }
 
+/** 本脚本造的频道（收尾统一解散，避免 dev 库越跑越多测试频道） */
+const createdChannels = []
+
 async function createChannel(owner, { type = 'PUBLIC', visibility } = {}) {
   return api('POST', '/channels', {
     token: owner.token,
@@ -72,6 +91,9 @@ async function createChannel(owner, { type = 'PUBLIC', visibility } = {}) {
       type,
       ...(visibility ? { visibility } : {}),
     },
+  }).then((channel) => {
+    createdChannels.push({ id: channel.id, token: owner.token })
+    return channel
   })
 }
 
@@ -109,9 +131,10 @@ async function main() {
   await step('游客可读公开频道/帖子；未加入用户发帖被拒', async () => {
     await api('GET', `/channels/${channel.id}`)
     await api('GET', `/channels/${channel.id}/posts`)
-    await api('POST', `/channels/${channel.id}/posts`, {
+    await expectError('POST', `/channels/${channel.id}/posts`, {
       token: outsider.token,
-      expect: [403],
+      status: 403,
+      code: 'NOT_JOINED',
       body: { boardId: board.id, content: 'outsider should fail', contentFormat: 'PLAIN' },
     })
   })
@@ -121,9 +144,10 @@ async function main() {
       token: owner.token,
       body: { durationSeconds: 60 },
     })
-    await api('POST', `/channels/${channel.id}/posts`, {
+    await expectError('POST', `/channels/${channel.id}/posts`, {
       token: member.token,
-      expect: [403],
+      status: 403,
+      code: 'CHANNEL_MUTED',
       body: { boardId: board.id, content: 'muted member post', contentFormat: 'PLAIN' },
     })
     await api('DELETE', `/channels/${channel.id}/members/${member.id}/mute`, { token: owner.token })
@@ -139,9 +163,10 @@ async function main() {
       token: owner.token,
       body: { durationSeconds: 60 },
     })
-    await api('POST', `/channels/${channel.id}/posts`, {
+    await expectError('POST', `/channels/${channel.id}/posts`, {
       token: member.token,
-      expect: [403],
+      status: 403,
+      code: 'CHANNEL_MUTED',
       body: { boardId: board.id, content: 'mute-all member post', contentFormat: 'PLAIN' },
     })
     await api('POST', `/channels/${channel.id}/posts`, {
@@ -162,18 +187,27 @@ async function main() {
     await api('POST', `/channels/${channel.id}/leave`, { token: member.token, expect: [204] })
     const after = await api('GET', `/channels/${channel.id}`)
     assert(after.memberCount === before.memberCount - 1, '退出后成员数应 -1')
-    await api('POST', `/channels/${channel.id}/posts`, {
+    await expectError('POST', `/channels/${channel.id}/posts`, {
       token: member.token,
-      expect: [403],
+      status: 403,
+      code: 'NOT_JOINED',
       body: { boardId: board.id, content: 'left member post', contentFormat: 'PLAIN' },
     })
-    await api('POST', `/channels/${channel.id}/leave`, { token: owner.token, expect: [422] })
+    await expectError('POST', `/channels/${channel.id}/leave`, {
+      token: owner.token,
+      status: 422,
+      code: 'OWNER_CANNOT_LEAVE',
+    })
   })
 
   let privateChannel
   await step('私密频道：非成员 404；邀请链接 + 审批后可见', async () => {
     privateChannel = await createChannel(owner, { type: 'PRIVATE', visibility: 'MEMBERS_ONLY' })
-    await api('GET', `/channels/${privateChannel.id}`, { token: outsider.token, expect: [404] })
+    await expectError('GET', `/channels/${privateChannel.id}`, {
+      token: outsider.token,
+      status: 404,
+      code: 'CHANNEL_NOT_FOUND',
+    })
     const invite = await api('POST', `/channels/${privateChannel.id}/invites`, {
       token: owner.token,
       expect: [201],
@@ -181,7 +215,12 @@ async function main() {
     })
     const applied = await api('POST', `/invites/${invite.token}/accept`, { token: outsider.token })
     assert(applied.status === 'PENDING', '需审批的邀请应返回 PENDING')
-    await api('POST', `/invites/${invite.token}/accept`, { token: outsider.token, expect: [409] })
+    // 重复接受同一邀请 → 409 ALREADY_APPLIED（不是 JOIN_REQUEST_HANDLED：那个是「已审批」）
+    await expectError('POST', `/invites/${invite.token}/accept`, {
+      token: outsider.token,
+      status: 409,
+      code: 'ALREADY_APPLIED',
+    })
     const requests = await api('GET', `/channels/${privateChannel.id}/join-requests?status=PENDING`, {
       token: owner.token,
     })
@@ -197,9 +236,12 @@ async function main() {
 
   await step('AI：非成员不能对「仅成员可见」频道发起问答（防 AI 越权读私密内容）', async () => {
     const secret = await createChannel(owner, { type: 'PRIVATE', visibility: 'MEMBERS_ONLY' })
-    await api('POST', '/ai/conversations', {
+    // 实现选择「不暴露频道是否存在」→ 404 CHANNEL_NOT_FOUND（不是 403）。
+    // 断言到具体错误码，才能区分「越权被拒」与「路由/接口挂了」（后者不会带这个 code）。
+    await expectError('POST', '/ai/conversations', {
       token: outsider.token,
-      expect: [403, 404],
+      status: 404,
+      code: 'CHANNEL_NOT_FOUND',
       body: { scope: 'CHANNEL', channelId: secret.id, title: '越权探测' },
     })
     // 频道成员（频道主）可以正常发起
@@ -212,9 +254,10 @@ async function main() {
 
   await step('拉黑：被拉黑方无法私信；解除后恢复', async () => {
     await api('POST', `/users/${member.id}/block`, { token: owner.token, expect: [204] })
-    await api('POST', '/dm/conversations', {
+    await expectError('POST', '/dm/conversations', {
       token: member.token,
-      expect: [403],
+      status: 403,
+      code: 'BLOCKED',
       body: { userId: owner.id },
     })
     await api('DELETE', `/users/${member.id}/block`, { token: owner.token, expect: [204] })
@@ -259,9 +302,10 @@ async function main() {
     // 绑定板块内可置顶
     await api('POST', `/channels/${channel.id}/posts/${postInDefault.id}/pin`, { token: member.token })
     // 其他板块应被拒
-    await api('POST', `/channels/${channel.id}/posts/${postInExtra.id}/pin`, {
+    await expectError('POST', `/channels/${channel.id}/posts/${postInExtra.id}/pin`, {
       token: member.token,
-      expect: [403],
+      status: 403,
+      code: 'FORBIDDEN',
     })
   })
 
@@ -276,9 +320,10 @@ async function main() {
       expect: [201],
       body: { targetType: 'POST', targetId: post.id, reason: 'SPAM' },
     })
-    await api('POST', '/reports', {
+    await expectError('POST', '/reports', {
       token: member.token,
-      expect: [409],
+      status: 409,
+      code: 'REPORT_ALREADY_EXISTS',
       body: { targetType: 'POST', targetId: post.id, reason: 'SPAM' },
     })
     const reports = await api('GET', `/channels/${channel.id}/reports?status=PENDING&page=1&size=20`, {
@@ -377,12 +422,19 @@ async function main() {
   await step('解散频道：之后访问 404，成员列表不可用', async () => {
     const temp = await createChannel(owner)
     await api('POST', `/channels/${temp.id}/dissolve`, { token: owner.token, expect: [204] })
-    await api('GET', `/channels/${temp.id}`, { expect: [404] })
-    await api('GET', `/channels/${temp.id}/members?page=1&size=10`, {
+    await expectError('GET', `/channels/${temp.id}`, { status: 404, code: 'CHANNEL_NOT_FOUND' })
+    await expectError('GET', `/channels/${temp.id}/members?page=1&size=10`, {
       token: owner.token,
-      expect: [404],
+      status: 404,
+      code: 'CHANNEL_NOT_FOUND',
     })
   })
+
+  // 收尾：解散本脚本造的频道（之前一直没清，dev 库里攒了十几个）
+  for (const { id, token } of createdChannels) {
+    await api('POST', `/channels/${id}/dissolve`, { token, expect: [204, 200, 404] }).catch(() => null)
+  }
+  if (createdChannels.length > 0) console.log(`  ✓ 已解散测试频道 ${createdChannels.length} 个`)
 
   const passed = results.filter((item) => item.ok).length
   console.log(`\n结果：${passed}/${results.length} 步通过\n`)
