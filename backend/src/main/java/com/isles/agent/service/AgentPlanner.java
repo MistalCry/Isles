@@ -11,6 +11,7 @@ import com.isles.ai.service.AiModelConfigService;
 import com.isles.common.error.AppException;
 import com.isles.common.error.ErrorCode;
 import com.isles.common.json.JsonSupport;
+import com.isles.platform.setting.PlatformSettingService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +38,12 @@ public class AgentPlanner {
 
     private static final Logger log = LoggerFactory.getLogger(AgentPlanner.class);
 
-    private static final int MAX_TOKENS = 800;
+    /** 模型配置没填 max_tokens 时的兜底输出预算。 */
+    private static final int DEFAULT_MAX_TOKENS = 2048;
+    /** 思考型模型的放大倍数：reasoning 与 content 共用输出预算。 */
+    private static final int REASONING_MULTIPLIER = 3;
+    /** 单次调用输出预算的硬上限，防止配置成天文数字把上游打爆。 */
+    private static final int MAX_TOKENS_CAP = 16000;
     /** 研究阶段允许的只读动作（docs/12 §2.1 两阶段 tick）。 */
     public static final Set<String> RESEARCH_ACTIONS = Set.of(
             "web_search", "search_site_posts", "list_channel_posts", "fetch_page");
@@ -46,6 +52,7 @@ public class AgentPlanner {
 
     private final AiModelConfigService modelConfigService;
     private final JsonSupport jsonSupport;
+    private final PlatformSettingService settingService;
 
     /**
      * 研究阶段（两阶段 tick 的第一步）：只允许只读动作，最多 {@value #MAX_RESEARCH_ACTIONS} 个。
@@ -209,22 +216,43 @@ public class AgentPlanner {
     /**
      * 单次模型调用（两阶段共用）：返回正文与 token。
      */
+    /**
+     * 单次调用的输出预算。
+     *
+     * <p>顺序：配置中心 `agent.plannerMaxTokens`（>0 时强制生效）→ 模型配置的 `max_tokens`
+     * → 兜底 2048。思考型模型的 reasoning 与 content 共用输出预算，所以再乘 3——
+     * 否则 9B 这类模型会把预算全花在推理上、content 返回空。
+     */
+    private int outputBudget(AiModelConfig model) {
+        int override = settingService.getInt("agent.plannerMaxTokens");
+        if (override > 0) {
+            return Math.min(override, MAX_TOKENS_CAP);
+        }
+        Integer configured = model.getMaxTokens();
+        int base = configured == null || configured <= 0 ? DEFAULT_MAX_TOKENS : configured;
+        if (Boolean.TRUE.equals(model.getReasoningEnabled())) {
+            base = base * REASONING_MULTIPLIER;
+        }
+        return Math.min(base, MAX_TOKENS_CAP);
+    }
+
     private ModelCall callModel(AiModelConfig model, String system, String user) {
-        ModelCall first = callOnce(model, system, user, MAX_TOKENS);
+        int budget = outputBudget(model);
+        ModelCall first = callOnce(model, system, user, budget);
         if (!first.content().isBlank()) {
             return first;
         }
-        // 思考型模型（如 qwen3.5-9b）会把 token 全花在 reasoning 上，content 直接为空。
-        // 空内容永远没用，所以放大预算重试一次，而不是让它以「输出不是 JSON」失败。
-        log.warn("模型返回空内容，放大 token 预算重试一次 model={}", model.getModel());
-        ModelCall retry = callOnce(model, system, user, MAX_TOKENS * 3);
+        // 空内容永远没用（思考型模型可能把预算全用在 reasoning 上），放大预算再试一次
+        log.warn("模型返回空内容，放大 token 预算重试一次 model={} budget={}", model.getModel(), budget);
+        ModelCall retry = callOnce(model, system, user, Math.min(budget * 2, MAX_TOKENS_CAP));
         if (!retry.content().isBlank()) {
             return new ModelCall(retry.content(),
                     first.tokensIn() + retry.tokensIn(),
                     first.tokensOut() + retry.tokensOut());
         }
         throw new AppException(ErrorCode.BUSINESS_RULE_VIOLATION,
-                "模型返回空内容（思考型模型可能把 token 都用在推理上），请改用非思考模型或提高该模型的 maxTokens");
+                "模型返回空内容（思考型模型可能把 token 都用在推理上），请改用非思考模型"
+                        + "或调高该模型的 max_tokens / agent.plannerMaxTokens");
     }
 
     private ModelCall callOnce(AiModelConfig model, String system, String user, int maxTokens) {
@@ -260,27 +288,16 @@ public class AgentPlanner {
                           List<ChannelBrief> channels, String busyHint) {
         String system = systemPrompt(profile, memories, channels, busyHint);
         String user = userPrompt();
-        AiProvider provider = modelConfigService.providerFor(model);
-        AiChatRequest request = AiChatRequest.of(model.getModel(),
-                List.of(AiChatMessage.system(system), AiChatMessage.user(user)),
-                false, false, MAX_TOKENS);
-        AiChatResult result = provider.chat(request);
-        String content = result.content() == null ? "" : result.content();
+        ModelCall call = callModel(model, system, user);
+        String content = call.content();
         Map<String, Object> parsed = parseJson(content);
         String action = parsed.get("action") == null ? null : String.valueOf(parsed.get("action")).trim();
         if (action == null || action.isBlank()) {
             throw new AppException(ErrorCode.BUSINESS_RULE_VIOLATION, "模型未给出 action");
         }
         Map<String, Object> args = extractArgs(parsed);
-        int tokensIn = result.usage() == null ? 0 : result.usage().promptTokens();
-        int tokensOut = result.usage() == null ? 0 : result.usage().completionTokens();
-        if (tokensIn == 0 && tokensOut == 0) {
-            // 上游未返回 usage：按字符数粗估，保证成本熔断仍有数据可用
-            tokensIn = Math.max(1, system.length() / 4);
-            tokensOut = Math.max(1, content.length() / 4);
-        }
         log.debug("代理计划生成 agentId={} action={}", profile.getUserId(), action);
-        return new AgentPlan(action, args, content, tokensIn, tokensOut);
+        return new AgentPlan(action, args, content, call.tokensIn(), call.tokensOut());
     }
 
     /**

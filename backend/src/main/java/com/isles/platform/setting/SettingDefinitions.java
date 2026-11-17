@@ -99,6 +99,9 @@ public final class SettingDefinitions {
                     "同一代理两次发帖之间的最小间隔；0 = 不限制（联调时可设 0 连续发帖）", 0, 10080),
             number("agent.minCommentIntervalMinutes", SettingGroup.AI, "AI 代理评论最小间隔（分钟）", "10", false,
                     "同一代理两次评论之间的最小间隔；0 = 不限制", 0, 10080),
+            number("agent.plannerMaxTokens", SettingGroup.AI, "AI 代理单次输出 token 上限", "0", false,
+                    "代理计划/产出阶段单次模型调用的输出上限；0 = 跟随模型配置的 max_tokens"
+                            + "（思考型模型会自动按 3 倍放大，避免推理耗尽预算）", 0, 16000),
             number("ai.default.timeoutSeconds", SettingGroup.AI, "模型调用超时（秒）", "60", false,
                     "单次模型调用的默认超时，模型配置可覆盖", 5, 600),
 

@@ -8,14 +8,18 @@ import com.isles.ai.provider.AiUsage;
 import com.isles.ai.service.AiModelConfigService;
 import com.isles.common.error.AppException;
 import com.isles.common.json.JsonSupport;
+import com.isles.platform.setting.PlatformSettingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.verify;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -27,16 +31,19 @@ class AgentPlannerTest {
     private AiProvider provider;
     private AgentPlanner planner;
     private AiModelConfig model;
+    private PlatformSettingService settingService;
 
     @BeforeEach
     void setUp() {
         AiModelConfigService modelConfigService = mock(AiModelConfigService.class);
+        settingService = mock(PlatformSettingService.class);
         provider = mock(AiProvider.class);
         model = new AiModelConfig();
         model.setId("cfg-1");
         model.setModel("mock-chat");
+        model.setMaxTokens(2048);
         when(modelConfigService.providerFor(any())).thenReturn(provider);
-        planner = new AgentPlanner(modelConfigService, new JsonSupport());
+        planner = new AgentPlanner(modelConfigService, new JsonSupport(), settingService);
     }
 
     @Test
@@ -131,6 +138,33 @@ class AgentPlannerTest {
 
     private void reply(String content) {
         when(provider.chat(any())).thenReturn(new AiChatResult(content, null, new AiUsage(120, 40), "mock-chat"));
+    }
+
+    /** 输出预算：默认跟随模型配置，思考型模型放大 3 倍，配置中心可强制覆盖。 */
+    @Test
+    void should_use_model_max_tokens_as_output_budget() {
+        reply("{\"action\":\"none\"}");
+        planner.compose(model, profile(), List.of(), List.of(), "", null, List.of());
+        assertThat(capturedMaxTokens()).isEqualTo(2048);
+
+        model.setReasoningEnabled(true);
+        planner.compose(model, profile(), List.of(), List.of(), "", null, List.of());
+        assertThat(capturedMaxTokens()).isEqualTo(2048 * 3);
+    }
+
+    @Test
+    void should_let_setting_override_output_budget() {
+        when(settingService.getInt("agent.plannerMaxTokens")).thenReturn(4000);
+        reply("{\"action\":\"none\"}");
+        planner.compose(model, profile(), List.of(), List.of(), "", null, List.of());
+        assertThat(capturedMaxTokens()).isEqualTo(4000);
+    }
+
+    private int capturedMaxTokens() {
+        ArgumentCaptor<com.isles.ai.provider.AiChatRequest> captor =
+                ArgumentCaptor.forClass(com.isles.ai.provider.AiChatRequest.class);
+        verify(provider, atLeastOnce()).chat(captor.capture());
+        return captor.getValue().maxTokens();
     }
 
     private AgentProfile profile() {
