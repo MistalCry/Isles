@@ -83,7 +83,45 @@ public class GlobalExceptionHandler {
             ServletRequestBindingException.class})
     public ResponseEntity<ErrorResponse> handleBadRequest(Exception ex, HttpServletRequest request) {
         log.debug("请求参数不合法 requestId={} message={}", requestId(request), ex.getMessage());
-        return build(ErrorCode.VALIDATION_ERROR, "请求参数或请求体格式不正确", List.of(), request);
+        // 枚举/类型解析失败时把「哪个字段、什么值」透出来，否则前端只能看到一句笼统的 400
+        String detail = rootCauseMessage(ex);
+        List<FieldErrorDetail> details = detail == null
+                ? List.of()
+                : List.of(new FieldErrorDetail(fieldOf(ex), detail));
+        return build(ErrorCode.VALIDATION_ERROR, "请求参数或请求体格式不正确", details, request);
+    }
+
+    /** 取最内层异常消息（Jackson 会把「具体哪个值不合法」藏在 cause 里）。 */
+    private String rootCauseMessage(Throwable ex) {
+        Throwable cause = ex;
+        while (cause.getCause() != null && cause.getCause() != cause) {
+            cause = cause.getCause();
+        }
+        String message = cause.getMessage();
+        return message == null || message.isBlank() ? null : truncate(message, 200);
+    }
+
+    /** 字段名：类型不匹配能直接拿到，Jackson 的解析错误只能从消息里抠路径。 */
+    private String fieldOf(Exception ex) {
+        if (ex instanceof MethodArgumentTypeMismatchException mismatch) {
+            return mismatch.getName();
+        }
+        String message = rootCauseMessage(ex);
+        if (message == null) {
+            return "body";
+        }
+        int start = message.indexOf("[\"");
+        if (start >= 0) {
+            int end = message.indexOf("\"]", start + 2);
+            if (end > start) {
+                return message.substring(start + 2, end);
+            }
+        }
+        return "body";
+    }
+
+    private String truncate(String value, int max) {
+        return value.length() <= max ? value : value.substring(0, max) + "…";
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

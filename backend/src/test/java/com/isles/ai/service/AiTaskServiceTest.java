@@ -275,4 +275,33 @@ class AiTaskServiceTest {
         channel.setName("露营岛");
         return channel;
     }
+
+    // ------------------------------------------------------------------
+    // 第 21 轮 P1-3：扫描必须排除已解散频道
+    // ------------------------------------------------------------------
+
+    @Test
+    void should_scan_only_surviving_channels() {
+        when(settingMapper.selectScannable()).thenReturn(java.util.List.of());
+
+        service.scanAndRun();
+
+        // 用 selectScannable（SQL 层 join channels 过滤 ACTIVE/未软删），不再全量 selectList
+        verify(settingMapper).selectScannable();
+        verify(settingMapper, never()).selectList(any());
+        // 没有任何可扫设置时不该产生任务日志
+        verify(taskLogMapper, never()).insert(any(AiTaskLog.class));
+    }
+
+    @Test
+    void should_skip_when_scheduler_disabled() {
+        AiProperties disabled = new AiProperties(false, "0 0 * * * *", 60, 1, 120, 8, 20, 200, 1, "", 8000);
+        AiTaskService offService = new AiTaskService(settingMapper, taskLogMapper, settingsService, contextService,
+                modelConfigService, postService, commentService, interactionService, boardMapper, channelMapper,
+                commentMapper, disabled);
+
+        offService.scanAndRun();
+
+        verify(settingMapper, never()).selectScannable();
+    }
 }

@@ -448,6 +448,68 @@ class AgentRuntimeTest {
         verify(modelConfigService, never()).resolveDefault();
     }
 
+    // ------------------------------------------------------------------
+    // 第 21 轮 P1-4：研究阶段降级必须留痕
+    // ------------------------------------------------------------------
+
+    @Test
+    void should_record_research_degradation_in_error() {
+        stubHappyPath();
+        when(settingService.getBoolean("agent.twoPhaseEnabled")).thenReturn(true);
+        when(planner.research(any(), any(), any(), any()))
+                .thenThrow(new IllegalStateException("connection reset"));
+        // 研究失败后走人设兜底（无兴趣/无频道 → 逛频道），不能让 tick 挂掉
+        when(toolbox.execute(eq("list_channel_posts"), any(), any())).thenReturn(new AgentToolbox.ToolOutcome(
+                "NONE", null, "频道最新帖", Map.of("postIds", List.of())));
+        when(planner.compose(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new AgentPlanner.AgentPlan("none", Map.of(), "{}", 1, 1));
+
+        AgentRun run = runtime.runOne(profile(), true);
+
+        // 状态仍可 SUCCESS（不阻断 tick），但 error 必须写清「退化成无素材产出」
+        assertThat(run.getStatus()).isEqualTo(AgentRun.Status.SUCCESS.name());
+        assertThat(run.getError()).contains("研究阶段异常，按无素材产出").contains("connection reset");
+    }
+
+    @Test
+    void should_record_research_business_failure_in_error() {
+        stubHappyPath();
+        when(settingService.getBoolean("agent.twoPhaseEnabled")).thenReturn(true);
+        when(planner.research(any(), any(), any(), any()))
+                .thenThrow(new com.isles.common.error.AppException(
+                        com.isles.common.error.ErrorCode.AGENT_SEARCH_QUOTA_EXCEEDED));
+        when(toolbox.execute(eq("list_channel_posts"), any(), any())).thenReturn(new AgentToolbox.ToolOutcome(
+                "NONE", null, "频道最新帖", Map.of("postIds", List.of())));
+        when(planner.compose(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new AgentPlanner.AgentPlan("none", Map.of(), "{}", 1, 1));
+
+        AgentRun run = runtime.runOne(profile(), true);
+
+        assertThat(run.getError()).contains("研究阶段失败，按无素材产出");
+    }
+
+    @Test
+    void should_merge_model_fallback_note_and_research_note() {
+        stubHappyPath();
+        when(settingService.getBoolean("agent.twoPhaseEnabled")).thenReturn(true);
+        AgentProfile profile = profile();
+        profile.setModelConfigId("cfg-deleted");
+        when(modelConfigService.findEnabled("cfg-deleted")).thenReturn(null);
+        when(planner.research(any(), any(), any(), any()))
+                .thenThrow(new IllegalStateException("boom"));
+        when(toolbox.execute(eq("list_channel_posts"), any(), any())).thenReturn(new AgentToolbox.ToolOutcome(
+                "NONE", null, "频道最新帖", Map.of("postIds", List.of())));
+        when(planner.compose(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new AgentPlanner.AgentPlan("none", Map.of(), "{}", 1, 1));
+
+        AgentRun run = runtime.runOne(profile, true);
+
+        // 两条降级备注都要在（error 列只有一个，必须累积而不是互相覆盖）
+        assertThat(run.getError())
+                .contains("指定模型不可用，已回落默认")
+                .contains("研究阶段异常，按无素材产出");
+    }
+
     private AiModelConfig model(String id, String name) {
         AiModelConfig config = new AiModelConfig();
         config.setId(id);

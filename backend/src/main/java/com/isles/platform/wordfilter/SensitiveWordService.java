@@ -36,6 +36,14 @@ import java.util.regex.Pattern;
  *   <li>{@code BLOCK}：直接拒绝发布（422 {@code SENSITIVE_WORD_BLOCKED}），返回命中提示。</li>
  * </ul>
  * 命中记录写入失败不影响内容发布（记录 WARN 后继续）；BLOCK 的拒绝不受此保护。
+ *
+ * <p><b>fail-open / fail-closed（第 21 轮修正）</b>：词库查询或匹配过程抛异常时，按当前模式分流——
+ * <ul>
+ *   <li>{@code BLOCK}：<b>fail-closed</b>，抛 503 {@code SENSITIVE_WORD_UNAVAILABLE} 拒绝发布
+ *       （宁可拒绝也不能让违规内容直出）；</li>
+ *   <li>{@code REVIEW}/{@code MASK}：仍降级为原文放行，但记 ERROR 并累加指标
+ *       {@code sensitive_word_check_failures{mode=…}}，便于告警发现词库/配置异常。</li>
+ * </ul>
  */
 @Service
 @RequiredArgsConstructor
@@ -48,6 +56,13 @@ public class SensitiveWordService {
     private static final int MAX_IMPORT_WORDS = 500;
     private static final String SETTING_ENABLED = "content.sensitiveWord.enabled";
     private static final String SETTING_MODE = "content.sensitiveWord.mode";
+    /**
+     * 校验失败计数指标名（mode 作为 tag）。
+     *
+     * <p>写入 {@link io.micrometer.core.instrument.MeterRegistry}：当前只暴露 health/info，
+     * 接 Prometheus 或开放 metrics 端点后即可直接告警；在此之前以 ERROR 日志为告警源。
+     */
+    static final String METRIC_CHECK_FAILURES = "sensitive_word_check_failures";
 
     /** 处理方式（与配置项白名单一致）。 */
     public static final String MODE_REVIEW = "REVIEW";
@@ -62,6 +77,7 @@ public class SensitiveWordService {
     private final SensitiveWordHitMapper hitMapper;
     private final PlatformSettingService settingService;
     private final PlatformAuditService auditService;
+    private final io.micrometer.core.instrument.MeterRegistry meterRegistry;
 
     private volatile CachedWords cache;
 
@@ -257,8 +273,43 @@ public class SensitiveWordService {
         } catch (AppException ex) {
             throw ex;
         } catch (RuntimeException ex) {
-            log.warn("敏感词检查失败，按原文放行", ex);
+            // 第 21 轮：BLOCK 模式必须 fail-closed，其余模式降级但留痕（ERROR + 指标）
+            String mode = safeMode();
+            recordCheckFailure(mode);
+            if (MODE_BLOCK.equals(mode)) {
+                log.error("敏感词检查失败且当前为 BLOCK 模式，已拒绝发布（fail-closed）", ex);
+                throw new AppException(ErrorCode.SENSITIVE_WORD_UNAVAILABLE,
+                        "内容校验服务暂时不可用，请稍后重试");
+            }
+            log.error("敏感词检查失败，按原文放行 mode={}（fail-open，请排查词库/配置）", mode, ex);
             return new Inspection(text, List.of(), MODE_REVIEW);
+        }
+    }
+
+    /**
+     * 读模式但不抛异常：异常路径里再用一次 {@link #currentMode()} 会把原始异常盖掉。
+     */
+    private String safeMode() {
+        try {
+            return currentMode();
+        } catch (RuntimeException ex) {
+            // 连配置都读不到时按 REVIEW 处理：不能因为读配置失败就升级成 503
+            return MODE_REVIEW;
+        }
+    }
+
+    /**
+     * 累加「校验失败」计数（按模式打 tag），异常不影响主流程。
+     */
+    private void recordCheckFailure(String mode) {
+        try {
+            io.micrometer.core.instrument.Counter.builder(METRIC_CHECK_FAILURES)
+                    .description("敏感词校验过程抛异常的次数")
+                    .tag("mode", mode == null ? "UNKNOWN" : mode)
+                    .register(meterRegistry)
+                    .increment();
+        } catch (RuntimeException ex) {
+            log.warn("敏感词校验失败计数写入异常（忽略）", ex);
         }
     }
 

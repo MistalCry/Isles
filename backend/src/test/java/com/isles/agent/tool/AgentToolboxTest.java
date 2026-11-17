@@ -209,6 +209,8 @@ class AgentToolboxTest {
         assertThat(outcome.summary()).contains("联网搜索未启用").contains("post-1");
         verify(searchProvider, never()).search(anyString(), any(), anyInt());
         verify(memoryService, never()).remember(anyString(), eq("SOURCE"), anyString(), anyString());
+        // 第 21 轮 P0-1：没发出任何上游请求，配额一分不动
+        verify(searchQuota, never()).tryConsume();
     }
 
     @Test
@@ -220,10 +222,48 @@ class AgentToolboxTest {
         AgentToolbox.ToolOutcome outcome = toolbox.execute("web_search", Map.of("query", "冷门话题"), context);
 
         assertThat(outcome.summary()).contains("联网搜索无结果");
+        // 0 结果 = 没有可用产出，配额必须退还
+        verify(searchQuota).refund();
+    }
+
+    @Test
+    void should_refund_quota_when_search_throws() {
+        when(searchProvider.available()).thenReturn(true);
+        when(searchProvider.providerType()).thenReturn("SEARXNG");
+        when(searchProvider.search(anyString(), any(), anyInt()))
+                .thenThrow(new IllegalStateException("connection reset"));
+        when(contextMapper.searchContextPosts(anyList(), eq("ch-1"), anyInt())).thenReturn(List.of());
+
+        AgentToolbox.ToolOutcome outcome = toolbox.execute("web_search", Map.of("query", "露营"), context);
+
+        // 上游炸了不阻塞 tick：降级站内检索，并把已扣的配额退回
+        assertThat(outcome.summary()).contains("联网搜索失败").contains("已退回站内检索");
+        verify(searchQuota).tryConsume();
+        verify(searchQuota).refund();
+    }
+
+    @Test
+    void should_consume_quota_only_after_provider_available() {
+        when(searchProvider.available()).thenReturn(true);
+        when(searchProvider.providerType()).thenReturn("SEARXNG");
+        when(searchProvider.search(anyString(), any(), anyInt())).thenReturn(List.of(
+                new SearchResult("红石", "https://mc.example.com/redstone", "红石", "google cse", null)));
+
+        toolbox.execute("web_search", Map.of("query", "红石"), context);
+
+        // 先判可用性、再扣配额、最后发请求：顺序错了就会「没联网也扣配额」
+        org.mockito.InOrder inOrder = org.mockito.Mockito.inOrder(searchProvider, searchQuota);
+        inOrder.verify(searchProvider).available();
+        inOrder.verify(searchQuota).tryConsume();
+        inOrder.verify(searchProvider).search(anyString(), any(), anyInt());
+        verify(searchQuota, never()).refund();
     }
 
     @Test
     void should_fail_loudly_when_quota_exhausted() {
+        // provider 必须可用，否则走「未启用」分支、根本不会检查配额
+        when(searchProvider.available()).thenReturn(true);
+        when(searchProvider.providerType()).thenReturn("SEARXNG");
         when(searchQuota.tryConsume()).thenReturn(false);
         when(searchQuota.used()).thenReturn(200);
         when(searchQuota.limit()).thenReturn(200);

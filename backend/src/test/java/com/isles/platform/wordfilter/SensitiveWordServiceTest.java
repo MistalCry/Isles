@@ -28,6 +28,7 @@ class SensitiveWordServiceTest {
     private SensitiveWordMapper wordMapper;
     private SensitiveWordHitMapper hitMapper;
     private PlatformSettingService settingService;
+    private io.micrometer.core.instrument.simple.SimpleMeterRegistry meterRegistry;
     private SensitiveWordService service;
 
     @BeforeEach
@@ -35,8 +36,9 @@ class SensitiveWordServiceTest {
         wordMapper = mock(SensitiveWordMapper.class);
         hitMapper = mock(SensitiveWordHitMapper.class);
         settingService = mock(PlatformSettingService.class);
+        meterRegistry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
         service = new SensitiveWordService(wordMapper, hitMapper, settingService,
-                mock(PlatformAuditService.class));
+                mock(PlatformAuditService.class), meterRegistry);
         when(settingService.getBoolean("content.sensitiveWord.enabled")).thenReturn(true);
     }
 
@@ -176,6 +178,69 @@ class SensitiveWordServiceTest {
         service.delete("w-1", "admin-1");
 
         verify(wordMapper).deleteById("w-1");
+    }
+
+    // ------------------------------------------------------------------
+    // 第 21 轮 P0-2：BLOCK 模式 fail-closed，其余模式降级但留痕
+    // ------------------------------------------------------------------
+
+    @Test
+    void should_reject_content_when_block_mode_and_wordbank_fails() {
+        when(settingService.getString("content.sensitiveWord.mode")).thenReturn("BLOCK");
+        // 词库查询炸了（DB 抖动 / 表被锁）
+        when(wordMapper.selectEnabled()).thenThrow(new IllegalStateException("db down"));
+
+        assertThatThrownBy(() -> service.inspect("正常内容", false))
+                .isInstanceOf(AppException.class)
+                .satisfies(ex -> assertThat(((AppException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.SENSITIVE_WORD_UNAVAILABLE));
+        assertThat(ErrorCode.SENSITIVE_WORD_UNAVAILABLE.httpStatus().value()).isEqualTo(503);
+        // 失败计数要能告警
+        assertThat(failureCount("BLOCK")).isEqualTo(1.0);
+    }
+
+    @Test
+    void should_fail_open_but_count_when_review_mode_and_wordbank_fails() {
+        when(settingService.getString("content.sensitiveWord.mode")).thenReturn("REVIEW");
+        when(wordMapper.selectEnabled()).thenThrow(new IllegalStateException("db down"));
+
+        SensitiveWordService.Inspection inspection = service.inspect("正常内容", false);
+
+        // REVIEW 模式不能因为词库故障阻断发布
+        assertThat(inspection.text()).isEqualTo("正常内容");
+        assertThat(inspection.hits()).isEmpty();
+        assertThat(failureCount("REVIEW")).isEqualTo(1.0);
+    }
+
+    @Test
+    void should_fail_open_and_count_when_mask_mode_and_wordbank_fails() {
+        when(settingService.getString("content.sensitiveWord.mode")).thenReturn("MASK");
+        when(wordMapper.selectEnabled()).thenThrow(new IllegalStateException("db down"));
+
+        SensitiveWordService.Inspection inspection = service.inspect("正常内容", false);
+
+        // 打不了码就原样放行（不能吞内容），但计数带 MASK tag，运营能看出是哪种模式在降级
+        assertThat(inspection.text()).isEqualTo("正常内容");
+        assertThat(failureCount("MASK")).isEqualTo(1.0);
+    }
+
+    @Test
+    void should_not_reject_when_mode_read_itself_fails() {
+        // 连配置都读不到：按 REVIEW 处理，不能升级成 503（否则配置服务抖动会阻断全站发布）
+        when(settingService.getString("content.sensitiveWord.mode"))
+                .thenThrow(new IllegalStateException("config down"));
+        when(wordMapper.selectEnabled()).thenThrow(new IllegalStateException("db down"));
+
+        SensitiveWordService.Inspection inspection = service.inspect("正常内容", false);
+
+        assertThat(inspection.text()).isEqualTo("正常内容");
+        assertThat(failureCount("REVIEW")).isEqualTo(1.0);
+    }
+
+    private double failureCount(String mode) {
+        io.micrometer.core.instrument.Counter counter = meterRegistry.find(
+                SensitiveWordService.METRIC_CHECK_FAILURES).tag("mode", mode).counter();
+        return counter == null ? 0.0 : counter.count();
     }
 
     private SensitiveWord word(String id, String value, String action) {

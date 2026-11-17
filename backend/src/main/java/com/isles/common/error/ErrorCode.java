@@ -103,7 +103,11 @@ public enum ErrorCode {
 
     // 500
     MEDIA_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "文件保存失败"),
-    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "服务端异常，请稍后重试");
+    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "服务端异常，请稍后重试"),
+
+    // 503
+    /** 敏感词校验本身故障且当前为 BLOCK 模式：fail-closed 拒绝发布（第 21 轮）。 */
+    SENSITIVE_WORD_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "内容校验服务暂时不可用，请稍后重试");
 
     private final HttpStatus httpStatus;
     private final String defaultMessage;

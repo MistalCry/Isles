@@ -216,7 +216,7 @@ public class AgentRuntime {
             run.setModel(model.getModel());
             if (choice.note() != null) {
                 // error 列只有一个：先把回落备注暂存，finish 时与最终原因合并
-                run.setError(choice.note());
+                appendNote(run, choice.note());
             }
 
             List<String> channelIds = resolveChannels(profile);
@@ -260,11 +260,15 @@ public class AgentRuntime {
                 try {
                     researchPlans = planner.research(model, profile, memories, briefs);
                 } catch (AppException ex) {
-                    // 研究阶段失败不阻断 tick：降级为「无素材直接产出」，由闸门兜住
+                    // 研究阶段失败不阻断 tick：降级为「无素材直接产出」，由闸门兜住。
+                    // 第 21 轮：降级原因必须落到 agent_runs.error，否则 run 记 SUCCESS 且 error=null，
+                    // 监控完全看不见「两阶段退化成单轮」这件事。
+                    appendNote(run, "研究阶段失败，按无素材产出：" + ex.getMessage());
                     log.warn("代理研究阶段失败，按无素材继续 agentId={} reason={}",
                             profile.getUserId(), ex.getMessage());
                 } catch (RuntimeException ex) {
-                    log.warn("代理研究阶段异常，按无素材继续 agentId={}", profile.getUserId(), ex);
+                    appendNote(run, "研究阶段异常，按无素材产出：" + brief(ex));
+                    log.error("代理研究阶段异常，按无素材继续 agentId={}", profile.getUserId(), ex);
                 }
                 if (researchPlans.isEmpty()) {
                     // 模型给不出可执行的研究动作 → 用人设兴趣词兜底（不交给模型决定要不要研究）
@@ -303,7 +307,9 @@ public class AgentRuntime {
             }
             // 模型可能只逛了站内（list_channel_posts），而频道是空的 → 素材全空 → 只能输出 none。
             // 所以没搜过就强制补一次联网搜索，保证每轮 tick 都有外部素材。
-            if (!searched && researchSteps.size() < AgentPlanner.MAX_RESEARCH_ACTIONS) {
+            // 注意：仅在两阶段+研究前置都开启时生效——researchFirst=false 的语义是「本轮不研究」，
+            // 此时补搜会让这个开关失效。
+            if (researchFirst && !searched && researchSteps.size() < AgentPlanner.MAX_RESEARCH_ACTIONS) {
                 AgentPlanner.AgentPlan extra = fallbackResearchPlan(profile, channelIds);
                 if ("web_search".equals(extra.action())) {
                     try {
@@ -355,7 +361,7 @@ public class AgentRuntime {
             }
             return executePlan(run, compose, context, researchSteps, tokensIn, tokensOut);
         } catch (RuntimeException ex) {
-            log.warn("AI 代理运行异常 agentId={}", profile.getUserId(), ex);
+            log.error("AI 代理运行异常 agentId={}", profile.getUserId(), ex);
             return finish(run, AgentRun.Status.FAILED, null, null, "运行异常：" + ex.getMessage(), null,
                     run.getTokensIn(), run.getTokensOut());
         } finally {
@@ -430,7 +436,7 @@ public class AgentRuntime {
             return finish(run, status, null, null, ex.getMessage(),
                     traceOf(researchSteps, plan, null, ex.getMessage()), tokensIn, tokensOut);
         } catch (RuntimeException ex) {
-            log.warn("AI 代理工具执行失败 agentId={} action={}", run.getAgentId(), plan.action(), ex);
+            log.error("AI 代理工具执行失败 agentId={} action={}", run.getAgentId(), plan.action(), ex);
             return finish(run, AgentRun.Status.FAILED, null, null, "工具执行失败：" + ex.getMessage(),
                     traceOf(researchSteps, plan, null, ex.getMessage()), tokensIn, tokensOut);
         }
@@ -729,6 +735,25 @@ public class AgentRuntime {
             return error;
         }
         return error == null || error.isBlank() ? note : error + "；" + note;
+    }
+
+    /**
+     * 追加一条「降级备注」到 {@code run.error}（第 21 轮）。
+     *
+     * <p>error 列只有一个，但一次运行可能同时发生「指定模型回落」与「研究阶段降级」，
+     * 因此这里做累积而不是覆盖；最终由 {@link #finish} 与状态原因合并。
+     */
+    private void appendNote(AgentRun run, String note) {
+        if (note == null || note.isBlank()) {
+            return;
+        }
+        run.setError(mergeNote(run.getError(), note));
+    }
+
+    /** 异常的一句话摘要（message 可能为空，退化为异常类名）。 */
+    private String brief(RuntimeException ex) {
+        String message = ex.getMessage();
+        return message == null || message.isBlank() ? ex.getClass().getSimpleName() : message;
     }
 
     /**

@@ -52,6 +52,16 @@ public class SearchQuota {
         }
     }
 
+    /**
+     * 退还一次配额（第 21 轮）：上游请求失败或 0 结果时调用，保证「只有真正拿到结果才计数」。
+     *
+     * <p>不会退到负数：跨日归零后再退，`used` 已是 0，`max(0)` 兜住。
+     */
+    public void refund() {
+        rolloverIfNeeded();
+        used.updateAndGet(current -> Math.max(current - 1, 0));
+    }
+
     public int used() {
         rolloverIfNeeded();
         return used.get();

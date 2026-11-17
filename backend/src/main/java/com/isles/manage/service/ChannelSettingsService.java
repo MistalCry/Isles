@@ -43,6 +43,7 @@ public class ChannelSettingsService {
     private final ChannelService channelService;
     private final AuditLogService auditLogService;
     private final ChannelAppDataCleaner appDataCleaner;
+    private final com.isles.ai.mapper.ChannelAiSettingMapper aiSettingMapper;
 
     /**
      * 修改频道资料；可见性变更需要额外的 channel.visibility 权限。
@@ -210,10 +211,13 @@ public class ChannelSettingsService {
         // 解散是软删除，外键 CASCADE 不会触发：必须显式清理频道级数据（应用/语音房/麦位/活动/报名），
         // 否则这些行会一直挂在已解散的频道下（K2）
         ChannelAppDataCleaner.PurgeResult purged = appDataCleaner.purgeChannel(channelId);
+        // 频道助手同样要停：扫描器已按频道状态过滤（第 21 轮），这里再置 false 做双保险，
+        // 避免有人绕过扫描器（例如手工 run-now）继续给已解散频道烧 token。
+        int aiDisabled = aiSettingMapper.disableByChannel(channelId);
         auditLogService.record(channelId, userId, ChannelAuditLog.Action.CHANNEL_DISSOLVE, "CHANNEL", channelId);
-        log.info("解散频道 channelId={} ownerId={} 清理 apps={} rooms={} seats={} activities={} signups={}",
+        log.info("解散频道 channelId={} ownerId={} 清理 apps={} rooms={} seats={} activities={} signups={} aiSettingsOff={}",
                 channelId, userId, purged.apps(), purged.rooms(), purged.seats(), purged.activities(),
-                purged.signups());
+                purged.signups(), aiDisabled);
     }
 
     private long requireDuration(MuteRequest request) {

@@ -132,10 +132,14 @@ public class AgentToolbox {
     /**
      * 联网搜索（P1）。三种结局：
      * <ol>
+     *   <li>provider=NONE → 直接退回站内检索，**不扣配额**（没有发出任何上游请求）；</li>
      *   <li>配额用尽 → 抛 {@link ErrorCode#AGENT_SEARCH_QUOTA_EXCEEDED}（**不静默失败**，让模型/后台看得见）；</li>
-     *   <li>provider=NONE 或搜索失败/空结果 → 退回站内检索，WARN 一行，不阻塞 tick；</li>
+     *   <li>搜索失败/空结果 → 退还配额后退回站内检索，WARN 一行，不阻塞 tick；</li>
      *   <li>有结果 → 返回前 N 条摘要，并把命中的 url 写进记忆（{@code kind=SOURCE}）供追溯与去重。</li>
      * </ol>
+     *
+     * <p><b>配额口径（第 21 轮修正）</b>：只有真正发出上游请求且拿到结果才计数。旧实现先扣后判，
+     * 导致 provider=NONE 或引擎全挂时白扣配额，200 次后代理永久 429、再也无法研究。
      */
     private ToolOutcome webSearch(Map<String, Object> args, AgentContext context) {
         String query = str(args, "query", null);
@@ -144,17 +148,32 @@ public class AgentToolbox {
         }
         String freshness = str(args, "freshness", null);
         int limit = clampInt(args, "limit", MAX_WEB_RESULTS, 1, MAX_WEB_RESULTS);
+        if (!searchProvider.available()) {
+            // 未启用：没有任何上游调用，配额一分不动
+            log.warn("联网搜索未启用（provider={}），退回站内检索 query={}", searchProvider.providerType(), query);
+            return fallbackToSiteSearch(query, context, "联网搜索未启用，已退回站内检索");
+        }
         if (!searchQuota.tryConsume()) {
             throw new AppException(ErrorCode.AGENT_SEARCH_QUOTA_EXCEEDED,
                     "今日联网搜索配额已用尽（" + searchQuota.used() + "/" + searchQuota.limit() + "）");
         }
-        if (!searchProvider.available()) {
-            log.warn("联网搜索未启用（provider={}），退回站内检索 query={}", searchProvider.providerType(), query);
-            return fallbackToSiteSearch(query, context, "联网搜索未启用，已退回站内检索");
+        List<SearchResult> results;
+        try {
+            results = searchProvider.search(query, freshness, limit);
+        } catch (AppException ex) {
+            // 业务异常（参数/配额类）：配额已扣但没产出，先退还再抛
+            searchQuota.refund();
+            throw ex;
+        } catch (RuntimeException ex) {
+            // 上游炸了：退还配额，降级站内检索（保持「不阻塞 tick」的既有契约）
+            searchQuota.refund();
+            log.warn("联网搜索失败，已退还配额并退回站内检索 query={} reason={}", query, ex.toString());
+            return fallbackToSiteSearch(query, context, "联网搜索失败，已退回站内检索");
         }
-        List<SearchResult> results = searchProvider.search(query, freshness, limit);
         if (results.isEmpty()) {
-            log.warn("联网搜索无结果（或引擎全部失败），退回站内检索 query={}", query);
+            // 引擎全挂或确实没有结果：本次没有可用产出，退还配额
+            searchQuota.refund();
+            log.warn("联网搜索无结果（或引擎全部失败），已退还配额并退回站内检索 query={}", query);
             return fallbackToSiteSearch(query, context, "联网搜索无结果，已退回站内检索");
         }
         // 记忆：命中的 url 写入 SOURCE，供后续选题去重与内容追溯（docs/12 §5.3）

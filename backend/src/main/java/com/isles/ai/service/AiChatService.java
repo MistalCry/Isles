@@ -404,7 +404,9 @@ public class AiChatService {
         try {
             emitter.complete();
         } catch (RuntimeException ex) {
-            log.debug("SSE 连接收尾失败（可能已关闭）");
+            // 第 21 轮：这里原先连堆栈都不打（debug 且丢掉 ex），出问题无从排查。
+            // 语义上是「收尾阶段连接已不可写」，WARN + 堆栈足够，用 ERROR 会被客户端断连刷屏。
+            log.warn("SSE 连接收尾失败（客户端可能已断开）", ex);
         }
     }
 

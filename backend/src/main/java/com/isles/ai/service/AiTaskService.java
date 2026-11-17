@@ -94,7 +94,11 @@ public class AiTaskService {
     // ---------------------------------------------------------------------
 
     /**
-     * 定时扫描：读取所有已启用频道助手设置的频道，按开关/时间点/频率上限执行到期任务。
+     * 定时扫描：读取所有已启用**且频道仍存活**的助手设置，按开关/时间点/频率上限执行到期任务。
+     *
+     * <p>第 21 轮修正：旧实现只按 {@code enabled=1} 取，频道解散后设置行还在，任务每天照跑——
+     * 先调模型烧 token，再在发帖处撞 `CHANNEL_NOT_FOUND`。现在由
+     * {@link ChannelAiSettingMapper#selectScannable()} 在 SQL 层 join channels 过滤。
      *
      * <p>单实例部署（docs/02 §1.2）；多实例时依赖 ai_task_logs 唯一键幂等（重复插入会被幂等键拦截）。
      */
@@ -102,8 +106,7 @@ public class AiTaskService {
         if (!properties.schedulerEnabled()) {
             return;
         }
-        List<ChannelAiSetting> settings = settingMapper.selectList(Wrappers.<ChannelAiSetting>lambdaQuery()
-                .eq(ChannelAiSetting::getEnabled, true));
+        List<ChannelAiSetting> settings = settingMapper.selectScannable();
         if (settings.isEmpty()) {
             return;
         }

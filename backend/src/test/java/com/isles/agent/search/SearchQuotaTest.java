@@ -37,4 +37,37 @@ class SearchQuotaTest {
         }
         assertThat(quota.used()).isEqualTo(5);
     }
+
+    // ------------------------------------------------------------------
+    // 第 21 轮 P0-1：失败/空结果退还配额
+    // ------------------------------------------------------------------
+
+    @Test
+    void should_refund_consumed_quota() {
+        PlatformSettingService settingService = mock(PlatformSettingService.class);
+        when(settingService.getInt("agent.search.dailyQuota")).thenReturn(2);
+        SearchQuota quota = new SearchQuota(settingService);
+
+        assertThat(quota.tryConsume()).isTrue();
+        quota.refund();
+
+        assertThat(quota.used()).isZero();
+        // 退回来的名额能再用：两次都成功，第三次才拒绝
+        assertThat(quota.tryConsume()).isTrue();
+        assertThat(quota.tryConsume()).isTrue();
+        assertThat(quota.tryConsume()).isFalse();
+    }
+
+    @Test
+    void should_never_refund_below_zero() {
+        PlatformSettingService settingService = mock(PlatformSettingService.class);
+        when(settingService.getInt("agent.search.dailyQuota")).thenReturn(10);
+        SearchQuota quota = new SearchQuota(settingService);
+
+        // 没消费过也退（跨日归零后可能发生）：不能变成负数
+        quota.refund();
+        quota.refund();
+
+        assertThat(quota.used()).isZero();
+    }
 }
